@@ -1,4 +1,4 @@
-# SmartKraft DMF - Changelog
+# SmartKraft LebensSpur - Changelog
 
 ## v1.1.5 (2025-12-02) - TERMAL KORUMA SİSTEMİ
 
@@ -116,8 +116,8 @@
 
 ### 🔧 Diğer İyileştirmeler
 - Chip ID artık tam 12 karakter gösteriliyor
-- AP adı formatı: `DMF-XXXXXXXXXXXX`
-- mDNS formatı: `dmf-xxxxxxxxxxxx.local`
+- AP adı formatı: `LS-XXXXXXXXXXXX`
+- mDNS formatı: `ls-xxxxxxxxxxxx.local`
 - Status API'ye `macAddress` alanı eklendi
 
 ---

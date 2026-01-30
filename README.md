@@ -1,4 +1,4 @@
-# 🚨 SmartKraft DMF Protocol
+# 🚨 SmartKraft LebensSpur Protocol
 
 **[English](#english)** | **[Deutsch](#deutsch)** | **[Türkçe](#turkish)**
 
@@ -7,18 +7,18 @@
 <a name="english"></a>
 ## 🇬🇧 English
 
-### 🚨 SmartKraft DMF Protocol
+### 🚨 SmartKraft LebensSpur Protocol
 
-**DMF Protocol** is an automatic message transmission system that requires periodic postponement actions. If postponement is not performed, your pre-prepared critical messages and important files are automatically sent to designated trusted contacts.
+**LebensSpur Protocol** is an automatic message transmission system that requires periodic postponement actions. If postponement is not performed, your pre-prepared critical messages and important files are automatically sent to designated trusted contacts.
 
 The system guarantees delivery of vital information, passwords, documents, or instructions to trusted individuals in emergency situations. It provides uninterrupted automatic transmission through a three-tier WiFi infrastructure, programmable alarm system, and relay control.
 
 ### 📖 What Does It Do?
 
-The DMF Protocol waits for you to postpone using the physical or virtual button within the set time period. If postponement is not done:
+The LebensSpur Protocol waits for you to postpone using the physical or virtual button within the set time period. If postponement is not done:
 
 1. **Early Warning System:** Before the countdown ends, warning emails are sent to your email address as many times as you configured
-2. **DMF Protocol Activation:** If no action is taken by the end of the period, the protocol is activated and critical messages are automatically sent to your designated contacts/groups
+2. **LebensSpur Protocol Activation:** If no action is taken by the end of the period, the protocol is activated and critical messages are automatically sent to your designated contacts/groups
 
 ### 💡 Who Is It Designed For?
 
@@ -32,7 +32,7 @@ The DMF Protocol waits for you to postpone using the physical or virtual button 
 1. **Setup** → WiFi connection, timer settings, email configuration, static IP assignment
 2. **Usage** → Press the physical or virtual button before the alarm time, reset the countdown
 3. **Early Warning** → If no postponement is made, you receive the configured number of warning emails
-4. **DMF Activation** → If no action is taken by the end, the protocol activates and sends critical messages
+4. **LebensSpur Activation** → If no action is taken by the end, the protocol activates and sends critical messages
 
 ### ✨ Features
 
@@ -56,9 +56,9 @@ The DMF Protocol waits for you to postpone using the physical or virtual button 
 
 #### 1. WiFi Configuration
 
-On first boot, the device creates an access point named **"SmartKraft-DMF"**:
+On first boot, the device creates an access point named **"SmartKraft-LebensSpur"**:
 
-1. Connect to **SmartKraft-DMF** network from WiFi networks
+1. Connect to **SmartKraft-LebensSpur** network from WiFi networks
 2. Go to `http://192.168.4.1` in your browser
 3. Enter your WiFi network name (SSID) and password
 4. Set static IP address (recommended)
@@ -134,18 +134,18 @@ See [LICENSE](LICENSE) file for details.
 <a name="deutsch"></a>
 ## 🇩🇪 Deutsch
 
-### 🚨 SmartKraft DMF-Protokoll
+### 🚨 SmartKraft LebensSpur-Protokoll
 
-**DMF Protokoll** ist ein automatisches Nachrichtenübermittlungssystem, das regelmäßige Verlängerungsaktionen erfordert. Wenn keine Verlängerung durchgeführt wird, werden Ihre vorbereiteten kritischen Nachrichten und wichtigen Dateien automatisch an festgelegte Vertrauenspersonen gesendet.
+**LebensSpur Protokoll** ist ein automatisches Nachrichtenübermittlungssystem, das regelmäßige Verlängerungsaktionen erfordert. Wenn keine Verlängerung durchgeführt wird, werden Ihre vorbereiteten kritischen Nachrichten und wichtigen Dateien automatisch an festgelegte Vertrauenspersonen gesendet.
 
 Das System garantiert die Zustellung lebenswichtiger Informationen, Passwörter, Dokumente oder Anweisungen an Vertrauenspersonen in Notfallsituationen. Es bietet unterbrechungsfreie automatische Übertragung durch eine dreistufige WiFi-Infrastruktur, programmierbares Alarmsystem und Relaissteuerung.
 
 ### 📖 Wofür ist es gedacht?
 
-Das DMF-Protokoll wartet darauf, dass Sie innerhalb der festgelegten Zeit mit der physischen oder virtuellen Taste verlängern. Wenn keine Verlängerung erfolgt:
+Das LebensSpur-Protokoll wartet darauf, dass Sie innerhalb der festgelegten Zeit mit der physischen oder virtuellen Taste verlängern. Wenn keine Verlängerung erfolgt:
 
 1. **Frühwarnsystem:** Vor Ablauf des Countdowns werden so viele Warn-E-Mails an Ihre E-Mail-Adresse gesendet, wie Sie konfiguriert haben
-2. **DMF-Protokoll-Aktivierung:** Wenn bis zum Ende des Zeitraums keine Aktion durchgeführt wird, wird das Protokoll aktiviert und kritische Nachrichten werden automatisch an Ihre festgelegten Kontakte/Gruppen gesendet
+2. **LebensSpur-Protokoll-Aktivierung:** Wenn bis zum Ende des Zeitraums keine Aktion durchgeführt wird, wird das Protokoll aktiviert und kritische Nachrichten werden automatisch an Ihre festgelegten Kontakte/Gruppen gesendet
 
 ### 💡 Für wen ist es konzipiert?
 
@@ -159,7 +159,7 @@ Das DMF-Protokoll wartet darauf, dass Sie innerhalb der festgelegten Zeit mit de
 1. **Einrichtung** → WiFi-Verbindung, Timer-Einstellungen, E-Mail-Konfiguration, statische IP-Zuweisung
 2. **Verwendung** → Drücken Sie die physische oder virtuelle Taste vor der Alarmzeit, setzen Sie den Countdown zurück
 3. **Frühwarnung** → Wenn keine Verlängerung erfolgt, erhalten Sie die konfigurierte Anzahl von Warn-E-Mails
-4. **DMF-Aktivierung** → Wenn bis zum Ende keine Aktion erfolgt, wird das Protokoll aktiviert und sendet kritische Nachrichten
+4. **LebensSpur-Aktivierung** → Wenn bis zum Ende keine Aktion erfolgt, wird das Protokoll aktiviert und sendet kritische Nachrichten
 
 ### ✨ Funktionen
 
@@ -183,9 +183,9 @@ Das DMF-Protokoll wartet darauf, dass Sie innerhalb der festgelegten Zeit mit de
 
 #### 1. WiFi-Konfiguration
 
-Beim ersten Start erstellt das Gerät einen Access Point namens **"SmartKraft-DMF"**:
+Beim ersten Start erstellt das Gerät einen Access Point namens **"SmartKraft-LebensSpur"**:
 
-1. Verbinden Sie sich mit dem **SmartKraft-DMF** Netzwerk aus den WiFi-Netzwerken
+1. Verbinden Sie sich mit dem **SmartKraft-LebensSpur** Netzwerk aus den WiFi-Netzwerken
 2. Gehen Sie in Ihrem Browser zu `http://192.168.4.1`
 3. Geben Sie Ihren WiFi-Netzwerknamen (SSID) und Passwort ein
 4. Stellen Sie eine statische IP-Adresse ein (empfohlen)
@@ -261,9 +261,9 @@ Siehe [LICENSE](LICENSE) Datei für Details.
 <a name="turkish"></a>
 ## 🇹🇷 Türkçe
 
-### 🚨 SmartKraft DMF Protokolü
+### 🚨 SmartKraft LebensSpur Protokolü
 
-**DMF Protokolü**, belirli aralıklarla erteleme işlemi yapılmasını gerektiren otomatik mesaj iletim sistemidir. Erteleme yapılmazsa, önceden hazırladığınız kritik mesajlar ve önemli dosyalar belirlediğiniz güvenilir kişilere otomatik olarak gönderilir. 
+**LebensSpur Protokolü**, belirli aralıklarla erteleme işlemi yapılmasını gerektiren otomatik mesaj iletim sistemidir. Erteleme yapılmazsa, önceden hazırladığınız kritik mesajlar ve önemli dosyalar belirlediğiniz güvenilir kişilere otomatik olarak gönderilir. 
 
 Sistem, acil durumlarda hayati bilgilerin, şifrelerin, belgelerin veya talimatların güvenilir kişilere ulaşmasını garanti eder. Üç katmanlı WiFi altyapısı, programlanabilir alarm sistemi ve röle kontrolü ile kesintisiz otomatik iletim sağlar.
 
@@ -271,10 +271,10 @@ Sistem, acil durumlarda hayati bilgilerin, şifrelerin, belgelerin veya talimatl
 
 ### 📖 Ne İşe Yarar?
 
-DMF Protokolü, belirlediğiniz süre zarfında fiziksel veya sanal buton ile erteleme yapmanızı bekler. Erteleme yapılmazsa:
+LebensSpur Protokolü, belirlediğiniz süre zarfında fiziksel veya sanal buton ile erteleme yapmanızı bekler. Erteleme yapılmazsa:
 
 1. **Erken Uyarı Sistemi:** Geri sayım bitiminden önce, ayarladığınız alarm sayısı kadar e-posta adresinize uyarı gönderilir
-2. **DMF Protokolü Aktivasyonu:** Süre sonunda hiçbir işlem yapılmamışsa, protokol devreye girer ve belirlediğiniz kişilere/gruplara kritik mesajlar otomatik olarak gönderilir
+2. **LebensSpur Protokolü Aktivasyonu:** Süre sonunda hiçbir işlem yapılmamışsa, protokol devreye girer ve belirlediğiniz kişilere/gruplara kritik mesajlar otomatik olarak gönderilir
 
 ### 💡 Kimler İçin Tasarlandı?
 
@@ -288,7 +288,7 @@ DMF Protokolü, belirlediğiniz süre zarfında fiziksel veya sanal buton ile er
 1. **Kurulum** → WiFi bağlantısı, timer ayarı, e-posta yapılandırması, statik IP ataması
 2. **Kullanım** → Alarm süresi dolmadan önce fiziksel veya sanal butona bas, geri sayımı sıfırla
 3. **Erken Uyarı** → Erteleme yapılmazsa belirlediğiniz sayıda uyarı e-postası gelir
-4. **DMF Aktivasyonu** → Süre sonunda işlem yapılmazsa protokol devreye girer, kritik mesajlar gönderilir
+4. **LebensSpur Aktivasyonu** → Süre sonunda işlem yapılmazsa protokol devreye girer, kritik mesajlar gönderilir
 
 ### ✨ Özellikler
 
@@ -312,9 +312,9 @@ DMF Protokolü, belirlediğiniz süre zarfında fiziksel veya sanal buton ile er
 
 #### 1. WiFi Yapılandırması
 
-Cihaz ilk açılışta **"SmartKraft-DMF"** adında bir access point oluşturur:
+Cihaz ilk açılışta **"SmartKraft-LebensSpur"** adında bir access point oluşturur:
 
-1. WiFi ağlarından **SmartKraft-DMF** ağına bağlanın
+1. WiFi ağlarından **SmartKraft-LebensSpur** ağına bağlanın
 2. Tarayıcınızda `http://192.168.4.1` adresine gidin
 3. WiFi ağ adınızı (SSID) ve şifrenizi girin
 4. Statik IP adresi ayarlayın (önerilen)

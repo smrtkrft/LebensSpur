@@ -8,7 +8,7 @@
 ## 🇬🇧 English
 
 ### What's New
-- **mDNS Hostname**: Custom `.local` domains (e.g., `dmf.local`, `test.local`) with static IP support
+- **mDNS Hostname**: Custom `.local` domains (e.g., `ls.local`, `test.local`) with static IP support
 - **Mail Groups Popup**: Improved modal design for mail group configuration
 - **Mobile Design**: 2x2 grid tab layout optimized for mobile devices
 - **Feature Descriptions**: Extended explanations for system features in 3 languages
@@ -30,7 +30,7 @@ Nevertheless, in this "BUG" state, it continues to actively search for the first
 ## 🇩🇪 Deutsch
 
 ### Neuerungen
-- **mDNS Hostname**: Benutzerdefinierte `.local` Domains (z.B. `dmf.local`, `test.local`) mit statischer IP-Unterstützung
+- **mDNS Hostname**: Benutzerdefinierte `.local` Domains (z.B. `ls.local`, `test.local`) mit statischer IP-Unterstützung
 - **Mail-Gruppen Popup**: Verbessertes Modal-Design für Mail-Gruppen-Konfiguration
 - **Mobiles Design**: 2x2 Grid-Tab-Layout für Mobilgeräte optimiert
 - **Feature-Beschreibungen**: Erweiterte Erklärungen für Systemfunktionen in 3 Sprachen
@@ -52,7 +52,7 @@ Dennoch sucht das Gerät in diesem "BUG"-Zustand aktiv weiter nach den registrie
 ## 🇹🇷 Türkçe
 
 ### Yenilikler
-- **mDNS Hostname**: Özel `.local` domain adları (örn: `dmf.local`, `test.local`) ve statik IP desteği
+- **mDNS Hostname**: Özel `.local` domain adları (örn: `ls.local`, `test.local`) ve statik IP desteği
 - **Mail Grupları Popup**: Geliştirilmiş modal tasarımı
 - **Mobil Tasarım**: Mobil cihazlar için optimize edilmiş 2x2 grid sekme düzeni
 - **Özellik Açıklamaları**: 3 dilde genişletilmiş sistem özellikleri açıklamaları

@@ -24,7 +24,7 @@
 <a name="overview-en"></a>
 ## 🎯 Overview
 
-This project is a **DMF Protocol** implementation developed for **ESP32-C6**. It includes OTA (Over-The-Air) updates, SPIFFS file system, and multi-language support.
+This project is a **LebensSpur Protocol** implementation developed for **ESP32-C6**. It includes OTA (Over-The-Air) updates, SPIFFS file system, and multi-language support.
 
 **⚠️ IMPORTANT:** This code is optimized ONLY for **ESP32-C6**. It will not work or may cause issues on other ESP32 variants.
 
@@ -63,13 +63,13 @@ Tools → Board → Boards Manager → Search "ESP32" → **esp32 by Espressif S
 ### 2. Download Code
 
 ```bash
-git clone https://github.com/smrtkrft/DMF_protocol.git
-cd DMF_protocol
+git clone https://github.com/smrtkrft/LebensSpur_protocol.git
+cd LebensSpur_protocol
 ```
 
 ### 3. Open in Arduino IDE
 
-Open `SmartKraft_DMF/SmartKraft_DMF.ino` file with Arduino IDE.
+Open `SmartKraft_LebensSpur/SmartKraft_LebensSpur.ino` file with Arduino IDE.
 
 ---
 
@@ -187,7 +187,7 @@ spiffs,   data, spiffs,  0x310000,0xF0000    # 960KB
 ### Used Pins
 
 ```cpp
-// Defined in SmartKraft_DMF.ino
+// Defined in SmartKraft_LebensSpur.ino
 
 #define BUTTON_PIN 21       // Physical button (optional)
 #define RELAY_PIN  18       // Relay output (optional)
@@ -219,7 +219,7 @@ spiffs,   data, spiffs,  0x310000,0xF0000    # 960KB
 
 ### Pin Modification
 
-If you want to use different pins, in `SmartKraft_DMF.ino`:
+If you want to use different pins, in `SmartKraft_LebensSpur.ino`:
 
 ```cpp
 #define BUTTON_PIN 21  // Your desired pin number
@@ -367,8 +367,8 @@ Tools → Serial Monitor → 115200 baud
 
 **Successful boot output:**
 ```
-SmartKraft DMF v1.0.0
-[WiFi] AP mode active: SmartKraft-DMF
+SmartKraft LebensSpur v1.0.0
+[WiFi] AP mode active: SmartKraft-LebensSpur
 [SPIFFS] File system initialized
 [Web] Server started: 192.168.4.1
 [OTA] Automatic update active
@@ -386,7 +386,7 @@ In `network_manager.cpp` file:
 
 ```cpp
 const char* GITHUB_REPO_OWNER = "smrtkrft";           // Your GitHub username
-const char* GITHUB_REPO_NAME = "DMF_protocol";        // Your repository name
+const char* GITHUB_REPO_NAME = "LebensSpur_protocol";        // Your repository name
 const char* GITHUB_FIRMWARE_FILE = "firmware.bin";    // Release asset name
 ```
 
@@ -396,12 +396,12 @@ After compiling with Arduino IDE:
 
 **Windows:**
 ```
-%TEMP%\arduino\sketches\[sketch-folder]\SmartKraft_DMF.ino.bin
+%TEMP%\arduino\sketches\[sketch-folder]\SmartKraft_LebensSpur.ino.bin
 ```
 
 **Linux/Mac:**
 ```
-/tmp/arduino/sketches/[sketch-folder]/SmartKraft_DMF.ino.bin
+/tmp/arduino/sketches/[sketch-folder]/SmartKraft_LebensSpur.ino.bin
 ```
 
 Upload this file to GitHub Release as `firmware.bin`.
@@ -410,7 +410,7 @@ Upload this file to GitHub Release as `firmware.bin`.
 
 1. GitHub repository → Releases → Create a new release
 2. Tag: `v1.0.1` (version number)
-3. Title: "SmartKraft DMF v1.0.1"
+3. Title: "SmartKraft LebensSpur v1.0.1"
 4. Upload: `firmware.bin` file
 5. Publish release
 
@@ -483,7 +483,7 @@ esp_task_wdt_reset();  // Reset watchdog
 
 ## 📞 Support and Contribution
 
-- **Issues:** https://github.com/smrtkrft/DMF_protocol/issues
+- **Issues:** https://github.com/smrtkrft/LebensSpur_protocol/issues
 - **Pull Requests:** Welcome!
 - **License:** AGPL-3.0 (you must share forks and modifications)
 
@@ -531,7 +531,7 @@ Check before uploading:
 <a name="genel-bakış-tr"></a>
 ## 🎯 Genel Bakış
 
-Bu proje **ESP32-C6** için geliştirilmiş bir **DMF Protokolü** uygulamasıdır. OTA (Over-The-Air) güncellemesi, SPIFFS dosya sistemi ve çoklu dil desteği içerir.
+Bu proje **ESP32-C6** için geliştirilmiş bir **LebensSpur Protokolü** uygulamasıdır. OTA (Over-The-Air) güncellemesi, SPIFFS dosya sistemi ve çoklu dil desteği içerir.
 
 **⚠️ ÖNEMLİ:** Bu kod yalnızca **ESP32-C6** için optimize edilmiştir. Diğer ESP32 varyantlarında çalışmaz veya sorun çıkarabilir.
 
@@ -570,13 +570,13 @@ Tools → Board → Boards Manager → "ESP32" ara → **esp32 by Espressif Syst
 ### 2. Kodu İndirme
 
 ```bash
-git clone https://github.com/smrtkrft/DMF_protocol.git
-cd DMF_protocol
+git clone https://github.com/smrtkrft/LebensSpur_protocol.git
+cd LebensSpur_protocol
 ```
 
 ### 3. Arduino IDE'de Açma
 
-`SmartKraft_DMF/SmartKraft_DMF.ino` dosyasını Arduino IDE ile açın.
+`SmartKraft_LebensSpur/SmartKraft_LebensSpur.ino` dosyasını Arduino IDE ile açın.
 
 ---
 
@@ -694,7 +694,7 @@ spiffs,   data, spiffs,  0x310000,0xF0000    # 960KB
 ### Kullanılan Pinler
 
 ```cpp
-// SmartKraft_DMF.ino içinde tanımlı
+// SmartKraft_LebensSpur.ino içinde tanımlı
 
 #define BUTTON_PIN 21       // Fiziksel buton (isteğe bağlı)
 #define RELAY_PIN  18       // Röle çıkışı (isteğe bağlı)
@@ -726,7 +726,7 @@ spiffs,   data, spiffs,  0x310000,0xF0000    # 960KB
 
 ### Pin Değiştirme
 
-Farklı pin kullanmak isterseniz `SmartKraft_DMF.ino` içinde:
+Farklı pin kullanmak isterseniz `SmartKraft_LebensSpur.ino` içinde:
 
 ```cpp
 #define BUTTON_PIN 21  // İstediğiniz pin numarası
