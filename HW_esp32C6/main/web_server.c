@@ -21,7 +21,16 @@
 #include "freertos/task.h"
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 #include <sys/socket.h>
+#include "esp_chip_info.h"
+#include "esp_mac.h"
+#include "esp_timer.h"
+#include "esp_system.h"
+#include "esp_heap_caps.h"
+#include "esp_flash.h"
+#include "esp_partition.h"
+#include "ext_flash.h"
 
 static const char *TAG = "web_server";
 
@@ -615,23 +624,127 @@ static esp_err_t api_wifi_status(httpd_req_t *req)
     return ret;
 }
 
-// GET /api/device/info - Device information
+// GET /api/device/info - Device information (comprehensive)
 static esp_err_t api_device_info(httpd_req_t *req)
 {
+    // Chip info
+    esp_chip_info_t chip_info;
+    esp_chip_info(&chip_info);
+
+    const char *chip_model_str = "Unknown";
+    switch (chip_info.model) {
+        case CHIP_ESP32:   chip_model_str = "ESP32"; break;
+        case CHIP_ESP32S2: chip_model_str = "ESP32-S2"; break;
+        case CHIP_ESP32S3: chip_model_str = "ESP32-S3"; break;
+        case CHIP_ESP32C3: chip_model_str = "ESP32-C3"; break;
+        case CHIP_ESP32C6: chip_model_str = "ESP32-C6"; break;
+        case CHIP_ESP32H2: chip_model_str = "ESP32-H2"; break;
+        default: break;
+    }
+
+    // MAC address
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    char mac_str[18];
+    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    // WiFi status
     wifi_status_t wifi_status;
     wifi_manager_get_status(&wifi_status);
-    
+
+    // Heap info
+    uint32_t heap_free = esp_get_free_heap_size();
+    uint32_t heap_min_free = esp_get_minimum_free_heap_size();
+    uint32_t heap_total = heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
+
+    // Internal flash
+    uint32_t int_flash_total = 0;
+    esp_flash_get_size(NULL, &int_flash_total);
+
+    // Partition sizes
+    const esp_partition_t *app_part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
+    const esp_partition_t *ota_part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    const esp_partition_t *nvs_part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);
+
+    // External flash
+    uint32_t ext_flash_total = ext_flash_get_size();
+    uint32_t ext_spiffs_total = 0, ext_spiffs_used = 0;
+    file_manager_get_info(&ext_spiffs_total, &ext_spiffs_used);
+
+    // Uptime
+    int64_t uptime_us = esp_timer_get_time();
+    uint32_t uptime_s = (uint32_t)(uptime_us / 1000000);
+
+    // Reset reason
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+
+    // NTP & time
+    bool ntp_synced = time_manager_is_synced();
+    time_t now;
+    time(&now);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    char time_str[32];
+    strftime(time_str, sizeof(time_str), "%d.%m.%Y %H:%M:%S", &timeinfo);
+
+    // CPU frequency
+    int cpu_freq = 160;
+#ifdef CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ
+    cpu_freq = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
+#endif
+
+    // Build JSON
     cJSON *json = cJSON_CreateObject();
+
+    // Identity
     cJSON_AddStringToObject(json, "device_id", device_id_get());
     cJSON_AddStringToObject(json, "firmware", FIRMWARE_VERSION);
-    cJSON_AddStringToObject(json, "sta_ip", wifi_status.sta_ip);
-    cJSON_AddStringToObject(json, "ap_ip", wifi_status.ap_ip);
-    cJSON_AddBoolToObject(json, "sta_connected", wifi_status.sta_connected);
+    cJSON_AddStringToObject(json, "mac", mac_str);
     cJSON_AddStringToObject(json, "hostname", wifi_manager_get_hostname());
-    
+
+    // Hardware
+    cJSON_AddStringToObject(json, "chip_model", chip_model_str);
+    cJSON_AddNumberToObject(json, "chip_cores", chip_info.cores);
+    cJSON_AddNumberToObject(json, "chip_revision", chip_info.revision);
+    cJSON_AddNumberToObject(json, "cpu_freq_mhz", cpu_freq);
+    cJSON_AddNumberToObject(json, "int_flash_total", int_flash_total);
+
+    // Heap
+    cJSON_AddNumberToObject(json, "heap_total", heap_total);
+    cJSON_AddNumberToObject(json, "heap_free", heap_free);
+    cJSON_AddNumberToObject(json, "heap_min_free", heap_min_free);
+
+    // Partitions
+    cJSON_AddNumberToObject(json, "app_size", app_part ? app_part->size : 0);
+    cJSON_AddNumberToObject(json, "ota_size", ota_part ? ota_part->size : 0);
+    cJSON_AddNumberToObject(json, "nvs_size", nvs_part ? nvs_part->size : 0);
+
+    // External flash
+    cJSON_AddNumberToObject(json, "ext_flash_total", ext_flash_total);
+    cJSON_AddNumberToObject(json, "ext_spiffs_total", ext_spiffs_total);
+    cJSON_AddNumberToObject(json, "ext_spiffs_used", ext_spiffs_used);
+
+    // WiFi
+    cJSON_AddBoolToObject(json, "sta_connected", wifi_status.sta_connected);
+    cJSON_AddStringToObject(json, "sta_ssid", wifi_status.sta_ssid);
+    cJSON_AddStringToObject(json, "sta_ip", wifi_status.sta_ip);
+    cJSON_AddNumberToObject(json, "sta_rssi", wifi_status.sta_rssi);
+    cJSON_AddBoolToObject(json, "ap_active", wifi_status.ap_active);
+    cJSON_AddStringToObject(json, "ap_ip", wifi_status.ap_ip);
+
+    // Runtime
+    cJSON_AddNumberToObject(json, "uptime_s", uptime_s);
+    cJSON_AddNumberToObject(json, "reset_reason", (int)reset_reason);
+    cJSON_AddBoolToObject(json, "ntp_synced", ntp_synced);
+    cJSON_AddStringToObject(json, "time", time_str);
+
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
-    
+
     esp_err_t ret = web_send_json(req, 200, json_str);
     free(json_str);
     return ret;

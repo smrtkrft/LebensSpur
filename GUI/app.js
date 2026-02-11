@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDemoLogs();
     updateUI();
     startTimerUpdate();
-    fetchVersionInfo();
+    fetchDeviceInfo();
 });
 
 function cacheElements() {
@@ -1458,21 +1458,157 @@ function handleLogout() {
     showToast('Çıkış yapıldı', 'success');
 }
 
-function fetchVersionInfo() {
+function fetchDeviceInfo() {
     fetch('/api/device/info')
         .then(res => res.json())
         .then(data => {
+            const setTxt = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = val;
+            };
+            const setBar = (id, pct) => {
+                const el = document.getElementById(id);
+                if (el) el.style.width = pct + '%';
+            };
+            const fmtBytes = (b) => {
+                if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+                if (b >= 1024) return Math.round(b / 1024) + ' KB';
+                return b + ' B';
+            };
+
+            // Firmware version
             const fw = data.firmware ? ('v' + data.firmware) : '';
             if (fw) {
-                const loginVer = document.getElementById('loginVersion');
-                if (loginVer) loginVer.textContent = fw;
-                const sysFw = document.getElementById('sysFirmware');
-                if (sysFw) sysFw.textContent = fw;
-                const otaFw = document.getElementById('currentFirmwareVersion');
-                if (otaFw) otaFw.textContent = fw;
+                setTxt('loginVersion', fw);
+                setTxt('sysFirmware', fw);
+                setTxt('currentFirmwareVersion', fw);
             }
+
+            // Device identity
+            setTxt('sysDeviceId', data.device_id || '-');
+            setTxt('sysMac', data.mac || '-');
+            setTxt('sysChip', data.chip_model || '-');
+            setTxt('sysCores', data.chip_cores != null ? data.chip_cores : '-');
+            setTxt('sysCpuFreq', data.cpu_freq_mhz ? (data.cpu_freq_mhz + ' MHz') : '-');
+            setTxt('sysFlashSize', data.int_flash_total ? fmtBytes(data.int_flash_total) : '-');
+
+            // RAM / Heap
+            if (data.heap_total) {
+                const heapUsed = data.heap_total - (data.heap_free || 0);
+                const heapPct = (heapUsed / data.heap_total * 100).toFixed(1);
+                setTxt('sysRamTotal', fmtBytes(data.heap_total));
+                setTxt('sysRamUsed', fmtBytes(heapUsed));
+                setTxt('sysRamFree', fmtBytes(data.heap_free || 0));
+                setTxt('sysRamMinFree', fmtBytes(data.heap_min_free || 0));
+                setBar('ramBarFill', heapPct);
+                setTxt('ramUsagePercent', heapPct + '%');
+            }
+
+            // Internal Flash
+            if (data.int_flash_total) {
+                const appSz = data.app_size || 0;
+                const otaSz = data.ota_size || 0;
+                const nvsSz = data.nvs_size || 0;
+                const usedSz = appSz + otaSz + nvsSz;
+                const freeSz = data.int_flash_total > usedSz ? data.int_flash_total - usedSz : 0;
+                const intPct = (usedSz / data.int_flash_total * 100).toFixed(0);
+                setTxt('sysIntFlashTotal', fmtBytes(data.int_flash_total));
+                setTxt('sysIntFlashFirmware', fmtBytes(appSz));
+                setTxt('sysIntFlashNvs', fmtBytes(nvsSz));
+                setTxt('sysIntFlashOta', fmtBytes(otaSz));
+                setTxt('sysIntFlashFree', fmtBytes(freeSz));
+                setBar('intFlashBarFill', intPct);
+                setTxt('intFlashUsagePercent', intPct + '%');
+            }
+
+            // External Flash
+            if (data.ext_flash_total) {
+                const spiffsTotal = data.ext_spiffs_total || 0;
+                const spiffsUsed = data.ext_spiffs_used || 0;
+                const spiffsFree = spiffsTotal > spiffsUsed ? spiffsTotal - spiffsUsed : 0;
+                const extPct = spiffsTotal ? (spiffsUsed / spiffsTotal * 100).toFixed(1) : '0';
+                setTxt('sysExtFlashTotal', fmtBytes(data.ext_flash_total));
+                setTxt('sysExtFlashSpiffs', fmtBytes(spiffsTotal));
+                setTxt('sysExtFlashUsed', fmtBytes(spiffsUsed));
+                setTxt('sysExtFlashFree', fmtBytes(spiffsFree));
+                setBar('extFlashBarFill', extPct);
+                setTxt('extFlashUsagePercent', extPct + '%');
+            }
+
+            // WiFi status
+            if (data.sta_connected) {
+                setTxt('sysWifiStatus', 'Bağlı');
+                const el = document.getElementById('sysWifiStatus');
+                if (el) el.className = 'system-value status-connected';
+            } else {
+                setTxt('sysWifiStatus', 'Bağlı Değil');
+                const el = document.getElementById('sysWifiStatus');
+                if (el) el.className = 'system-value status-disconnected';
+            }
+            setTxt('sysWifiSsid', data.sta_ssid || '-');
+            if (data.sta_rssi != null && data.sta_connected) {
+                const rssi = data.sta_rssi;
+                let quality = 'Çok Zayıf';
+                if (rssi >= -50) quality = 'Mükemmel';
+                else if (rssi >= -60) quality = 'Çok İyi';
+                else if (rssi >= -70) quality = 'İyi';
+                else if (rssi >= -80) quality = 'Zayıf';
+                setTxt('sysRssi', rssi + ' dBm (' + quality + ')');
+            } else {
+                setTxt('sysRssi', '-');
+            }
+            setTxt('sysIp', data.sta_ip || '-');
+            if (data.ap_active) {
+                setTxt('sysApStatus', 'Aktif');
+                const el = document.getElementById('sysApStatus');
+                if (el) el.className = 'system-value status-active';
+            } else {
+                setTxt('sysApStatus', 'Kapalı');
+                const el = document.getElementById('sysApStatus');
+                if (el) el.className = 'system-value';
+            }
+            setTxt('sysApIp', data.ap_ip || '-');
+
+            // Uptime
+            if (data.uptime_s != null) {
+                const s = data.uptime_s;
+                const days = Math.floor(s / 86400);
+                const hours = Math.floor((s % 86400) / 3600);
+                const mins = Math.floor((s % 3600) / 60);
+                let upStr = '';
+                if (days > 0) upStr += days + ' gün ';
+                if (hours > 0 || days > 0) upStr += hours + ' saat ';
+                upStr += mins + ' dk';
+                setTxt('sysUptime', upStr.trim());
+            }
+
+            // Reset reason
+            const resetReasons = {
+                1: 'Güç açıldı', 2: 'Harici reset', 3: 'Yazılım reset',
+                4: 'Panik / İstisna', 5: 'Watchdog (INT_WDT)',
+                6: 'Watchdog (TASK_WDT)', 7: 'Watchdog (Diğer)',
+                8: 'Derin uyku', 9: 'Brownout', 10: 'SDIO'
+            };
+            setTxt('sysResetReason', resetReasons[data.reset_reason] || ('Kod: ' + data.reset_reason));
+
+            // NTP
+            setTxt('sysNtpStatus', data.ntp_synced ? 'Senkronize' : 'Senkronize Değil');
+            const ntpEl = document.getElementById('sysNtpStatus');
+            if (ntpEl) {
+                ntpEl.className = data.ntp_synced
+                    ? 'system-value status-connected'
+                    : 'system-value status-disconnected';
+            }
+
+            // System time
+            setTxt('sysTime', data.time || '-');
+
+            // GUI version
+            setTxt('sysGuiVersion', 'v0.1.0');
         })
-        .catch(() => {});
+        .catch(err => {
+            console.error('Device info fetch failed:', err);
+        });
 }
 function showPage(page) {
     if (page === 'login') {
