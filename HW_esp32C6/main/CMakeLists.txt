@@ -1,0 +1,39 @@
+# LebensSpur ESP32-C6 Main Component
+# This file registers the main component with ESP-IDF build system
+
+idf_component_register(
+    SRCS
+        "main.c"
+        "device_id.c"
+        "ext_flash.c"
+        "file_manager.c"
+        "config_manager.c"
+        "wifi_manager.c"
+        "time_manager.c"
+        "log_manager.c"
+        "session_auth.c"
+        "web_server.c"
+        "timer_scheduler.c"
+        "mail_sender.c"
+        "relay_manager.c"
+        "button_manager.c"
+        "ota_manager.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        nvs_flash
+        esp_event
+        esp_system
+        esp_wifi
+        esp_netif
+        mdns
+        esp_http_server
+        esp_https_ota
+        esp_timer
+        driver
+        spiffs
+        json
+        mbedtls
+        esp_tls
+        app_update
+)
