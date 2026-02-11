@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDemoLogs();
     updateUI();
     startTimerUpdate();
+    fetchVersionInfo();
 });
 
 function cacheElements() {
@@ -1402,49 +1403,77 @@ function handleLogin(e) {
     
     const passwordInput = document.getElementById('password');
     const password = passwordInput.value;
+    const loginBtn = document.querySelector('#login-form button[type="submit"]');
     
-    // Check if locked out
-    if (state.lockoutUntil && Date.now() < state.lockoutUntil) {
-        const remainingTime = Math.ceil((state.lockoutUntil - Date.now()) / 60000);
-        showToast(`Hesap kilitli. ${remainingTime} dakika bekleyin.`, 'error');
+    if (!password) {
+        showToast('Şifre gerekli', 'error');
         return;
     }
     
-    // Demo: sadece "demo" şifresi kabul edilir
-    if (password === 'demo' || password.length >= 4) {
-        state.isAuthenticated = true;
-        state.loginAttempts = 0;
-        state.lockoutUntil = null;
-        showPage('app');
-        showToast('Giriş başarılı', 'success');
-        addAuditLog('login', 'Başarılı giriş');
-        startAutoLogoutTimer();
-    } else {
-        state.loginAttempts++;
-        
-        if (state.loginAttempts >= state.maxLoginAttempts) {
-            state.lockoutUntil = Date.now() + (state.lockoutTime * 60 * 1000);
-            showToast(`5 başarısız deneme! ${state.lockoutTime} dakika kilitlendi.`, 'error');
-            addAuditLog('login_lockout', `Hesap ${state.lockoutTime} dakika kilitlendi`);
+    // Disable button during request
+    loginBtn.disabled = true;
+    loginBtn.textContent = '...';
+    
+    fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            state.isAuthenticated = true;
+            state.loginAttempts = 0;
+            state.lockoutUntil = null;
+            showPage('app');
+            showToast('Giriş başarılı', 'success');
+            startAutoLogoutTimer();
+        } else if (data.lockoutSeconds) {
+            const mins = Math.ceil(data.lockoutSeconds / 60);
+            state.lockoutUntil = Date.now() + (data.lockoutSeconds * 1000);
+            showToast(`Hesap kilitli. ${mins} dakika bekleyin.`, 'error');
             state.loginAttempts = 0;
         } else {
-            const remaining = state.maxLoginAttempts - state.loginAttempts;
+            state.loginAttempts++;
+            const remaining = data.remainingAttempts || (state.maxLoginAttempts - state.loginAttempts);
             showToast(`Geçersiz şifre. ${remaining} deneme kaldı.`, 'error');
+            passwordInput.classList.add('shake');
+            setTimeout(() => passwordInput.classList.remove('shake'), 500);
         }
-        
-        passwordInput.classList.add('shake');
-        setTimeout(() => passwordInput.classList.remove('shake'), 500);
-    }
+    })
+    .catch(() => {
+        showToast('Sunucuya bağlanılamıyor', 'error');
+    })
+    .finally(() => {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Giriş';
+    });
 }
 
 function handleLogout() {
+    fetch('/api/logout', { method: 'POST' }).catch(() => {});
     state.isAuthenticated = false;
     stopAutoLogoutTimer();
     showPage('login');
     showToast('Çıkış yapıldı', 'success');
-    addAuditLog('logout', 'Çıkış yapıldı');
 }
 
+function fetchVersionInfo() {
+    fetch('/api/device/info')
+        .then(res => res.json())
+        .then(data => {
+            const fw = data.firmware ? ('v' + data.firmware) : '';
+            if (fw) {
+                const loginVer = document.getElementById('loginVersion');
+                if (loginVer) loginVer.textContent = fw;
+                const sysFw = document.getElementById('sysFirmware');
+                if (sysFw) sysFw.textContent = fw;
+                const otaFw = document.getElementById('currentFirmwareVersion');
+                if (otaFw) otaFw.textContent = fw;
+            }
+        })
+        .catch(() => {});
+}
 function showPage(page) {
     if (page === 'login') {
         elements.loginPage.classList.remove('hidden');
@@ -1964,6 +1993,12 @@ function getSystemTheme() {
 
 function applyTheme(actualTheme) {
     document.documentElement.setAttribute('data-theme', actualTheme);
+    
+    // Logo: koyu temada beyaz logo, açık temada siyah logo
+    const brandLogo = document.getElementById('brandLogo');
+    if (brandLogo) {
+        brandLogo.src = actualTheme === 'dark' ? 'logo.png' : 'darklogo.png';
+    }
     
     // Meta theme-color güncelle
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');

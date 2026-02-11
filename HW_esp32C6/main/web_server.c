@@ -10,14 +10,30 @@
 #include "device_id.h"
 #include "log_manager.h"
 #include "time_manager.h"
+#include "wifi_manager.h"
 #include "esp_log.h"
+#include "esp_http_client.h"
+#include "esp_crt_bundle.h"
+#include "lwip/dns.h"
+#include "lwip/inet.h"
 #include "cJSON.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
+#include <stdio.h>
 #include <sys/socket.h>
 
 static const char *TAG = "web_server";
 
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "0.1.0"
+#endif
+
 static httpd_handle_t s_server = NULL;
+
+/* Embedded setup.html - available without SPIFFS */
+extern const uint8_t setup_html_start[] asm("_binary_setup_html_start");
+extern const uint8_t setup_html_end[] asm("_binary_setup_html_end");
 
 /* ============================================
  * MIME TYPE LOOKUP
@@ -433,25 +449,419 @@ static esp_err_t api_clear_logs(httpd_req_t *req)
 }
 
 /* ============================================
+ * EMBEDDED SETUP PAGE HANDLER
+ * ============================================ */
+
+static esp_err_t setup_html_handler(httpd_req_t *req)
+{
+    size_t setup_html_len = setup_html_end - setup_html_start;
+    httpd_resp_set_type(req, MIME_HTML);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    return httpd_resp_send(req, (const char *)setup_html_start, setup_html_len);
+}
+
+/* ============================================
+ * SETUP API HANDLERS (no auth required)
+ * ============================================ */
+
+// GET /api/setup/wifi/scan
+static esp_err_t api_setup_wifi_scan(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "WiFi scan requested");
+    
+    wifi_scan_result_t results[WIFI_SCAN_MAX_AP];
+    int count = wifi_manager_scan(results, WIFI_SCAN_MAX_AP);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON *networks = cJSON_CreateArray();
+    
+    if (count > 0) {
+        for (int i = 0; i < count; i++) {
+            cJSON *net = cJSON_CreateObject();
+            cJSON_AddStringToObject(net, "ssid", results[i].ssid);
+            cJSON_AddNumberToObject(net, "rssi", results[i].rssi);
+            cJSON_AddNumberToObject(net, "auth", results[i].authmode);
+            cJSON_AddItemToArray(networks, net);
+        }
+    }
+    
+    cJSON_AddItemToObject(json, "networks", networks);
+    cJSON_AddBoolToObject(json, "success", true);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/setup/wifi/connect
+static esp_err_t api_setup_wifi_connect(httpd_req_t *req)
+{
+    char buf[256];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        return web_send_error(req, 400, "No data received");
+    }
+    buf[ret] = '\0';
+    
+    cJSON *json = cJSON_Parse(buf);
+    if (!json) {
+        return web_send_error(req, 400, "Invalid JSON");
+    }
+    
+    cJSON *ssid_item = cJSON_GetObjectItem(json, "ssid");
+    cJSON *pass_item = cJSON_GetObjectItem(json, "password");
+    
+    if (!ssid_item || !cJSON_IsString(ssid_item)) {
+        cJSON_Delete(json);
+        return web_send_error(req, 400, "Missing SSID");
+    }
+    
+    const char *ssid = ssid_item->valuestring;
+    const char *password = (pass_item && cJSON_IsString(pass_item)) ? pass_item->valuestring : "";
+    
+    ESP_LOGI(TAG, "WiFi connect requested: SSID=%s", ssid);
+    
+    // Start connection (non-blocking - client will poll for status)
+    // Save config first
+    app_wifi_config_t wifi_cfg = WIFI_CONFIG_DEFAULT();
+    strncpy(wifi_cfg.ssid, ssid, sizeof(wifi_cfg.ssid) - 1);
+    strncpy(wifi_cfg.password, password, sizeof(wifi_cfg.password) - 1);
+    wifi_cfg.configured = true;
+    config_save_wifi(&wifi_cfg);
+    
+    cJSON_Delete(json);
+    
+    // Start connection in background - response sent before channel change
+    esp_err_t err = wifi_manager_connect_async(ssid, password);
+    
+    if (err == ESP_OK) {
+        return web_send_success(req, "Connecting");
+    } else {
+        return web_send_error(req, 500, "Failed to start connection");
+    }
+}
+
+// POST /api/setup/password
+static esp_err_t api_setup_password(httpd_req_t *req)
+{
+    char buf[256];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        return web_send_error(req, 400, "No data received");
+    }
+    buf[ret] = '\0';
+    
+    cJSON *json = cJSON_Parse(buf);
+    if (!json) {
+        return web_send_error(req, 400, "Invalid JSON");
+    }
+    
+    cJSON *pass_item = cJSON_GetObjectItem(json, "password");
+    if (!pass_item || !cJSON_IsString(pass_item)) {
+        cJSON_Delete(json);
+        return web_send_error(req, 400, "Missing password");
+    }
+    
+    const char *password = pass_item->valuestring;
+    ESP_LOGI(TAG, "Setting device password");
+    
+    auth_config_t auth_cfg = AUTH_CONFIG_DEFAULT();
+    strncpy(auth_cfg.password, password, sizeof(auth_cfg.password) - 1);
+    
+    esp_err_t err = config_save_auth(&auth_cfg);
+    cJSON_Delete(json);
+    
+    if (err != ESP_OK) {
+        return web_send_error(req, 500, "Failed to save password");
+    }
+    
+    return web_send_success(req, "Password saved");
+}
+
+// POST /api/setup/complete
+static esp_err_t api_setup_complete(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "Setup complete requested");
+    
+    config_mark_setup_completed();
+    
+    LOG_SYSTEM(LOG_LEVEL_INFO, "Initial setup completed");
+    
+    return web_send_success(req, "Setup complete");
+}
+
+// GET /api/wifi/status - WiFi connection status for setup
+static esp_err_t api_wifi_status(httpd_req_t *req)
+{
+    wifi_status_t status;
+    wifi_manager_get_status(&status);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "connected", status.sta_connected);
+    cJSON_AddStringToObject(json, "ssid", status.sta_ssid);
+    cJSON_AddStringToObject(json, "ip", status.sta_ip);
+    cJSON_AddNumberToObject(json, "rssi", status.sta_rssi);
+    cJSON_AddBoolToObject(json, "ap_active", status.ap_active);
+    cJSON_AddStringToObject(json, "ap_ip", status.ap_ip);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// GET /api/device/info - Device information
+static esp_err_t api_device_info(httpd_req_t *req)
+{
+    wifi_status_t wifi_status;
+    wifi_manager_get_status(&wifi_status);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "device_id", device_id_get());
+    cJSON_AddStringToObject(json, "firmware", FIRMWARE_VERSION);
+    cJSON_AddStringToObject(json, "sta_ip", wifi_status.sta_ip);
+    cJSON_AddStringToObject(json, "ap_ip", wifi_status.ap_ip);
+    cJSON_AddBoolToObject(json, "sta_connected", wifi_status.sta_connected);
+    cJSON_AddStringToObject(json, "hostname", wifi_manager_get_hostname());
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+/* ============================================
+ * GUI DOWNLOAD FROM GITHUB
+ * ============================================ */
+
+#define GUI_REPO_BASE  "https://raw.githubusercontent.com/smrtkrft/LebensSpur/main/GUI/"
+#define GUI_DEST_DIR   "/ext/web"
+
+typedef struct {
+    const char *filename;
+} gui_file_t;
+
+static const gui_file_t s_gui_files[] = {
+    { "index.html" },
+    { "app.js" },
+    { "style.css" },
+    { "i18n.js" },
+    { "manifest.json" },
+    { "sw.js" },
+    { "logo.png" },
+    { "darklogo.png" },
+};
+#define GUI_FILE_COUNT (sizeof(s_gui_files) / sizeof(s_gui_files[0]))
+
+/* Download state (accessed from handler + task) */
+static volatile int  s_dl_progress   = 0;   /* 0-100 */
+static volatile bool s_dl_running    = false;
+static volatile bool s_dl_done       = false;
+static volatile bool s_dl_error      = false;
+static char          s_dl_msg[64]    = "Idle";
+
+static esp_err_t download_one_file(const char *filename)
+{
+    char url[196];
+    char path[64];
+    snprintf(url, sizeof(url), GUI_REPO_BASE "%s", filename);
+    snprintf(path, sizeof(path), GUI_DEST_DIR "/%s", filename);
+
+    ESP_LOGI(TAG, "DL %s", filename);
+
+    esp_http_client_config_t cfg = {
+        .url             = url,
+        .timeout_ms      = 30000,
+        .buffer_size     = 4096,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) return ESP_FAIL;
+
+    esp_err_t ret = esp_http_client_open(client, 0);
+    if (ret != ESP_OK) {
+        esp_http_client_cleanup(client);
+        return ret;
+    }
+
+    int content_len = esp_http_client_fetch_headers(client);
+    (void)content_len;   /* may be -1 for chunked */
+    int status_code = esp_http_client_get_status_code(client);
+    if (status_code != 200) {
+        ESP_LOGE(TAG, "%s HTTP %d", filename, status_code);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    /* Read into temp buffer and write to SPIFFS */
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        ESP_LOGE(TAG, "Cannot create %s", path);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    char *buf = malloc(4096);
+    if (!buf) {
+        fclose(f);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_ERR_NO_MEM;
+    }
+
+    int total = 0;
+    int rd;
+    while ((rd = esp_http_client_read(client, buf, 4096)) > 0) {
+        fwrite(buf, 1, rd, f);
+        total += rd;
+    }
+
+    free(buf);
+    fclose(f);
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+
+    ESP_LOGI(TAG, "Saved %s (%d bytes)", filename, total);
+    return ESP_OK;
+}
+
+static void gui_download_task(void *arg)
+{
+    s_dl_running = true;
+    s_dl_done    = false;
+    s_dl_error   = false;
+
+    /* Ensure DNS is configured (fallback to Google DNS if empty) */
+    const ip_addr_t *d0 = dns_getserver(0);
+    if (ip_addr_isany(d0)) {
+        ip_addr_t gdns;
+        IP_ADDR4(&gdns, 8, 8, 8, 8);
+        dns_setserver(0, &gdns);
+        IP_ADDR4(&gdns, 8, 8, 4, 4);
+        dns_setserver(1, &gdns);
+    }
+
+    /* Wait for network to stabilize */
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    for (int i = 0; i < GUI_FILE_COUNT; i++) {
+        snprintf(s_dl_msg, sizeof(s_dl_msg), "Downloading GUI...");
+        s_dl_progress = (i * 100) / GUI_FILE_COUNT;
+
+        /* Retry up to 3 times per file */
+        esp_err_t err = ESP_FAIL;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            err = download_one_file(s_gui_files[i].filename);
+            if (err == ESP_OK) break;
+            ESP_LOGW(TAG, "Retry %d for %s", attempt + 1, s_gui_files[i].filename);
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
+        if (err != ESP_OK) {
+            snprintf(s_dl_msg, sizeof(s_dl_msg), "Download failed");
+            s_dl_error   = true;
+            s_dl_running = false;
+            vTaskDelete(NULL);
+            return;
+        }
+    }
+
+    s_dl_progress = 100;
+    snprintf(s_dl_msg, sizeof(s_dl_msg), "Download complete");
+    s_dl_done    = true;
+    s_dl_running = false;
+    vTaskDelete(NULL);
+}
+
+// POST /api/gui/download - Start GUI download from GitHub
+static esp_err_t api_gui_download(httpd_req_t *req)
+{
+    if (s_dl_running) {
+        return web_send_error(req, 409, "Download already in progress");
+    }
+
+    ESP_LOGI(TAG, "Starting GUI download from GitHub");
+
+    s_dl_progress = 0;
+    s_dl_done     = false;
+    s_dl_error    = false;
+    snprintf(s_dl_msg, sizeof(s_dl_msg), "Downloading GUI...");
+
+    BaseType_t ok = xTaskCreate(gui_download_task, "gui_dl", 16384, NULL, 5, NULL);
+    if (ok != pdPASS) {
+        return web_send_error(req, 500, "Cannot start download task");
+    }
+
+    return web_send_success(req, "Download started");
+}
+
+// GET /api/gui/download/status - GUI download progress
+static esp_err_t api_gui_download_status(httpd_req_t *req)
+{
+    cJSON *json = cJSON_CreateObject();
+
+    if (s_dl_error) {
+        cJSON_AddStringToObject(json, "state", "error");
+        cJSON_AddStringToObject(json, "error", s_dl_msg);
+    } else if (s_dl_done) {
+        cJSON_AddStringToObject(json, "state", "complete");
+    } else {
+        cJSON_AddStringToObject(json, "state", "downloading");
+    }
+
+    cJSON_AddNumberToObject(json, "progress", s_dl_progress);
+    cJSON_AddStringToObject(json, "message", s_dl_msg);
+
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+/* ============================================
  * STATIC FILE HANDLER
  * ============================================ */
 
 static esp_err_t static_file_handler(httpd_req_t *req)
 {
-    char filepath[128];
+    char filepath[FILE_MGR_MAX_PATH_LEN];
+    char uri_copy[128];
     const char *uri = req->uri;
+    bool is_root = (strcmp(uri, "/") == 0);
     
     // Default to index.html
-    if (strcmp(uri, "/") == 0) {
+    if (is_root) {
         uri = "/index.html";
     }
     
+    // Truncate URI to prevent overflow
+    strncpy(uri_copy, uri, sizeof(uri_copy) - 1);
+    uri_copy[sizeof(uri_copy) - 1] = '\0';
+    
     // Build filepath
-    snprintf(filepath, sizeof(filepath), "%s%s", WEB_STATIC_DIR, uri);
+    snprintf(filepath, sizeof(filepath), "%s%s", WEB_STATIC_DIR, uri_copy);
     
     // Security: prevent path traversal
     if (strstr(filepath, "..") != NULL) {
         return web_send_error(req, 403, "Forbidden");
+    }
+    
+    // Check if file exists, if root and index.html missing, redirect to setup
+    if (is_root && !file_manager_exists(filepath)) {
+        ESP_LOGI(TAG, "index.html not found, redirecting to setup");
+        httpd_resp_set_status(req, "302 Found");
+        httpd_resp_set_hdr(req, "Location", "/setup.html");
+        return httpd_resp_send(req, NULL, 0);
     }
     
     return web_send_file(req, filepath);
@@ -524,11 +934,87 @@ void web_register_api_routes(httpd_handle_t server)
     };
     httpd_register_uri_handler(server, &logs_clear);
     
+    // Setup APIs (no auth required)
+    httpd_uri_t setup_wifi_scan = {
+        .uri = "/api/setup/wifi/scan",
+        .method = HTTP_GET,
+        .handler = api_setup_wifi_scan
+    };
+    httpd_register_uri_handler(server, &setup_wifi_scan);
+    
+    httpd_uri_t setup_wifi_connect = {
+        .uri = "/api/setup/wifi/connect",
+        .method = HTTP_POST,
+        .handler = api_setup_wifi_connect
+    };
+    httpd_register_uri_handler(server, &setup_wifi_connect);
+    
+    httpd_uri_t setup_password = {
+        .uri = "/api/setup/password",
+        .method = HTTP_POST,
+        .handler = api_setup_password
+    };
+    httpd_register_uri_handler(server, &setup_password);
+    
+    httpd_uri_t setup_complete = {
+        .uri = "/api/setup/complete",
+        .method = HTTP_POST,
+        .handler = api_setup_complete
+    };
+    httpd_register_uri_handler(server, &setup_complete);
+    
+    // WiFi status endpoint (for setup wizard)
+    httpd_uri_t wifi_status = {
+        .uri = "/api/wifi/status",
+        .method = HTTP_GET,
+        .handler = api_wifi_status
+    };
+    httpd_register_uri_handler(server, &wifi_status);
+    
+    // Device info endpoint
+    httpd_uri_t device_info = {
+        .uri = "/api/device/info",
+        .method = HTTP_GET,
+        .handler = api_device_info
+    };
+    httpd_register_uri_handler(server, &device_info);
+    
+    // GUI download endpoints (for setup wizard)
+    httpd_uri_t gui_download = {
+        .uri = "/api/gui/download",
+        .method = HTTP_POST,
+        .handler = api_gui_download
+    };
+    httpd_register_uri_handler(server, &gui_download);
+    
+    httpd_uri_t gui_download_status = {
+        .uri = "/api/gui/download/status",
+        .method = HTTP_GET,
+        .handler = api_gui_download_status
+    };
+    httpd_register_uri_handler(server, &gui_download_status);
+    
     ESP_LOGI(TAG, "API routes registered");
 }
 
 void web_register_static_routes(httpd_handle_t server)
 {
+    // Setup page - embedded in firmware (always available)
+    httpd_uri_t setup_uri = {
+        .uri = "/setup.html",
+        .method = HTTP_GET,
+        .handler = setup_html_handler
+    };
+    httpd_register_uri_handler(server, &setup_uri);
+    
+    // Also serve setup on root when no index.html exists
+    httpd_uri_t setup_root = {
+        .uri = "/setup",
+        .method = HTTP_GET,
+        .handler = setup_html_handler
+    };
+    httpd_register_uri_handler(server, &setup_root);
+    
     // Catch-all for static files
     httpd_uri_t static_uri = {
         .uri = "/*",

@@ -1,12 +1,6 @@
 /**
  * @file wifi_manager.c
- * @brief WiFi management implementation for LebensSpur ESP32-C6
- * 
- * Features:
- * - AP mode: SSID = Device ID, Password = smartkraft
- * - STA mode: Connect to external networks
- * - mDNS: {device_id}.local
- * - Concurrent AP+STA operation
+ * @brief WiFi management - AP + STA dual mode for ESP32-C6
  */
 
 #include "wifi_manager.h"
@@ -18,509 +12,394 @@
 #include "esp_mac.h"
 #include "mdns.h"
 #include "lwip/inet.h"
+#include "lwip/dns.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include <string.h>
 
-static const char *TAG = "wifi_mgr";
+static const char *TAG = "wifi";
 
-/** Event group bits */
+/* Event bits */
 #define WIFI_CONNECTED_BIT  BIT0
 #define WIFI_FAIL_BIT       BIT1
 #define WIFI_SCAN_DONE_BIT  BIT2
 
-/** WiFi event group */
-static EventGroupHandle_t s_wifi_event_group = NULL;
-
-/** Network interfaces */
-static esp_netif_t *s_netif_ap = NULL;
+/* State */
+static EventGroupHandle_t s_event_group = NULL;
+static esp_netif_t *s_netif_ap  = NULL;
 static esp_netif_t *s_netif_sta = NULL;
+static wifi_state_t s_state     = WIFI_STATE_IDLE;
+static int  s_retry             = 0;
+static char s_sta_ip[16]        = "0.0.0.0";
+static char s_ap_ip[16]         = "192.168.4.1";
+static char s_hostname[32]      = {0};
+static uint8_t s_ap_clients     = 0;
+static bool s_inited            = false;
 
-/** Connection state */
-static wifi_state_t s_sta_state = WIFI_STATE_IDLE;
-static int s_retry_count = 0;
-static const int s_max_retry = 3;
+/* Pending async connect */
+static char s_pend_ssid[33]     = {0};
+static char s_pend_pass[65]     = {0};
+static TaskHandle_t s_conn_task = NULL;
 
-/** IP addresses */
-static char s_sta_ip[16] = "0.0.0.0";
-static char s_ap_ip[16] = "192.168.4.1";
+/* ── Event handler ────────────────────────────────────── */
 
-/** Hostname (device ID) */
-static char s_hostname[32] = {0};
-
-/** AP client count */
-static uint8_t s_ap_clients = 0;
-
-/** Initialization flag */
-static bool s_initialized = false;
-
-/**
- * @brief WiFi event handler
- */
-static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-                               int32_t event_id, void *event_data)
+static void on_wifi_event(void *arg, esp_event_base_t base,
+                          int32_t id, void *data)
 {
-    if (event_base == WIFI_EVENT) {
-        switch (event_id) {
-            case WIFI_EVENT_AP_START:
-                ESP_LOGI(TAG, "AP started - SSID: %s, Password: %s", 
-                         device_id_get(), WIFI_AP_PASSWORD);
-                break;
-                
-            case WIFI_EVENT_AP_STOP:
-                ESP_LOGI(TAG, "AP stopped");
-                break;
-                
-            case WIFI_EVENT_AP_STACONNECTED: {
-                wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-                s_ap_clients++;
-                ESP_LOGI(TAG, "Client connected to AP - MAC: " MACSTR ", AID: %d, Total: %d",
-                         MAC2STR(event->mac), event->aid, s_ap_clients);
-                break;
-            }
-            
-            case WIFI_EVENT_AP_STADISCONNECTED: {
-                wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-                if (s_ap_clients > 0) s_ap_clients--;
-                ESP_LOGI(TAG, "Client disconnected from AP - MAC: " MACSTR ", Total: %d",
-                         MAC2STR(event->mac), s_ap_clients);
-                break;
-            }
-            
-            case WIFI_EVENT_STA_START:
-                ESP_LOGI(TAG, "STA started");
-                break;
-                
-            case WIFI_EVENT_STA_CONNECTED:
-                ESP_LOGI(TAG, "STA connected to AP");
-                s_sta_state = WIFI_STATE_CONNECTING; // Wait for IP
-                s_retry_count = 0;
-                break;
-                
-            case WIFI_EVENT_STA_DISCONNECTED: {
-                wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
-                ESP_LOGW(TAG, "STA disconnected, reason: %d", event->reason);
-                
-                strcpy(s_sta_ip, "0.0.0.0");
-                
-                if (s_sta_state == WIFI_STATE_CONNECTING || s_sta_state == WIFI_STATE_CONNECTED) {
-                    if (s_retry_count < s_max_retry) {
-                        s_retry_count++;
-                        ESP_LOGI(TAG, "Retrying connection (%d/%d)...", s_retry_count, s_max_retry);
-                        esp_wifi_connect();
-                    } else {
-                        ESP_LOGE(TAG, "Connection failed after %d retries", s_max_retry);
-                        s_sta_state = WIFI_STATE_FAILED;
-                        xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-                    }
+    if (base == WIFI_EVENT) {
+        switch (id) {
+        case WIFI_EVENT_AP_STACONNECTED:
+            s_ap_clients++;
+            break;
+        case WIFI_EVENT_AP_STADISCONNECTED:
+            if (s_ap_clients > 0) s_ap_clients--;
+            break;
+        case WIFI_EVENT_STA_CONNECTED:
+            s_state = WIFI_STATE_CONNECTING;   /* waiting for IP */
+            s_retry = 0;
+            break;
+        case WIFI_EVENT_STA_DISCONNECTED: {
+            wifi_event_sta_disconnected_t *ev = data;
+            ESP_LOGW(TAG, "STA disc reason:%d", ev->reason);
+            strcpy(s_sta_ip, "0.0.0.0");
+
+            if (s_state == WIFI_STATE_CONNECTING || s_state == WIFI_STATE_CONNECTED) {
+                if (s_retry < WIFI_MAX_RETRY) {
+                    s_retry++;
+                    ESP_LOGI(TAG, "Retry %d/%d", s_retry, WIFI_MAX_RETRY);
+                    esp_wifi_connect();
                 } else {
-                    s_sta_state = WIFI_STATE_DISCONNECTED;
+                    s_state = WIFI_STATE_FAILED;
+                    xEventGroupSetBits(s_event_group, WIFI_FAIL_BIT);
                 }
-                break;
+            } else {
+                s_state = WIFI_STATE_DISCONNECTED;
             }
-            
-            case WIFI_EVENT_SCAN_DONE:
-                ESP_LOGI(TAG, "WiFi scan completed");
-                xEventGroupSetBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
-                break;
-                
-            default:
-                break;
+            break;
         }
-    } else if (event_base == IP_EVENT) {
-        switch (event_id) {
-            case IP_EVENT_STA_GOT_IP: {
-                ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-                snprintf(s_sta_ip, sizeof(s_sta_ip), IPSTR, IP2STR(&event->ip_info.ip));
-                ESP_LOGI(TAG, "STA got IP: %s", s_sta_ip);
-                s_sta_state = WIFI_STATE_CONNECTED;
-                s_retry_count = 0;
-                xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-                break;
-            }
-            
-            case IP_EVENT_STA_LOST_IP:
-                ESP_LOGW(TAG, "STA lost IP");
-                strcpy(s_sta_ip, "0.0.0.0");
-                break;
-                
-            default:
-                break;
+        case WIFI_EVENT_SCAN_DONE:
+            xEventGroupSetBits(s_event_group, WIFI_SCAN_DONE_BIT);
+            break;
+        default:
+            break;
         }
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *ev = data;
+        snprintf(s_sta_ip, sizeof(s_sta_ip), IPSTR, IP2STR(&ev->ip_info.ip));
+        ESP_LOGI(TAG, "Got IP: %s", s_sta_ip);
+        ESP_LOGI(TAG, "Gateway: " IPSTR, IP2STR(&ev->ip_info.gw));
+
+        /* Log current DNS servers from DHCP */
+        const ip_addr_t *d0 = dns_getserver(0);
+        const ip_addr_t *d1 = dns_getserver(1);
+        ESP_LOGI(TAG, "DHCP DNS0: %s", ipaddr_ntoa(d0));
+        ESP_LOGI(TAG, "DHCP DNS1: %s", ipaddr_ntoa(d1));
+
+        /* If DHCP didn't provide DNS, use gateway as DNS relay */
+        if (ip_addr_isany(d0)) {
+            ip_addr_t gw_addr;
+            IP_ADDR4(&gw_addr,
+                      ip4_addr1_16(&ev->ip_info.gw),
+                      ip4_addr2_16(&ev->ip_info.gw),
+                      ip4_addr3_16(&ev->ip_info.gw),
+                      ip4_addr4_16(&ev->ip_info.gw));
+            dns_setserver(0, &gw_addr);
+            ESP_LOGI(TAG, "No DHCP DNS, using gateway as DNS");
+        }
+
+        /* Set Google DNS as secondary/fallback */
+        ip_addr_t gdns;
+        IP_ADDR4(&gdns, 8, 8, 8, 8);
+        dns_setserver(1, &gdns);
+        ESP_LOGI(TAG, "DNS configured");
+
+        s_state = WIFI_STATE_CONNECTED;
+        s_retry = 0;
+        xEventGroupSetBits(s_event_group, WIFI_CONNECTED_BIT);
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_LOST_IP) {
+        strcpy(s_sta_ip, "0.0.0.0");
     }
 }
 
-/**
- * @brief Initialize mDNS with device ID as hostname
- */
-static esp_err_t init_mdns(void)
+/* ── mDNS ─────────────────────────────────────────────── */
+
+static void setup_mdns(void)
 {
-    // Hostname = device ID (without modification)
     strncpy(s_hostname, device_id_get(), sizeof(s_hostname) - 1);
-    
-    esp_err_t ret = mdns_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS init failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    // Set hostname (will be accessible as {hostname}.local)
-    ret = mdns_hostname_set(s_hostname);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS hostname set failed: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    // Set instance name
-    ret = mdns_instance_name_set("LebensSpur Device");
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "mDNS instance name set failed");
-    }
-    
-    // Add HTTP service
-    ret = mdns_service_add("LebensSpur Web", "_http", "_tcp", 80, NULL, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "mDNS service add failed");
-    }
-    
-    ESP_LOGI(TAG, "mDNS initialized - hostname: %s.local", s_hostname);
-    
-    return ESP_OK;
+    if (mdns_init() != ESP_OK) return;
+    mdns_hostname_set(s_hostname);
+    mdns_instance_name_set("LebensSpur");
+    mdns_service_add("LebensSpur", "_http", "_tcp", 80, NULL, 0);
 }
+
+/* ── Init ─────────────────────────────────────────────── */
 
 int wifi_manager_init(void)
 {
-    if (s_initialized) {
-        ESP_LOGW(TAG, "Already initialized");
-        return ESP_OK;
-    }
-    
-    // Check device ID is ready
-    if (!device_id_is_valid()) {
-        ESP_LOGE(TAG, "Device ID not initialized");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    ESP_LOGI(TAG, "Initializing WiFi manager...");
-    
-    // Create event group
-    s_wifi_event_group = xEventGroupCreate();
-    if (s_wifi_event_group == NULL) {
-        ESP_LOGE(TAG, "Failed to create event group");
-        return ESP_ERR_NO_MEM;
-    }
-    
-    // Initialize TCP/IP stack
+    if (s_inited) return ESP_OK;
+    if (!device_id_is_valid()) return ESP_ERR_INVALID_STATE;
+
+    s_event_group = xEventGroupCreate();
+    if (!s_event_group) return ESP_ERR_NO_MEM;
+
     ESP_ERROR_CHECK(esp_netif_init());
-    
-    // Create default network interfaces
-    s_netif_ap = esp_netif_create_default_wifi_ap();
+
+    s_netif_ap  = esp_netif_create_default_wifi_ap();
     s_netif_sta = esp_netif_create_default_wifi_sta();
-    
-    // Initialize WiFi with default config
+
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    
-    // Register event handlers
+
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
+        WIFI_EVENT, ESP_EVENT_ANY_ID, &on_wifi_event, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        IP_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
-    
-    // Set WiFi mode to AP+STA
+        IP_EVENT, ESP_EVENT_ANY_ID, &on_wifi_event, NULL, NULL));
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    
-    // Initialize mDNS
-    init_mdns();
-    
-    s_initialized = true;
-    ESP_LOGI(TAG, "WiFi manager initialized");
-    
+
+    setup_mdns();
+
+    s_inited = true;
     return ESP_OK;
 }
 
+/* ── AP ───────────────────────────────────────────────── */
+
 int wifi_manager_start_ap(void)
 {
-    if (!s_initialized) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    const char *device_id = device_id_get();
-    
-    // Configure AP
-    wifi_config_t ap_config = {
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+
+    const char *id = device_id_get();
+
+    wifi_config_t ap = {
         .ap = {
-            .channel = WIFI_AP_CHANNEL,
-            .max_connection = WIFI_AP_MAX_CONN,
-            .authmode = WIFI_AUTH_WPA2_PSK,
-            .pmf_cfg = {
-                .required = false,
-            },
+            .channel        = WIFI_AP_CHANNEL,
+            .max_connection  = WIFI_AP_MAX_CONN,
+            .authmode       = WIFI_AUTH_WPA2_PSK,
+            .pmf_cfg.required = false,
         },
     };
-    
-    // Set SSID = Device ID
-    strncpy((char *)ap_config.ap.ssid, device_id, sizeof(ap_config.ap.ssid) - 1);
-    ap_config.ap.ssid_len = strlen(device_id);
-    
-    // Set password = smartkraft
-    strncpy((char *)ap_config.ap.password, WIFI_AP_PASSWORD, sizeof(ap_config.ap.password) - 1);
-    
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+    strncpy((char *)ap.ap.ssid, id, sizeof(ap.ap.ssid) - 1);
+    ap.ap.ssid_len = strlen(id);
+    strncpy((char *)ap.ap.password, WIFI_AP_PASSWORD, sizeof(ap.ap.password) - 1);
+
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
     ESP_ERROR_CHECK(esp_wifi_start());
-    
-    ESP_LOGI(TAG, "AP started:");
-    ESP_LOGI(TAG, "  SSID: %s", device_id);
-    ESP_LOGI(TAG, "  Password: %s", WIFI_AP_PASSWORD);
-    ESP_LOGI(TAG, "  IP: %s", s_ap_ip);
-    ESP_LOGI(TAG, "  mDNS: %s.local", s_hostname);
-    
+
     return ESP_OK;
 }
 
 int wifi_manager_stop_ap(void)
 {
-    if (!s_initialized) {
-        return ESP_ERR_INVALID_STATE;
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+
+    wifi_mode_t m;
+    esp_wifi_get_mode(&m);
+    if (m == WIFI_MODE_APSTA) {
+        esp_wifi_set_mode(WIFI_MODE_STA);
+    } else if (m == WIFI_MODE_AP) {
+        esp_wifi_stop();
     }
-    
-    // Note: This stops WiFi entirely in AP+STA mode
-    // For partial stop, would need to change mode to STA only
-    wifi_mode_t mode;
-    esp_wifi_get_mode(&mode);
-    
-    if (mode == WIFI_MODE_APSTA) {
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    } else if (mode == WIFI_MODE_AP) {
-        ESP_ERROR_CHECK(esp_wifi_stop());
-    }
-    
     s_ap_clients = 0;
-    ESP_LOGI(TAG, "AP stopped");
-    
     return ESP_OK;
+}
+
+/* ── STA connect (blocking) ───────────────────────────── */
+
+static void sta_configure(const char *ssid, const char *password)
+{
+    wifi_config_t c = {0};
+    strncpy((char *)c.sta.ssid, ssid, sizeof(c.sta.ssid) - 1);
+    if (password && *password)
+        strncpy((char *)c.sta.password, password, sizeof(c.sta.password) - 1);
+    c.sta.pmf_cfg.capable  = true;
+    c.sta.pmf_cfg.required = false;
+
+    esp_wifi_set_config(WIFI_IF_STA, &c);
 }
 
 int wifi_manager_connect(const char *ssid, const char *password)
 {
-    if (!s_initialized) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    if (ssid == NULL || strlen(ssid) == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    ESP_LOGI(TAG, "Connecting to: %s", ssid);
-    
-    // Clear previous state
-    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-    s_sta_state = WIFI_STATE_CONNECTING;
-    s_retry_count = 0;
-    
-    // Configure STA
-    wifi_config_t sta_config = {0};
-    strncpy((char *)sta_config.sta.ssid, ssid, sizeof(sta_config.sta.ssid) - 1);
-    
-    if (password != NULL && strlen(password) > 0) {
-        strncpy((char *)sta_config.sta.password, password, sizeof(sta_config.sta.password) - 1);
-    }
-    
-    // Enable PMF if available
-    sta_config.sta.pmf_cfg.capable = true;
-    sta_config.sta.pmf_cfg.required = false;
-    
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
-    
-    // Ensure WiFi is started
-    wifi_mode_t mode;
-    esp_wifi_get_mode(&mode);
-    if (mode == WIFI_MODE_NULL) {
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-        ESP_ERROR_CHECK(esp_wifi_start());
-    }
-    
-    // Start connection
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    if (!ssid || !*ssid) return ESP_ERR_INVALID_ARG;
+
+    /* Disconnect cleanly first */
+    s_state = WIFI_STATE_IDLE;
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    xEventGroupClearBits(s_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    s_state = WIFI_STATE_CONNECTING;
+    s_retry = 0;
+
+    sta_configure(ssid, password);
+
     esp_err_t ret = esp_wifi_connect();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "WiFi connect failed: %s", esp_err_to_name(ret));
-        s_sta_state = WIFI_STATE_FAILED;
+        s_state = WIFI_STATE_FAILED;
         return ret;
     }
-    
-    // Wait for connection result
+
     EventBits_t bits = xEventGroupWaitBits(
-        s_wifi_event_group,
+        s_event_group,
         WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-        pdTRUE,  // Clear bits
-        pdFALSE, // Wait for any bit
-        pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_SEC * 1000)
-    );
-    
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Connected to %s, IP: %s", ssid, s_sta_ip);
-        return ESP_OK;
-    } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGE(TAG, "Failed to connect to %s", ssid);
-        return ESP_FAIL;
-    } else {
-        ESP_LOGE(TAG, "Connection timeout");
-        s_sta_state = WIFI_STATE_FAILED;
-        return ESP_ERR_TIMEOUT;
-    }
+        pdTRUE, pdFALSE,
+        pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_SEC * 1000));
+
+    if (bits & WIFI_CONNECTED_BIT) return ESP_OK;
+    if (bits & WIFI_FAIL_BIT)      return ESP_FAIL;
+
+    s_state = WIFI_STATE_FAILED;
+    return ESP_ERR_TIMEOUT;
 }
 
-int wifi_manager_disconnect(void)
+/* ── STA connect (async, for setup page) ──────────────── */
+
+static void async_connect_task(void *arg)
 {
-    if (!s_initialized) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    s_sta_state = WIFI_STATE_IDLE;
-    strcpy(s_sta_ip, "0.0.0.0");
-    
-    esp_err_t ret = esp_wifi_disconnect();
+    /*  Wait so that the HTTP response reaches the client
+        BEFORE we potentially change WiFi channel */
+    vTaskDelay(pdMS_TO_TICKS(800));
+
+    /* 1. Put STA in idle so disconnect-event won't auto-retry old creds */
+    s_state = WIFI_STATE_IDLE;
+    s_retry = 0;
+
+    /* 2. Disconnect whatever was connected */
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    /* 3. Configure new credentials */
+    xEventGroupClearBits(s_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    sta_configure(s_pend_ssid, s_pend_pass);
+
+    /* 4. NOW go to CONNECTING so event handler will do retries */
+    s_state = WIFI_STATE_CONNECTING;
+    s_retry = 0;
+
+    /* 5. Connect */
+    esp_err_t ret = esp_wifi_connect();
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Disconnect failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "connect err: %s", esp_err_to_name(ret));
+        s_state = WIFI_STATE_FAILED;
     }
-    
-    ESP_LOGI(TAG, "Disconnected from WiFi");
-    
+
+    memset(s_pend_pass, 0, sizeof(s_pend_pass));
+    s_conn_task = NULL;
+    vTaskDelete(NULL);
+}
+
+int wifi_manager_connect_async(const char *ssid, const char *password)
+{
+    if (!s_inited)   return ESP_ERR_INVALID_STATE;
+    if (!ssid || !*ssid) return ESP_ERR_INVALID_ARG;
+
+    /* Kill any pending task */
+    if (s_conn_task) {
+        vTaskDelete(s_conn_task);
+        s_conn_task = NULL;
+    }
+
+    /* Store credentials */
+    memset(s_pend_ssid, 0, sizeof(s_pend_ssid));
+    memset(s_pend_pass, 0, sizeof(s_pend_pass));
+    strncpy(s_pend_ssid, ssid, sizeof(s_pend_ssid) - 1);
+    if (password && *password)
+        strncpy(s_pend_pass, password, sizeof(s_pend_pass) - 1);
+
+    if (xTaskCreate(async_connect_task, "wcon", 4096, NULL, 5, &s_conn_task) != pdPASS) {
+        s_state = WIFI_STATE_FAILED;
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
-int wifi_manager_scan(wifi_scan_result_t *results, uint16_t max_results)
+/* ── Disconnect ───────────────────────────────────────── */
+
+int wifi_manager_disconnect(void)
 {
-    if (!s_initialized || results == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    ESP_LOGI(TAG, "Starting WiFi scan...");
-    
-    // Clear scan done bit
-    xEventGroupClearBits(s_wifi_event_group, WIFI_SCAN_DONE_BIT);
-    
-    // Configure scan
-    wifi_scan_config_t scan_config = {
-        .ssid = NULL,
-        .bssid = NULL,
-        .channel = 0,
-        .show_hidden = false,
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+    s_state = WIFI_STATE_IDLE;
+    strcpy(s_sta_ip, "0.0.0.0");
+    esp_wifi_disconnect();
+    return ESP_OK;
+}
+
+/* ── Scan ─────────────────────────────────────────────── */
+
+int wifi_manager_scan(wifi_scan_result_t *out, uint16_t max)
+{
+    if (!s_inited || !out) return -1;
+
+    xEventGroupClearBits(s_event_group, WIFI_SCAN_DONE_BIT);
+
+    wifi_scan_config_t sc = {
         .scan_type = WIFI_SCAN_TYPE_ACTIVE,
         .scan_time.active.min = 100,
         .scan_time.active.max = 300,
     };
-    
-    // Start scan
-    esp_err_t ret = esp_wifi_scan_start(&scan_config, false);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Scan start failed: %s", esp_err_to_name(ret));
-        return -1;
-    }
-    
-    // Wait for scan completion
+
+    if (esp_wifi_scan_start(&sc, false) != ESP_OK) return -1;
+
     EventBits_t bits = xEventGroupWaitBits(
-        s_wifi_event_group,
-        WIFI_SCAN_DONE_BIT,
-        pdTRUE,
-        pdFALSE,
-        pdMS_TO_TICKS(10000)
-    );
-    
+        s_event_group, WIFI_SCAN_DONE_BIT,
+        pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
     if (!(bits & WIFI_SCAN_DONE_BIT)) {
-        ESP_LOGW(TAG, "Scan timeout");
         esp_wifi_scan_stop();
         return -1;
     }
-    
-    // Get results
-    uint16_t ap_count = 0;
-    esp_wifi_scan_get_ap_num(&ap_count);
-    
-    if (ap_count == 0) {
-        ESP_LOGI(TAG, "No networks found");
-        return 0;
+
+    uint16_t n = 0;
+    esp_wifi_scan_get_ap_num(&n);
+    if (n == 0) return 0;
+
+    uint16_t cnt = (n < max) ? n : max;
+    wifi_ap_record_t *recs = malloc(cnt * sizeof(wifi_ap_record_t));
+    if (!recs) return -1;
+
+    esp_wifi_scan_get_ap_records(&cnt, recs);
+    for (int i = 0; i < cnt; i++) {
+        strncpy(out[i].ssid, (char *)recs[i].ssid, sizeof(out[i].ssid) - 1);
+        out[i].ssid[sizeof(out[i].ssid) - 1] = '\0';
+        out[i].rssi     = recs[i].rssi;
+        out[i].authmode = recs[i].authmode;
     }
-    
-    uint16_t count = (ap_count < max_results) ? ap_count : max_results;
-    wifi_ap_record_t *ap_records = malloc(count * sizeof(wifi_ap_record_t));
-    if (ap_records == NULL) {
-        ESP_LOGE(TAG, "Memory allocation failed");
-        return -1;
-    }
-    
-    ret = esp_wifi_scan_get_ap_records(&count, ap_records);
-    if (ret != ESP_OK) {
-        free(ap_records);
-        return -1;
-    }
-    
-    // Copy results
-    for (int i = 0; i < count; i++) {
-        strncpy(results[i].ssid, (char *)ap_records[i].ssid, sizeof(results[i].ssid) - 1);
-        results[i].ssid[sizeof(results[i].ssid) - 1] = '\0';
-        results[i].rssi = ap_records[i].rssi;
-        results[i].authmode = ap_records[i].authmode;
-    }
-    
-    free(ap_records);
-    
-    ESP_LOGI(TAG, "Scan found %d networks", count);
-    
-    return count;
+    free(recs);
+    return cnt;
 }
 
-int wifi_manager_get_status(wifi_status_t *status)
+/* ── Status ───────────────────────────────────────────── */
+
+int wifi_manager_get_status(wifi_status_t *st)
 {
-    if (!s_initialized || status == NULL) {
-        return ESP_ERR_INVALID_STATE;
+    if (!s_inited || !st) return ESP_ERR_INVALID_STATE;
+    memset(st, 0, sizeof(*st));
+
+    wifi_mode_t m;
+    esp_wifi_get_mode(&m);
+
+    st->ap_active     = (m == WIFI_MODE_AP || m == WIFI_MODE_APSTA);
+    st->sta_connected = (s_state == WIFI_STATE_CONNECTED);
+    st->sta_state     = s_state;
+    st->ap_clients    = s_ap_clients;
+
+    if (st->ap_active) {
+        strncpy(st->ap_ssid, device_id_get(), sizeof(st->ap_ssid) - 1);
+        strncpy(st->ap_ip,   s_ap_ip,         sizeof(st->ap_ip)   - 1);
     }
-    
-    memset(status, 0, sizeof(wifi_status_t));
-    
-    wifi_mode_t mode;
-    esp_wifi_get_mode(&mode);
-    
-    status->ap_active = (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA);
-    status->sta_connected = (s_sta_state == WIFI_STATE_CONNECTED);
-    status->sta_state = s_sta_state;
-    status->ap_clients = s_ap_clients;
-    
-    // AP info
-    if (status->ap_active) {
-        strncpy(status->ap_ssid, device_id_get(), sizeof(status->ap_ssid) - 1);
-        strncpy(status->ap_ip, s_ap_ip, sizeof(status->ap_ip) - 1);
-    }
-    
-    // STA info
-    if (status->sta_connected) {
-        wifi_ap_record_t ap_info;
-        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
-            strncpy(status->sta_ssid, (char *)ap_info.ssid, sizeof(status->sta_ssid) - 1);
-            status->sta_rssi = ap_info.rssi;
+    if (st->sta_connected) {
+        wifi_ap_record_t info;
+        if (esp_wifi_sta_get_ap_info(&info) == ESP_OK) {
+            strncpy(st->sta_ssid, (char *)info.ssid, sizeof(st->sta_ssid) - 1);
+            st->sta_rssi = info.rssi;
         }
-        strncpy(status->sta_ip, s_sta_ip, sizeof(status->sta_ip) - 1);
+        strncpy(st->sta_ip, s_sta_ip, sizeof(st->sta_ip) - 1);
     }
-    
     return ESP_OK;
 }
 
-bool wifi_manager_is_connected(void)
-{
-    return s_sta_state == WIFI_STATE_CONNECTED;
-}
-
-const char* wifi_manager_get_sta_ip(void)
-{
-    return s_sta_ip;
-}
-
-const char* wifi_manager_get_ap_ip(void)
-{
-    return s_ap_ip;
-}
-
-const char* wifi_manager_get_hostname(void)
-{
-    return s_hostname;
-}
+bool wifi_manager_is_connected(void)           { return s_state == WIFI_STATE_CONNECTED; }
+const char* wifi_manager_get_sta_ip(void)      { return s_sta_ip; }
+const char* wifi_manager_get_ap_ip(void)       { return s_ap_ip; }
+const char* wifi_manager_get_hostname(void)    { return s_hostname; }

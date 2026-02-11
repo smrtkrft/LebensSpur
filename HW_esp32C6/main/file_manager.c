@@ -40,11 +40,19 @@ esp_err_t file_manager_init(void)
     }
     
     // Register external flash as partition
+    // SPIFFS page_ix is uint16_t (max 65535 pages), with 256B page = ~16.7MB max
+    // To be safe, limit to 15MB (15*1024*1024 / 256 = 61440 pages < 65535)
     const esp_partition_t *partition = NULL;
+    uint32_t partition_size = ext_flash_get_size();
+    const uint32_t MAX_SPIFFS_SIZE = 15 * 1024 * 1024; // 15MB max for SPIFFS
+    if (partition_size > MAX_SPIFFS_SIZE) {
+        partition_size = MAX_SPIFFS_SIZE;
+        ESP_LOGW(TAG, "Limiting partition to 15MB for SPIFFS page_ix compatibility");
+    }
     esp_err_t err = esp_partition_register_external(
         flash,
         0,                          // Offset: start
-        ext_flash_get_size(),       // Size: entire flash
+        partition_size,             // Size: limited
         EXT_FLASH_PARTITION_LABEL,
         ESP_PARTITION_TYPE_DATA,
         ESP_PARTITION_SUBTYPE_DATA_SPIFFS,
@@ -327,4 +335,18 @@ esp_err_t file_manager_append_string(const char *path, const char *str)
 bool file_manager_is_mounted(void)
 {
     return s_mounted;
+}
+
+esp_err_t file_manager_rename(const char *old_path, const char *new_path)
+{
+    if (!s_mounted) return ESP_ERR_INVALID_STATE;
+    if (!old_path || !new_path) return ESP_ERR_INVALID_ARG;
+    
+    if (rename(old_path, new_path) != 0) {
+        ESP_LOGE(TAG, "Failed to rename %s to %s (errno: %d)", old_path, new_path, errno);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGD(TAG, "Renamed: %s -> %s", old_path, new_path);
+    return ESP_OK;
 }

@@ -149,37 +149,6 @@ static void on_button_event(button_event_t event)
 }
 
 /* ============================================
- * STARTUP BANNER
- * ============================================ */
-
-static void print_banner(void)
-{
-    printf("\n");
-    printf("╔════════════════════════════════════════════════════════════╗\n");
-    printf("║                                                            ║\n");
-    printf("║     ██╗     ███████╗██████╗ ███████╗███╗   ██╗███████╗    ║\n");
-    printf("║     ██║     ██╔════╝██╔══██╗██╔════╝████╗  ██║██╔════╝    ║\n");
-    printf("║     ██║     █████╗  ██████╔╝█████╗  ██╔██╗ ██║███████╗    ║\n");
-    printf("║     ██║     ██╔══╝  ██╔══██╗██╔══╝  ██║╚██╗██║╚════██║    ║\n");
-    printf("║     ███████╗███████╗██████╔╝███████╗██║ ╚████║███████║    ║\n");
-    printf("║     ╚══════╝╚══════╝╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝    ║\n");
-    printf("║                     ███████╗██████╗ ██╗   ██╗██████╗      ║\n");
-    printf("║                     ██╔════╝██╔══██╗██║   ██║██╔══██╗     ║\n");
-    printf("║                     ███████╗██████╔╝██║   ██║██████╔╝     ║\n");
-    printf("║                     ╚════██║██╔═══╝ ██║   ██║██╔══██╗     ║\n");
-    printf("║                     ███████║██║     ╚██████╔╝██║  ██║     ║\n");
-    printf("║                     ╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝     ║\n");
-    printf("║                                                            ║\n");
-    printf("║            IoT Dead Man's Switch - ESP32-C6               ║\n");
-    printf("╚════════════════════════════════════════════════════════════╝\n");
-    printf("\n");
-    printf("  Device ID: %s\n", device_id_get());
-    printf("  Firmware:  v%s\n", FIRMWARE_VERSION);
-    printf("  Build:     %s %s\n", __DATE__, __TIME__);
-    printf("\n");
-}
-
-/* ============================================
  * SYSTEM INITIALIZATION
  * ============================================ */
 
@@ -243,10 +212,6 @@ static esp_err_t system_init(void)
 
     // 5. Increment boot counter
     uint32_t boot_count = config_increment_boot_count();
-    ESP_LOGI(TAG, "Boot count: %lu", boot_count);
-
-    // Print banner
-    print_banner();
 
     // 6. Time Manager
     ret = time_manager_init();
@@ -298,24 +263,17 @@ static esp_err_t system_init(void)
         ESP_LOGE(TAG, "AP start failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    ESP_LOGI(TAG, "AP started: SSID=%s, Password=%s", device_id_get(), WIFI_AP_PASSWORD);
-    ESP_LOGI(TAG, "mDNS: http://%s.local", wifi_manager_get_hostname());
 
-    // 13. Connect to saved WiFi if available
-    wifi_config_t wifi_cfg;
-    config_load_wifi(&wifi_cfg);
-    if (wifi_cfg.configured && wifi_cfg.ssid[0]) {
-        ESP_LOGI(TAG, "Connecting to saved WiFi: %s", wifi_cfg.ssid);
-        ret = wifi_manager_connect(wifi_cfg.ssid, wifi_cfg.password);
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Connected! IP: %s", wifi_manager_get_sta_ip());
-            LOG_NETWORK(LOG_LEVEL_INFO, "Connected to %s", wifi_cfg.ssid);
-            
-            // Start NTP sync
-            time_manager_start_ntp();
-        } else {
-            ESP_LOGW(TAG, "WiFi connect failed, AP still available");
-            LOG_NETWORK(LOG_LEVEL_WARN, "Failed to connect to %s", wifi_cfg.ssid);
+
+    // 13. Connect to saved WiFi if available (only after setup is done)
+    if (config_is_setup_completed()) {
+        app_wifi_config_t wifi_cfg;
+        config_load_wifi(&wifi_cfg);
+        if (wifi_cfg.configured && wifi_cfg.ssid[0]) {
+            ret = wifi_manager_connect(wifi_cfg.ssid, wifi_cfg.password);
+            if (ret == ESP_OK) {
+                time_manager_start_ntp();
+            }
         }
     }
 
@@ -368,26 +326,8 @@ void app_main(void)
 
     ESP_LOGI(TAG, "System initialized successfully");
 
-    // Check setup status
     if (!config_is_setup_completed()) {
-        ESP_LOGW(TAG, "==============================================");
-        ESP_LOGW(TAG, "  INITIAL SETUP REQUIRED");
-        ESP_LOGW(TAG, "==============================================");
-        ESP_LOGI(TAG, "WiFi: %s  Password: %s", device_id_get(), WIFI_AP_PASSWORD);
-        ESP_LOGI(TAG, "URL:  http://%s.local", wifi_manager_get_hostname());
-        ESP_LOGI(TAG, "      http://%s", wifi_manager_get_ap_ip());
-        ESP_LOGW(TAG, "==============================================");
-    } else {
-        ESP_LOGI(TAG, "Setup complete - normal operation");
-        
-        // Log timer status
-        timer_status_t timer_status;
-        timer_scheduler_get_status(&timer_status);
-        ESP_LOGI(TAG, "Timer state: %s", timer_scheduler_state_name(timer_status.state));
-        
-        char remaining[32];
-        timer_scheduler_time_remaining_str(remaining, sizeof(remaining));
-        ESP_LOGI(TAG, "Time remaining: %s", remaining);
+        ESP_LOGW(TAG, "INITIAL SETUP REQUIRED");
     }
 
     // Main monitoring loop
@@ -404,11 +344,10 @@ void app_main(void)
         char timer_str[32];
         timer_scheduler_time_remaining_str(timer_str, sizeof(timer_str));
         
-        ESP_LOGI(TAG, "Status: uptime=%s, wifi=%s, timer=%s, relay=%s",
+        ESP_LOGD(TAG, "up=%s wifi=%s timer=%s",
                  uptime,
-                 wifi_status.sta_connected ? "connected" : "AP-only",
-                 timer_str,
-                 relay_is_on() ? "ON" : "OFF");
+                 wifi_status.sta_connected ? "STA" : "AP",
+                 timer_str);
         
         // Cleanup expired sessions
         session_auth_cleanup();

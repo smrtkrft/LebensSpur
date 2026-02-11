@@ -107,7 +107,7 @@ typedef struct {
     char gateway[16];
     char subnet[16];
     char dns[16];
-} wifi_config_t;
+} app_wifi_config_t;
 
 #define WIFI_CONFIG_DEFAULT() {     \
     .ssid = "",                     \
@@ -163,7 +163,7 @@ typedef struct {
     .smtp_password = "",            \
     .sender_name = "LebensSpur",    \
     .use_tls = true,                \
-    .groups = {{0}},                \
+    .groups = {{{0}}},              \
     .group_count = 0                \
 }
 
@@ -245,8 +245,8 @@ esp_err_t config_load_runtime(timer_runtime_t *runtime);
 esp_err_t config_save_runtime(const timer_runtime_t *runtime);
 
 /** WiFi config */
-esp_err_t config_load_wifi(wifi_config_t *config);
-esp_err_t config_save_wifi(const wifi_config_t *config);
+esp_err_t config_load_wifi(app_wifi_config_t *config);
+esp_err_t config_save_wifi(const app_wifi_config_t *config);
 
 /** Mail config */
 esp_err_t config_load_mail(mail_config_t *config);

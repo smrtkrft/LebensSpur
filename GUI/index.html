@@ -22,7 +22,7 @@
     <div id="login-page" class="page">
         <div class="login-container">
             <div class="login-brand">
-                <img src="logo.png" alt="LebensSpur Logo" class="logo-image">
+                <img src="logo.png" alt="LebensSpur Logo" class="logo-image" id="brandLogo">
                 <h1>LebensSpur</h1>
                 <span class="login-brand-sub">SmartKraft</span>
             </div>
@@ -38,7 +38,7 @@
             </form>
             
             <div class="login-footer">
-                <span class="version">v0.1.0</span>
+                <span class="version" id="loginVersion">v0.1.0</span>
             </div>
         </div>
     </div>
@@ -1563,7 +1563,7 @@
                                 <div class="ota-status-card">
                                     <div class="ota-status-header">
                                         <span class="ota-status-label">Mevcut Sürüm</span>
-                                        <span class="ota-status-value" id="currentFirmwareVersion">v1.0.0</span>
+                                        <span class="ota-status-value" id="currentFirmwareVersion">v0.1.0</span>
                                     </div>
                                     <div class="ota-status-header">
                                         <span class="ota-status-label">Son Kontrol</span>
@@ -2047,6 +2047,10 @@
                                     <ul>
                                         <li>Otomatik cihaz keşfi (mDNS/Bonjour)</li>
                                         <li>Merkezi kontrol paneli</li>
+                                        <li>####################</li>
+                                        <li>api laptop komutlari</li>
+                                        <li>mesela - kill_laptop /rm rf gibi</li>
+                                        <li>####################</li>
                                         <li>Cihazlar arası ayar senkronizasyonu</li>
                                         <li>Grup aksiyonları (tüm cihazları sıfırla)</li>
                                         <li>Cihaz durumu özeti (dashboard)</li>
@@ -2283,7 +2287,7 @@
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Firmware</span>
-                                        <span class="system-value" id="sysFirmware">v1.0.0</span>
+                                        <span class="system-value" id="sysFirmware">v0.1.0</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">GUI Versiyon</span>

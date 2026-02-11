@@ -20,6 +20,8 @@ idf_component_register(
         "ota_manager.c"
     INCLUDE_DIRS
         "."
+    EMBED_TXTFILES
+        "../setup.html"
     REQUIRES
         nvs_flash
         esp_event
@@ -28,12 +30,14 @@ idf_component_register(
         esp_netif
         mdns
         esp_http_server
+        esp_http_client
         esp_https_ota
         esp_timer
         driver
         spiffs
+        spi_flash
         json
         mbedtls
-        esp_tls
+        esp-tls
         app_update
 )

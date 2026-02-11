@@ -1,0 +1,225 @@
+Command: C:\Espressif\python_env\idf5.5_py3.13_env\Scripts\python.exe C:\Espressif\frameworks\esp-idf-v5.5.2\tools/idf_monitor.py -p COM9 -b 115200 --toolchain-prefix riscv32-esp-elf- --target esp32c6 --revision 0 --decode-panic backtrace C:\Users\SEU\Desktop\GitHub\2-LebensSpur\LebensSpur\HW_esp32C6\build\lebensspur.elf C:\Users\SEU\Desktop\GitHub\2-LebensSpur\LebensSpur\HW_esp32C6\build\bootloader\bootloader.elf --force-color -m 'C:\Espressif\python_env\idf5.5_py3.13_env\Scripts\python.exe' 'C:\Espressif\frameworks\esp-idf-v5.5.2\tools\idf.py' '-p' 'COM9'
+ESP-ROM:esp32c6-20220919
+Build:Sep 19 2022
+rst:0x15 (USB_UART_HPSYS),boot:0x1e (SPI_FAST_FLASH_BOOT)
+Saved PC:0x408054d4
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x40875730,len:0x175c
+load:0x4086b910,len:0xec8
+load:0x4086e610,len:0x3250
+entry 0x4086b91a
+[0;32mI (23) boot: ESP-IDF v5.5.2-dirty 2nd stage bootloader[0m
+[0;32mI (23) boot: compile time Feb 11 2026 21:01:19[0m
+[0;32mI (24) boot: chip revision: v0.2[0m
+[0;32mI (24) boot: efuse block revision: v0.3[0m
+[0;32mI (27) boot.esp32c6: SPI Speed      : 80MHz[0m
+[0;32mI (31) boot.esp32c6: SPI Mode       : DIO[0m
+[0;32mI (35) boot.esp32c6: SPI Flash Size : 4MB[0m
+[0;32mI (38) boot: Enabling RNG early entropy source...[0m
+[0;32mI (43) boot: Partition Table:[0m
+[0;32mI (45) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (52) boot:  0 nvs              WiFi data        01 02 00009000 0000c000[0m
+[0;32mI (58) boot:  1 otadata          OTA data         01 00 00015000 00002000[0m
+[0;32mI (65) boot:  2 phy_init         RF data          01 01 00017000 00001000[0m
+[0;32mI (71) boot:  3 ota_0            OTA app          00 10 00020000 00170000[0m
+[0;32mI (78) boot:  4 ota_1            OTA app          00 11 00190000 00170000[0m
+[0;32mI (84) boot:  5 nvs_keys         NVS keys         01 04 00300000 00001000[0m
+[0;32mI (91) boot: End of partition table[0m
+[0;32mI (94) esp_image: segment 0: paddr=00020020 vaddr=420f0020 size=3e0e4h (254180) map[0m
+[0;32mI (149) esp_image: segment 1: paddr=0005e10c vaddr=40800000 size=01f0ch (  7948) load[0m
+[0;32mI (151) esp_image: segment 2: paddr=00060020 vaddr=42000020 size=e0008h (917512) map[0m
+[0;32mI (321) esp_image: segment 3: paddr=00140030 vaddr=40801f0c size=19df0h (105968) load[0m
+[0;32mI (345) esp_image: segment 4: paddr=00159e28 vaddr=4081bd00 size=03914h ( 14612) load[0m
+[0;32mI (355) boot: Loaded app from partition at offset 0x20000[0m
+[0;32mI (355) boot: Disabling RNG early entropy source...[0m
+[0;32mI (365) cpu_start: Unicore app[0m
+[0;32mI (374) cpu_start: GPIO 17 and 16 are used as console UART I/O pins[0m
+[0;32mI (374) cpu_start: Pro cpu start user code[0m
+[0;32mI (374) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (376) app_init: Application information:[0m
+[0;32mI (380) app_init: Project name:     lebensspur[0m
+[0;32mI (384) app_init: App version:      v1.0.6-62-gd1b3091-dirty[0m
+[0;32mI (389) app_init: Compile time:     Feb 11 2026 21:00:38[0m
+[0;32mI (394) app_init: ELF file SHA256:  491f219d7...[0m
+[0;32mI (399) app_init: ESP-IDF:          v5.5.2-dirty[0m
+[0;32mI (403) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (407) efuse_init: Max chip rev:     v0.99 [0m
+[0;32mI (411) efuse_init: Chip rev:         v0.2[0m
+[0;32mI (415) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (421) heap_init: At 40826130 len 000564E0 (345 KiB): RAM[0m
+[0;32mI (426) heap_init: At 4087C610 len 00002F54 (11 KiB): RAM[0m
+[0;32mI (431) heap_init: At 50000000 len 00003FE8 (15 KiB): RTCRAM[0m
+[0;32mI (437) spi_flash: detected chip: generic[0m
+[0;32mI (440) spi_flash: flash io: dio[0m
+[0;32mI (444) sleep_gpio: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (450) sleep_gpio: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (465) main_task: Started on CPU0[0m
+[0;32mI (467) main_task: Calling app_main()[0m
+[0;32mI (471) lebensspur: Starting LebensSpur...[0m
+[0;32mI (498) device_id: Device ID initialized: LS-58E6C5FFFE00[0m
+[0;32mI (498) device_id: Chip ID (MAC): 58:E6:C5:FF:FE:00[0m
+[0;32mI (498) lebensspur: Device ID: LS-58E6C5FFFE00[0m
+[0;32mI (501) ext_flash: Initializing W25Q256 external flash...[0m
+[0;32mI (506) ext_flash: Pins: CS=21, MISO=0, MOSI=22, SCLK=16[0m
+[0;32mI (512) spi_flash: detected chip: generic[0m
+[0;33mW (515) spi_flash: Detected flash size > 16 MB, but access beyond 16 MB is not supported for this flash model yet.[0m
+[0;32mI (525) spi_flash: flash io: dio[0m
+[0;32mI (528) ext_flash: External flash initialized successfully[0m
+[0;32mI (533) ext_flash: ========== EXTERNAL FLASH INFO ==========[0m
+[0;32mI (539) ext_flash: Status:      READY[0m
+[0;32mI (542) ext_flash: Size:        33554432 bytes (32 MB)[0m
+[0;32mI (547) ext_flash: Flash ID:    0xC22019[0m
+[0;32mI (550) ext_flash: Manufacturer: Unknown (0xC2)[0m
+[0;32mI (555) ext_flash: ==========================================[0m
+[0;32mI (560) file_mgr: Initializing SPIFFS on external flash...[0m
+[0;33mW (565) file_mgr: Limiting partition to 15MB for SPIFFS page_ix compatibility[0m
+[0;32mI (572) file_mgr: Partition registered: ext_storage, size: 15728640 bytes[0m
+[0;32mI (1128) file_mgr: SPIFFS initialized successfully[0m
+[0;32mI (1128) file_mgr: ========== FILESYSTEM INFO ==========[0m
+[0;32mI (1128) file_mgr: Total:    14450321 bytes (13 MB)[0m
+[0;32mI (1131) file_mgr: Used:     6024 bytes (5 KB)[0m
+[0;32mI (1135) file_mgr: Free:     14444297 bytes (13 MB)[0m
+[0;32mI (1140) file_mgr: Usage:    0.0%[0m
+[0;32mI (1143) file_mgr: Mount:    /ext[0m
+[0;32mI (1146) file_mgr: ======================================[0m
+[0;32mI (1151) config_mgr: Initializing config manager...[0m
+[0;32mI (1155) config_mgr: Config manager ready[0m
+[0;32mI (1169) config_mgr: Boot count: 27[0m
+[0;32mI (1169) time_mgr: Initializing time manager...[0m
+[0;32mI (1169) time_mgr: Time manager initialized, TZ=CET-1CEST,M3.5.0,M10.5.0/3[0m
+[0;32mI (1173) log_mgr: Initializing log manager...[0m
+[0;32mI (1178) log_mgr: Log manager initialized[0m
+[0;32mI (1181) log_mgr: [SYSTEM] System starting (boot #27)[0m
+[0;32mI (1188) relay: Initializing relay manager (GPIO18)[0m
+[0;32mI (1605) relay: Relay manager initialized (inverted=0)[0m
+[0;32mI (1606) button: Initializing button manager (GPIO17)[0m
+[0;32mI (1606) button: Button manager initialized[0m
+[0;32mI (1608) session: Initializing session auth...[0m
+[0;32mI (1613) session: Session timeout: 60 min, max sessions: 4[0m
+[0;32mI (1619) pp: pp rom version: 5b8dcfa[0m
+[0;32mI (1621) net80211: net80211 rom version: 5b8dcfa[0m
+[0;32mI (1626) wifi:wifi driver task: 4082fdd0, prio:23, stack:6656, core=0[0m
+[0;32mI (1640) wifi:wifi firmware version: ee91c8c[0m
+[0;32mI (1641) wifi:wifi certification version: v7.0[0m
+[0;32mI (1641) wifi:config NVS flash: enabled[0m
+[0;32mI (1643) wifi:config nano formatting: disabled[0m
+[0;32mI (1647) wifi:mac_version:HAL_MAC_ESP32AX_761,ut_version:N, band mode:0x1[0m
+[0;32mI (1654) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (1659) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (1663) wifi:Init management short buffer num: 32[0m
+[0;32mI (1667) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (1671) wifi:Init static tx FG buffer num: 2[0m
+[0;32mI (1675) wifi:Init static rx buffer size: 1700 (rxctrl:92, csi:512)[0m
+[0;32mI (1682) wifi:Init static rx buffer num: 10[0m
+[0;32mI (1685) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (1690) wifi_init: rx ba win: 6[0m
+[0;32mI (1692) wifi_init: accept mbox: 6[0m
+[0;32mI (1695) wifi_init: tcpip mbox: 32[0m
+[0;32mI (1698) wifi_init: udp mbox: 6[0m
+[0;32mI (1701) wifi_init: tcp mbox: 6[0m
+[0;32mI (1704) wifi_init: tcp tx win: 5760[0m
+[0;32mI (1707) wifi_init: tcp rx win: 5760[0m
+[0;32mI (1711) wifi_init: tcp mss: 1440[0m
+[0;32mI (1714) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (1717) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (1721) wifi_init: WiFi SLP IRAM OP enabled[0m
+[0;32mI (1726) mdns_mem: mDNS task will be created from internal RAM[0m
+[0;32mI (1734) phy_init: phy_version 343,b513b46,Nov 14 2025,16:34:12[0m
+[0;33mW (1826) wifi:ACK_TAB0   :0x   90a0b, QAM16:0x9 (24Mbps), QPSK:0xa (12Mbps), BPSK:0xb (6Mbps)[0m
+[0;33mW (1827) wifi:CTS_TAB0   :0x   90a0b, QAM16:0x9 (24Mbps), QPSK:0xa (12Mbps), BPSK:0xb (6Mbps)[0m
+[0;33mW (1832) wifi:(agc)0x600a7128:0xd20239ee, min.avgNF:0xce->0xd2(dB), RCalCount:0x23, min.RRssi:0x9ee(-97.12)[0m
+[0;32mI (1842) wifi:11ax coex: WDEVAX_PTI0(0x55777555), WDEVAX_PTI1(0x00003377).[0m
+
+[0;32mI (1849) wifi:mode : sta (58:e6:c5:00:ef:44) + softAP (58:e6:c5:00:ef:45)[0m
+[0;32mI (1855) wifi:enable tsf[0m
+[0;33mW (1857) wifi:11ax/11ac mode can not work under phy bw 40M, the sta 2G phymode changed to 11N[0m
+[0;32mI (1869) wifi:Total power save buffer number: 16[0m
+[0;32mI (1869) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (1874) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (1880) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;33mW (2308) wifi:(itwt)itwt_stop_process![0m
+[0;33mW (2609) wifi:Password length matches WPA2 standards, authmode threshold changes from OPEN to WPA2[0m
+[0;32mI (2617) wifi:ap channel adjust o:1,1 n:9,2[0m
+[0;32mI (2617) wifi:new:<9,0>, old:<1,1>, ap:<9,2>, sta:<9,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (2618) wifi:(connect)dot11_authmode:0x6, pairwise_cipher:0x3, group_cipher:0x3[0m
+[0;32mI (2625) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (2931) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (2935) wifi:Association refused temporarily time 1464, comeback time 1564 (TUs)[0m
+[0;32mI (4537) wifi:state: assoc -> auth (0xb0)[0m
+[0;32mI (4837) wifi:state: auth -> assoc (0x0)[0m
+[1;31mE (4841) wifi:Association refused too many times, max allowed 1[0m
+[0;32mI (4842) wifi:state: assoc -> init (0xd010)[0m
+[0;32mI (4844) wifi:new:<9,0>, old:<9,0>, ap:<9,2>, sta:<9,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;33mW (4848) wifi: STA disc reason:208[0m
+[0;32mI (4850) wifi: Retry 1/5[0m
+[0;33mW (7684) wifi: STA disc reason:205[0m
+[0;32mI (7685) wifi: Retry 2/5[0m
+[0;32mI (7692) wifi:new:<9,2>, old:<9,0>, ap:<9,2>, sta:<9,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (7693) wifi:(connect)dot11_authmode:0x6, pairwise_cipher:0x3, group_cipher:0x3[0m
+[0;32mI (7695) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (8002) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (8007) wifi:(assoc)RESP, Extended Capabilities length:8, operating_mode_notification:0[0m
+[0;32mI (8007) wifi:(assoc)RESP, Extended Capabilities, MBSSID:0, TWT Responder:0, OBSS Narrow Bandwidth RU In OFDMA Tolerance:0[0m
+[0;32mI (8014) wifi:Extended Capabilities length:8, subtype:0x10, 66:4d:20:68:a5:26, Multiple BSSID Support[0m
+[0;32mI (8023) wifi:Extended Capabilities length:8, operating_mode_notification:1[0m
+[0;32mI (8031) wifi:state: assoc -> run (0x10)[0m
+[0;32mI (8034) wifi:(trc)phytype:CBW20-SGI, snr:36, maxRate:144, highestRateIdx:0[0m
+[0;33mW (8040) wifi:(trc)band:2G, phymode:3, highestRateIdx:0, lowestRateIdx:11, dataSchedTableSize:14[0m
+[0;32mI (8049) wifi:(trc)band:2G, rate(L-MCS7, rateIdx:1), ampdu(rate:L-MCS7, schedIdx(1, stop:8)), snr:36, ampduState:wait operational[0m
+[0;32mI (8060) wifi:ifidx:0, rssi:-62, nf:-98, phytype(0x3, CBW20-SGI), phymode(0x3, 11bgn), max_rate:144, he:0, vht:0, ht:1[0m
+[0;32mI (8071) wifi:(ht)max.RxAMPDULenExponent:3(65535 bytes), MMSS:6(8 us)[0m
+[0;32mI (8104) wifi:connected with Emek, aid = 1, channel 9, BW20, bssid = 66:4d:20:68:a5:26[0m
+[0;32mI (8105) wifi:security: WPA3-SAE, phy:bgn, rssi:-62, cipher(pairwise:0x3, group:0x3), pmf:1, [0m
+[0;32mI (8111) wifi:pm start, type: 1, twt_start:0[0m
+
+[0;32mI (8113) wifi:pm start, type:1, aid:0x1, trans-BSSID:66:4d:20:68:a5:26, BSSID[5]:0x26, mbssid(max-indicator:0, index:0), he:0[0m
+[0;32mI (8124) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us[0m
+[0;32mI (8132) wifi:set rx beacon pti, rx_bcn_pti: 10, bcn_timeout: 25000, mt_pti: 10, mt_time: 10000[0m
+[0;32mI (8141) wifi:[ADDBA]TX addba request, tid:0, dialogtoken:1, bufsize:64, A-MSDU:0(not supported), policy:1(IMR), ssn:0(0x0)[0m
+[0;32mI (8152) wifi:[ADDBA]TX addba request, tid:7, dialogtoken:2, bufsize:64, A-MSDU:0(not supported), policy:1(IMR), ssn:0(0x20)[0m
+[0;32mI (8163) wifi:[ADDBA]TX addba request, tid:5, dialogtoken:3, bufsize:64, A-MSDU:0(not supported), policy:1(IMR), ssn:0(0x0)[0m
+[0;32mI (8174) wifi:dp: 2, bi: 102400, li: 4, scale listen interval from 307200 us to 409600 us[0m
+[0;32mI (8181) wifi:AP's beacon interval = 102400 us, DTIM period = 2[0m
+[0;32mI (8188) wifi:[ADDBA]RX addba response, status:0, tid:0/tb:1(0xa1), bufsize:64, batimeout:0, txa_wnd:64[0m
+[0;32mI (8196) wifi:[ADDBA]RX addba response, status:0, tid:7/tb:1(0xa1), bufsize:64, batimeout:0, txa_wnd:64[0m
+[0;32mI (8205) wifi:[ADDBA]RX addba response, status:0, tid:5/tb:1(0xa1), bufsize:64, batimeout:0, txa_wnd:64[0m
+[0;33mW (8372) wifi:<ba-add>idx:0, ifx:0, tid:0, TAHI:0x10026a5, TALO:0x68204d66, (ssn:0, win:64, cur_ssn:0), CONF:0xc0000005[0m
+[0;32mI (9400) esp_netif_handlers: sta ip: 10.137.76.54, mask: 255.255.255.0, gw: 10.137.76.56[0m
+[0;32mI (9400) wifi: Got IP: 10.137.76.54[0m
+[0;32mI (9401) wifi: DNS set to 8.8.8.8 / 8.8.4.4[0m
+[0;32mI (9404) time_mgr: Starting NTP sync...[0m
+[0;32mI (9408) time_mgr: NTP servers: pool.ntp.org, time.google.com, time.cloudflare.com[0m
+[0;32mI (9415) mail: Mail sender initialized[0m
+[0;32mI (9418) ota: Initializing OTA manager[0m
+[0;32mI (9422) ota: Running partition: ota_0 at 0x20000[0m
+[0;32mI (9427) timer_sched: Initializing timer scheduler...[0m
+[0;32mI (10282) timer_sched: Timer scheduler initialized, state=DISABLED[0m
+[0;32mI (10282) web_server: Starting web server on port 80...[0m
+[0;32mI (10288) web_server: API routes registered[0m
+[0;32mI (10289) web_server: Static file handler registered[0m
+[0;32mI (10291) web_server: Web server started[0m
+[0;32mI (10294) log_mgr: [SYSTEM] System initialization complete[0m
+[0;32mI (10303) lebensspur: System initialized successfully[0m
+[0;33mW (11380) wifi:<ba-add>idx:1, ifx:0, tid:6, TAHI:0x10026a5, TALO:0x68204d66, (ssn:0, win:64, cur_ssn:0), CONF:0xc0006005[0m
+[0;32mI (11381) time_mgr: NTP sync complete: 1770844347[0m
+[0;32mI (77152) wifi:new:<9,2>, old:<9,2>, ap:<9,2>, sta:<9,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (77153) wifi:(trc)phytype:HT40-SGI, snr:39, maxRate:0, highestRateIdx:0[0m
+[0;33mW (77155) wifi:(trc)band:2G, phymode:3, highestRateIdx:0, lowestRateIdx:11, dataSchedTableSize:14[0m
+[0;32mI (77164) wifi:(trc)band:2G, rate(S-MCS7, rateIdx:0), ampdu(rate:S-MCS7, schedIdx(0, stop:8)), snr:39, ampduState:wait operational[0m
+[0;32mI (77175) wifi:ifidx:1, rssi:-59, nf:-98, phytype(0x5, HT40-SGI), phymode(0x3, 11bgn), max_rate:0, he:0, vht:0, ht:1[0m
+[0;32mI (77186) wifi:(ht)max.RxAMPDULenExponent:3(65535 bytes), MMSS:0(no restriction)[0m
+[0;32mI (77193) wifi:station: 14:5a:fc:44:d2:cd join, AID=1, bgn, 40D[0m
+[0;32mI (77358) wifi:[ADDBA]TX addba request, tid:0, dialogtoken:4, bufsize:64, A-MSDU:0(not supported), policy:1(IMR), ssn:0(0x0)[0m
+[0;32mI (77361) wifi:[ADDBA]RX addba response, status:0, tid:0/tb:1(0xa1), bufsize:64, batimeout:0, txa_wnd:64[0m
+[0;33mW (77393) wifi:<ba-add>idx:4, ifx:1, tid:0, TAHI:0x101cdd2, TALO:0x44fc5a14, (ssn:2, win:64, cur_ssn:2), CONF:0xc0000005[0m
+[0;32mI (77473) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2[0m
+[0;32mI (145939) web_server: WiFi scan requested[0m
+[0;32mI (157670) web_server: WiFi connect requested: SSID=Emek[0m
+[0;32mI (158476) wifi:state: run -> init (0x0)[0m
+[0;32mI (158479) wifi:teardown, set twt_inactive_time_secs:6, sp_count:0[0m
+[0;32mI (158479) wifi:pm stop, total sleep time: 141943391 us / 150354415 us[0m
+
+[0;32mI (158481) wifi:<ba-del>idx:0, tid:0[0m
+[0;32mI (158484) wifi:<ba-del>idx:1, tid:6[0m
+[0;32mI (158488) wifi:new:<9,2>, old:<9,2>, ap:<9,2>, sta:<9,0>, pro

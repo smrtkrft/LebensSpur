@@ -34,6 +34,9 @@ extern "C" {
 /** Connection timeout in seconds */
 #define WIFI_CONNECT_TIMEOUT_SEC 15
 
+/** Max STA retry count */
+#define WIFI_MAX_RETRY 5
+
 /**
  * @brief WiFi connection state
  */
@@ -104,6 +107,15 @@ int wifi_manager_stop_ap(void);
  * @return ESP_OK if connection started (check status for result)
  */
 int wifi_manager_connect(const char *ssid, const char *password);
+
+/**
+ * @brief Start WiFi connection asynchronously (non-blocking)
+ * 
+ * @param ssid Network SSID
+ * @param password Network password (can be NULL for open networks)
+ * @return ESP_OK if connection initiated
+ */
+int wifi_manager_connect_async(const char *ssid, const char *password);
 
 /**
  * @brief Disconnect from WiFi network

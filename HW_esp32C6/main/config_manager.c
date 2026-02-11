@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <sys/time.h>
 
 static const char *TAG = "config_mgr";
 
@@ -249,11 +250,11 @@ esp_err_t config_save_runtime(const timer_runtime_t *runtime)
  * WIFI CONFIG
  * ============================================ */
 
-esp_err_t config_load_wifi(wifi_config_t *config)
+esp_err_t config_load_wifi(app_wifi_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
     
-    wifi_config_t defaults = WIFI_CONFIG_DEFAULT();
+    app_wifi_config_t defaults = WIFI_CONFIG_DEFAULT();
     *config = defaults;
     
     cJSON *json = read_json_file(CONFIG_WIFI_FILE);
@@ -272,7 +273,7 @@ esp_err_t config_load_wifi(wifi_config_t *config)
     return ESP_OK;
 }
 
-esp_err_t config_save_wifi(const wifi_config_t *config)
+esp_err_t config_save_wifi(const app_wifi_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
     

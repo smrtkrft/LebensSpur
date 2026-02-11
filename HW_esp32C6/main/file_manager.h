@@ -180,6 +180,14 @@ esp_err_t file_manager_append_string(const char *path, const char *str);
  */
 bool file_manager_is_mounted(void);
 
+/**
+ * @brief Rename a file
+ * @param old_path Current file path
+ * @param new_path New file path
+ * @return ESP_OK on success
+ */
+esp_err_t file_manager_rename(const char *old_path, const char *new_path);
+
 #ifdef __cplusplus
 }
 #endif

@@ -75,7 +75,7 @@ static void check_vacation_mode(void)
     if (now < vacation_end) {
         if (s_state != TIMER_STATE_VACATION) {
             s_state = TIMER_STATE_VACATION;
-            LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode active (%d days)", s_config.vacation_days);
+            LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode active (%lu days)", (unsigned long)s_config.vacation_days);
         }
     } else {
         // Vacation ended
