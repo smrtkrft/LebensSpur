@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "lebensspur",
-    "project_version":    "v1.0.6-63-g52d9256-dirty",
+    "project_version":    "v1.0.6-64-gc3f4098-dirty",
     "project_path":       "C:/Users/SEU/Desktop/GitHub/2-LebensSpur/LebensSpur/HW_esp32C6",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.5.2",
     "build_dir":          "C:/Users/SEU/Desktop/GitHub/2-LebensSpur/LebensSpur/HW_esp32C6/build",
