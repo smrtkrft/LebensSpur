@@ -11,6 +11,8 @@
 #include "log_manager.h"
 #include "time_manager.h"
 #include "wifi_manager.h"
+#include "timer_scheduler.h"
+#include "relay_manager.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -416,9 +418,226 @@ static esp_err_t api_timer_reset(httpd_req_t *req)
         return web_send_error(req, 401, "Unauthorized");
     }
     
-    // This will be implemented in timer_scheduler
+    esp_err_t ret = timer_scheduler_reset();
+    if (ret != ESP_OK) {
+        return web_send_error(req, 400, "Timer cannot be reset (disabled or triggered)");
+    }
+    
     LOG_TIMER(LOG_LEVEL_INFO, "Timer reset via web");
     return web_send_success(req, "Timer reset");
+}
+
+// GET /api/timer/status (requires auth)
+static esp_err_t api_timer_status(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    timer_status_t status;
+    timer_scheduler_get_status(&status);
+    
+    timer_config_t config;
+    config_load_timer(&config);
+    
+    cJSON *json = cJSON_CreateObject();
+    
+    // State
+    cJSON_AddStringToObject(json, "state", timer_scheduler_state_name(status.state));
+    cJSON_AddNumberToObject(json, "stateCode", (int)status.state);
+    
+    // Timing
+    cJSON_AddNumberToObject(json, "timeRemainingMs", (double)status.time_remaining_ms);
+    cJSON_AddNumberToObject(json, "intervalHours", config.interval_hours);
+    cJSON_AddBoolToObject(json, "inTimeWindow", status.in_time_window);
+    
+    // Counters
+    cJSON_AddNumberToObject(json, "warningsSent", status.warnings_sent);
+    cJSON_AddNumberToObject(json, "resetCount", status.reset_count);
+    cJSON_AddNumberToObject(json, "triggerCount", status.trigger_count);
+    cJSON_AddNumberToObject(json, "alarmCount", config.alarm_count);
+    
+    // Config summary
+    cJSON_AddBoolToObject(json, "enabled", config.enabled);
+    cJSON_AddBoolToObject(json, "vacationEnabled", config.vacation_enabled);
+    cJSON_AddNumberToObject(json, "vacationDays", config.vacation_days);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/timer/enable (requires auth)
+static esp_err_t api_timer_enable(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    timer_scheduler_enable();
+    return web_send_success(req, "Timer enabled");
+}
+
+// POST /api/timer/disable (requires auth)
+static esp_err_t api_timer_disable(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    timer_scheduler_disable();
+    return web_send_success(req, "Timer disabled");
+}
+
+// POST /api/timer/acknowledge (requires auth)
+static esp_err_t api_timer_acknowledge(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    esp_err_t ret = timer_scheduler_acknowledge();
+    if (ret != ESP_OK) {
+        return web_send_error(req, 400, "Timer not triggered");
+    }
+    
+    relay_off();
+    LOG_TIMER(LOG_LEVEL_INFO, "Trigger acknowledged via web, relay off");
+    return web_send_success(req, "Acknowledged");
+}
+
+// POST /api/timer/vacation (requires auth) - body: {"enabled":true,"days":7}
+static esp_err_t api_timer_vacation(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[256];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) {
+        return web_send_error(req, 400, "No body");
+    }
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) {
+        return web_send_error(req, 400, "Invalid JSON");
+    }
+    
+    cJSON *enabled = cJSON_GetObjectItem(json, "enabled");
+    if (enabled && cJSON_IsTrue(enabled)) {
+        cJSON *days = cJSON_GetObjectItem(json, "days");
+        int d = (days && cJSON_IsNumber(days)) ? days->valueint : 7;
+        timer_scheduler_vacation_start(d);
+    } else {
+        timer_scheduler_vacation_end();
+    }
+    
+    cJSON_Delete(json);
+    return web_send_success(req, "Vacation mode updated");
+}
+
+// POST /api/relay/test (requires auth)  
+static esp_err_t api_relay_test(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    relay_config_t config;
+    config_load_relay(&config);
+    
+    if (config.pulse_mode) {
+        relay_pulse(config.pulse_duration_ms > 0 ? config.pulse_duration_ms : 1000);
+    } else {
+        relay_pulse(1000); // Default 1 second test pulse
+    }
+    
+    LOG_SYSTEM(LOG_LEVEL_INFO, "Relay test via web");
+    return web_send_success(req, "Relay test pulse sent");
+}
+
+// GET /api/config/relay (requires auth)
+static esp_err_t api_get_relay_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    relay_config_t config;
+    config_load_relay(&config);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "inverted", config.inverted);
+    cJSON_AddBoolToObject(json, "pulseMode", config.pulse_mode);
+    cJSON_AddNumberToObject(json, "pulseDurationMs", config.pulse_duration_ms);
+    cJSON_AddNumberToObject(json, "pulseIntervalMs", config.pulse_interval_ms);
+    cJSON_AddNumberToObject(json, "pulseCount", config.pulse_count);
+    cJSON_AddNumberToObject(json, "onDelayMs", config.on_delay_ms);
+    cJSON_AddNumberToObject(json, "offDelayMs", config.off_delay_ms);
+    cJSON_AddBoolToObject(json, "relayOn", relay_is_on());
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/config/relay (requires auth)
+static esp_err_t api_set_relay_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[512];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) {
+        return web_send_error(req, 400, "No body");
+    }
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) {
+        return web_send_error(req, 400, "Invalid JSON");
+    }
+    
+    relay_config_t config;
+    config_load_relay(&config);
+    
+    cJSON *item;
+    if ((item = cJSON_GetObjectItem(json, "inverted")) && cJSON_IsBool(item)) {
+        config.inverted = cJSON_IsTrue(item);
+    }
+    if ((item = cJSON_GetObjectItem(json, "pulseMode")) && cJSON_IsBool(item)) {
+        config.pulse_mode = cJSON_IsTrue(item);
+    }
+    if ((item = cJSON_GetObjectItem(json, "pulseDurationMs")) && cJSON_IsNumber(item)) {
+        config.pulse_duration_ms = item->valueint;
+    }
+    if ((item = cJSON_GetObjectItem(json, "pulseIntervalMs")) && cJSON_IsNumber(item)) {
+        config.pulse_interval_ms = item->valueint;
+    }
+    if ((item = cJSON_GetObjectItem(json, "pulseCount")) && cJSON_IsNumber(item)) {
+        config.pulse_count = item->valueint;
+    }
+    if ((item = cJSON_GetObjectItem(json, "onDelayMs")) && cJSON_IsNumber(item)) {
+        config.on_delay_ms = item->valueint;
+    }
+    if ((item = cJSON_GetObjectItem(json, "offDelayMs")) && cJSON_IsNumber(item)) {
+        config.off_delay_ms = item->valueint;
+    }
+    
+    cJSON_Delete(json);
+    
+    config_save_relay(&config);
+    LOG_CONFIG(LOG_LEVEL_INFO, "Relay config updated");
+    
+    return web_send_success(req, "Relay config saved");
 }
 
 // GET /api/logs (requires auth)
@@ -1031,6 +1250,68 @@ void web_register_api_routes(httpd_handle_t server)
         .handler = api_timer_reset
     };
     httpd_register_uri_handler(server, &timer_reset);
+    
+    // Timer status
+    httpd_uri_t timer_status_route = {
+        .uri = "/api/timer/status",
+        .method = HTTP_GET,
+        .handler = api_timer_status
+    };
+    httpd_register_uri_handler(server, &timer_status_route);
+    
+    // Timer enable/disable
+    httpd_uri_t timer_enable = {
+        .uri = "/api/timer/enable",
+        .method = HTTP_POST,
+        .handler = api_timer_enable
+    };
+    httpd_register_uri_handler(server, &timer_enable);
+    
+    httpd_uri_t timer_disable = {
+        .uri = "/api/timer/disable",
+        .method = HTTP_POST,
+        .handler = api_timer_disable
+    };
+    httpd_register_uri_handler(server, &timer_disable);
+    
+    // Timer acknowledge
+    httpd_uri_t timer_ack = {
+        .uri = "/api/timer/acknowledge",
+        .method = HTTP_POST,
+        .handler = api_timer_acknowledge
+    };
+    httpd_register_uri_handler(server, &timer_ack);
+    
+    // Vacation mode
+    httpd_uri_t vacation = {
+        .uri = "/api/timer/vacation",
+        .method = HTTP_POST,
+        .handler = api_timer_vacation
+    };
+    httpd_register_uri_handler(server, &vacation);
+    
+    // Relay test
+    httpd_uri_t relay_test = {
+        .uri = "/api/relay/test",
+        .method = HTTP_POST,
+        .handler = api_relay_test
+    };
+    httpd_register_uri_handler(server, &relay_test);
+    
+    // Relay config
+    httpd_uri_t relay_get = {
+        .uri = "/api/config/relay",
+        .method = HTTP_GET,
+        .handler = api_get_relay_config
+    };
+    httpd_register_uri_handler(server, &relay_get);
+    
+    httpd_uri_t relay_set = {
+        .uri = "/api/config/relay",
+        .method = HTTP_POST,
+        .handler = api_set_relay_config
+    };
+    httpd_register_uri_handler(server, &relay_set);
     
     // Logs
     httpd_uri_t logs_get = {

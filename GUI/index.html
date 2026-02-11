@@ -67,9 +67,9 @@
                     </svg>
                     <div class="timer-content">
                         <div class="timer-value" id="timerValue">
-                            <span class="time-days" id="timeDays">2g</span>
-                            <span class="time-hours" id="timeHours">14s</span>
-                            <span class="time-minutes" id="timeMinutes">32d</span>
+                            <span class="time-days hidden" id="timeDays">0g</span>
+                            <span class="time-hours" id="timeHours">0s</span>
+                            <span class="time-minutes" id="timeMinutes">0d</span>
                         </div>
                         <span class="timer-label">KALAN SÜRE</span>
                     </div>
@@ -2034,6 +2034,24 @@
                             <div class="setting-section">
                                 <h4 class="section-title">Proje Bilgisi</h4>
                                 <p class="section-desc">LebensSpur hakkında bilgiler ve geliştirme notları</p>
+                            </div>
+
+                            <div class="dev-note" style="border-left: 3px solid var(--danger); background: rgba(239,68,68,0.08);">
+                                <h5 class="dev-note-title">
+                                    <span class="dev-note-icon">⚠️</span>
+                                    Güvenlik Açığı — Setup Erişimi
+                                </h5>
+                                <p class="dev-note-content" style="color: var(--danger);">
+                                    <strong>/setup.html her zaman açık durumda!</strong> Yapılandırma tamamlandıktan sonra bile tarayıcıdan URL ile <code>/setup.html</code> sayfasına geri dönülebiliyor ve cihaz şifresi sıfırdan ayarlanabiliyor. Bu çok ciddi bir güvenlik açığıdır.<br><br>
+                                    Şu an test kolaylığı için açık bırakılmıştır ancak kesinlikle kapatılmalıdır.<br><br>
+                                    <strong>Yapılması gerekenler:</strong>
+                                    <ul>
+                                        <li>Setup tamamlandıktan sonra <code>/setup.html</code> ve <code>/api/setup/*</code> endpoint'lerini devre dışı bırak</li>
+                                        <li>Setup moduna sadece fiziksel buton kombinasyonu ile girilebilmeli (örn: 10 sn basılı tut)</li>
+                                        <li>Genel güvenlik kontrolleri ve penetrasyon testi yapılmalı</li>
+                                        <li>Session token güvenliği, CSRF koruması gözden geçirilmeli</li>
+                                    </ul>
+                                </p>
                             </div>
 
                             <div class="dev-note">

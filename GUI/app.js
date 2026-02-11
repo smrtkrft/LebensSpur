@@ -1,9 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * LebensSpur - UI Prototype JavaScript
- * 
- * Bu dosya sadece tasarım önizlemesi içindir.
- * Gerçek API çağrıları yerine simülasyon kullanılır.
+ * LebensSpur - Dead Man's Switch Controller
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -12,10 +9,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 const state = {
     isAuthenticated: false,
-    timerDuration: 24 * 60 * 60, // 24 saat (saniye)
-    timeRemaining: 2 * 24 * 60 * 60 + 14 * 60 * 60 + 32 * 60, // 2 gün 14 saat 32 dakika (demo için)
-    lastReset: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6 saat önce
-    isActive: true,
+    // Timer status (from ESP32 polling)
+    timerState: 'DISABLED',  // DISABLED, RUNNING, WARNING, TRIGGERED, PAUSED, VACATION
+    timeRemainingMs: 0,
+    intervalHours: 24,
+    warningsSent: 0,
+    resetCount: 0,
+    triggerCount: 0,
+    timerEnabled: false,
     
     // Theme & Language
     theme: localStorage.getItem('theme') || 'dark',
@@ -39,9 +40,7 @@ const state = {
     // Vacation Mode
     vacationMode: {
         enabled: false,
-        days: 7,
-        startDate: null,
-        remainingDays: 0
+        days: 7
     },
     
     // Auto Logout
@@ -778,6 +777,89 @@ function initStaticIpToggles() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Relay Config Save/Load
+// ─────────────────────────────────────────────────────────────────────────────
+function saveRelayConfig() {
+    const inverted = document.getElementById('relayInverted');
+    const pulseEnabled = document.getElementById('relayPulseEnabled');
+    const pulseDuration = document.getElementById('relayPulseDuration');
+    const durationValue = document.getElementById('relayDurationValue');
+    const durationUnit = document.getElementById('relayDurationUnit');
+    
+    const durVal = parseInt(durationValue?.value) || 1;
+    const durUnit = durationUnit?.value || 'seconds';
+    const totalMs = (durUnit === 'minutes' ? durVal * 60 : durVal) * 1000;
+    
+    const payload = {
+        inverted: inverted ? inverted.checked : false,
+        pulseMode: pulseEnabled ? pulseEnabled.checked : false,
+        pulseDurationMs: parseInt(pulseDuration?.value) * 1000 || 5000,
+        pulseIntervalMs: parseInt(pulseDuration?.value) * 1000 || 5000,
+        onDelayMs: totalMs,
+        offDelayMs: 0
+    };
+    
+    fetch('/api/config/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Röle ayarları kaydedildi', 'success');
+            handleModalBack();
+        } else {
+            showToast(data.error || 'Kaydetme hatası', 'error');
+        }
+    })
+    .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+function loadRelayConfig() {
+    fetch('/api/config/relay')
+        .then(res => {
+            if (!res.ok) throw new Error('err');
+            return res.json();
+        })
+        .then(data => {
+            const inverted = document.getElementById('relayInverted');
+            if (inverted) inverted.checked = data.inverted || false;
+            
+            const pulseEnabled = document.getElementById('relayPulseEnabled');
+            if (pulseEnabled) pulseEnabled.checked = data.pulseMode || false;
+            
+            const pulseFields = document.getElementById('relayPulseFields');
+            if (pulseFields) pulseFields.classList.toggle('hidden', !data.pulseMode);
+            
+            const pulseDuration = document.getElementById('relayPulseDuration');
+            if (pulseDuration && data.pulseDurationMs) {
+                pulseDuration.value = Math.round(data.pulseDurationMs / 1000);
+            }
+            
+            // Update idle/active state labels
+            const relayIdleState = document.getElementById('relayIdleState');
+            const relayActiveState = document.getElementById('relayActiveState');
+            if (relayIdleState && relayActiveState) {
+                if (data.inverted) {
+                    relayIdleState.textContent = 'Enerji VAR';
+                    relayIdleState.classList.add('relay-state-active');
+                    relayActiveState.textContent = 'Enerji YOK';
+                    relayActiveState.classList.remove('relay-state-active');
+                } else {
+                    relayIdleState.textContent = 'Enerji YOK';
+                    relayIdleState.classList.remove('relay-state-active');
+                    relayActiveState.textContent = 'Enerji VAR';
+                    relayActiveState.classList.add('relay-state-active');
+                }
+            }
+            
+            updateRelayCycleInfo();
+        })
+        .catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Relay Cycle Info Calculation
 // ─────────────────────────────────────────────────────────────────────────────
 function updateRelayCycleInfo() {
@@ -892,9 +974,31 @@ function initActionCards() {
     
     if (relayCancelBtn) relayCancelBtn.addEventListener('click', handleModalBack);
     if (relaySaveBtn) relaySaveBtn.addEventListener('click', () => {
-        showToast('Röle ayarları kaydedildi', 'success');
-        handleModalBack();
+        saveRelayConfig();
     });
+    
+    // Relay test button
+    const testRelayBtn = document.getElementById('testRelayBtn');
+    if (testRelayBtn) {
+        testRelayBtn.addEventListener('click', () => {
+            testRelayBtn.disabled = true;
+            testRelayBtn.textContent = 'Test ediliyor...';
+            fetch('/api/relay/test', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Röle test edildi', 'success');
+                    } else {
+                        showToast(data.error || 'Röle testi başarısız', 'error');
+                    }
+                })
+                .catch(() => showToast('Bağlantı hatası', 'error'))
+                .finally(() => {
+                    testRelayBtn.disabled = false;
+                    testRelayBtn.textContent = 'Röleyi Test Et';
+                });
+        });
+    }
     
     // Relay invert toggle - enerji durumu açıklamasını güncelle
     const relayInvertedToggle = document.getElementById('relayInverted');
@@ -1082,6 +1186,7 @@ function openActionConfig(type) {
         apiView.classList.remove('hidden');
     } else if (type === 'relay' && relayView) {
         relayView.classList.remove('hidden');
+        loadRelayConfig();
     } else if (type === 'telegram' && telegramView) {
         telegramView.classList.remove('hidden');
     } else if (type === 'early-mail' && earlyMailView) {
@@ -1201,6 +1306,9 @@ function showPreviousView(viewId) {
 // Timer Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 function initTimerConfig() {
+    // Load timer config from ESP32
+    loadTimerConfig();
+
     // Unit selector buttons (Gün/Saat/Dakika)
     document.querySelectorAll('.unit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1273,7 +1381,6 @@ function initTimerConfig() {
             if (vacationDaysGroup) {
                 vacationDaysGroup.classList.toggle('hidden', !vacationToggle.checked);
             }
-            updateVacationIndicator();
         });
     }
 
@@ -1288,8 +1395,6 @@ function initTimerConfig() {
             val = Math.max(1, Math.min(60, val));
             vacationInput.value = val;
             state.vacationMode.days = val;
-            state.vacationMode.remainingDays = val;
-            updateVacationIndicator();
         });
     }
     
@@ -1299,8 +1404,6 @@ function initTimerConfig() {
             val = Math.min(60, val + 1);
             vacationInput.value = val;
             state.vacationMode.days = val;
-            state.vacationMode.remainingDays = val;
-            updateVacationIndicator();
         });
     }
     
@@ -1310,10 +1413,66 @@ function initTimerConfig() {
             val = Math.max(1, val - 1);
             vacationInput.value = val;
             state.vacationMode.days = val;
-            state.vacationMode.remainingDays = val;
-            updateVacationIndicator();
         });
     }
+}
+
+function loadTimerConfig() {
+    fetch('/api/config/timer')
+        .then(res => {
+            if (!res.ok) throw new Error('Not authenticated');
+            return res.json();
+        })
+        .then(data => {
+            // Map intervalHours to unit + value
+            const hours = data.intervalHours || 24;
+            let unit = 'hours';
+            let value = hours;
+            
+            if (hours >= 24 && hours % 24 === 0) {
+                unit = 'days';
+                value = hours / 24;
+            } else if (hours < 1) {
+                unit = 'minutes';
+                value = Math.round(hours * 60);
+            }
+            
+            state.timerConfig.unit = unit;
+            state.timerConfig.value = value;
+            state.timerConfig.alarmCount = data.alarmCount || 0;
+            state.vacationMode.enabled = data.vacationEnabled || false;
+            state.vacationMode.days = data.vacationDays || 7;
+            
+            // Update UI elements
+            document.querySelectorAll('.unit-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.unit === unit);
+            });
+            
+            const timerInput = document.getElementById('timerDuration');
+            if (timerInput) timerInput.value = value;
+            
+            const alarmSlider = document.getElementById('alarmCount');
+            if (alarmSlider) alarmSlider.value = data.alarmCount || 0;
+            
+            const alarmValue = document.getElementById('alarmCountValue');
+            if (alarmValue) alarmValue.textContent = data.alarmCount || 0;
+            
+            const vacationToggle = document.getElementById('vacationMode');
+            if (vacationToggle) vacationToggle.checked = data.vacationEnabled || false;
+            
+            const vacationDaysGroup = document.getElementById('vacationDaysGroup');
+            if (vacationDaysGroup) {
+                vacationDaysGroup.classList.toggle('hidden', !data.vacationEnabled);
+            }
+            
+            const vacationInput = document.getElementById('vacationDays');
+            if (vacationInput) vacationInput.value = data.vacationDays || 7;
+            
+            updateAlarmConstraints();
+            updateAlarmInfo();
+            updateVacationIndicator();
+        })
+        .catch(() => {});
 }
 
 function updateAlarmConstraints() {
@@ -1366,10 +1525,10 @@ function updateVacationIndicator() {
     
     if (!indicator) return;
     
-    if (state.vacationMode.enabled && state.vacationMode.remainingDays > 0) {
+    if (state.timerState === 'VACATION' || state.vacationMode.enabled) {
         indicator.classList.add('active');
         if (remaining) {
-            remaining.textContent = `${state.vacationMode.remainingDays} gün`;
+            remaining.textContent = `${state.vacationMode.days} gün`;
         }
     } else {
         indicator.classList.remove('active');
@@ -1428,6 +1587,8 @@ function handleLogin(e) {
             showPage('app');
             showToast('Giriş başarılı', 'success');
             startAutoLogoutTimer();
+            pollTimerStatus();
+            loadTimerConfig();
         } else if (data.lockoutSeconds) {
             const mins = Math.ceil(data.lockoutSeconds / 60);
             state.lockoutUntil = Date.now() + (data.lockoutSeconds * 1000);
@@ -1621,28 +1782,70 @@ function showPage(page) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Timer Logic
+// Timer Logic - Real API Integration
 // ─────────────────────────────────────────────────────────────────────────────
 function handleReset() {
-    state.timeRemaining = state.timerDuration;
-    state.lastReset = new Date();
-    state.isActive = true;
-    
-    // Reset pause button to pause state
-    updatePauseButton();
-    
-    updateTimerDisplay();
-    showToast('Zamanlayıcı sıfırlandı', 'success');
+    if (state.timerState === 'TRIGGERED') {
+        // Acknowledge triggered timer
+        fetch('/api/timer/acknowledge', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Tetikleme onaylandı, zamanlayıcı yeniden başlatıldı', 'success');
+                    pollTimerStatus();
+                } else {
+                    showToast(data.error || 'Hata', 'error');
+                }
+            })
+            .catch(() => showToast('Bağlantı hatası', 'error'));
+    } else if (state.timerState === 'DISABLED') {
+        // Enable timer
+        fetch('/api/timer/enable', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Zamanlayıcı etkinleştirildi', 'success');
+                    pollTimerStatus();
+                }
+            })
+            .catch(() => showToast('Bağlantı hatası', 'error'));
+    } else {
+        // Normal reset
+        fetch('/api/timer/reset', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Zamanlayıcı sıfırlandı', 'success');
+                    pollTimerStatus();
+                } else {
+                    showToast(data.error || 'Sıfırlama başarısız', 'error');
+                }
+            })
+            .catch(() => showToast('Bağlantı hatası', 'error'));
+    }
 }
 
 function handlePause() {
-    state.isActive = !state.isActive;
-    updatePauseButton();
-    
-    if (state.isActive) {
-        showToast('Geri sayım devam ediyor', 'success');
+    if (state.timerState === 'DISABLED') {
+        fetch('/api/timer/enable', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Geri sayım başlatıldı', 'success');
+                    pollTimerStatus();
+                }
+            })
+            .catch(() => showToast('Bağlantı hatası', 'error'));
     } else {
-        showToast('Geri sayım durduruldu', 'warning');
+        fetch('/api/timer/disable', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Geri sayım durduruldu', 'warning');
+                    pollTimerStatus();
+                }
+            })
+            .catch(() => showToast('Bağlantı hatası', 'error'));
     }
 }
 
@@ -1653,38 +1856,67 @@ function updatePauseButton() {
     const pauseIcon = pauseBtn.querySelector('.pause-icon');
     const playIcon = pauseBtn.querySelector('.play-icon');
     
-    if (state.isActive) {
-        // Timer running - show pause icon
+    const isRunning = state.timerState === 'RUNNING' || state.timerState === 'WARNING';
+    
+    if (isRunning) {
         pauseBtn.classList.remove('paused');
         pauseBtn.title = 'Durdur';
         if (pauseIcon) pauseIcon.classList.remove('hidden');
         if (playIcon) playIcon.classList.add('hidden');
     } else {
-        // Timer paused - show play icon
         pauseBtn.classList.add('paused');
-        pauseBtn.title = 'Devam Et';
+        pauseBtn.title = 'Başlat';
         if (pauseIcon) pauseIcon.classList.add('hidden');
         if (playIcon) playIcon.classList.remove('hidden');
     }
 }
 
+let timerPollInterval = null;
+
 function startTimerUpdate() {
-    // Her saniye güncelle
-    setInterval(() => {
-        if (state.isActive && !state.settings.timer.vacationMode && state.timeRemaining > 0) {
-            state.timeRemaining--;
+    // Poll timer status from ESP32 every 5 seconds
+    pollTimerStatus();
+    timerPollInterval = setInterval(pollTimerStatus, 5000);
+}
+
+function pollTimerStatus() {
+    fetch('/api/timer/status')
+        .then(res => {
+            if (!res.ok) throw new Error('Not authenticated');
+            return res.json();
+        })
+        .then(data => {
+            state.timerState = data.state || 'DISABLED';
+            state.timeRemainingMs = data.timeRemainingMs || 0;
+            state.intervalHours = data.intervalHours || 24;
+            state.warningsSent = data.warningsSent || 0;
+            state.resetCount = data.resetCount || 0;
+            state.triggerCount = data.triggerCount || 0;
+            state.timerEnabled = data.enabled || false;
+            
+            // Update vacation state
+            if (data.vacationEnabled) {
+                state.vacationMode.enabled = true;
+                state.vacationMode.days = data.vacationDays || 0;
+            }
+            
             updateTimerDisplay();
-        }
-    }, 1000);
+            updatePauseButton();
+            updateVacationIndicator();
+        })
+        .catch(() => {
+            // Silent fail during polling
+        });
 }
 
 function updateTimerDisplay() {
-    const totalSeconds = state.timeRemaining;
+    const totalMs = state.timeRemainingMs;
+    const totalSeconds = Math.floor(totalMs / 1000);
     const days = Math.floor(totalSeconds / 86400);
     const hours = Math.floor((totalSeconds % 86400) / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     
-    // Gün gösterimi
+    // Days display
     if (elements.timeDays) {
         if (days > 0) {
             elements.timeDays.textContent = `${days}g`;
@@ -1694,7 +1926,7 @@ function updateTimerDisplay() {
         }
     }
     
-    // Saat gösterimi
+    // Hours display
     if (elements.timeHours) {
         if (days > 0 || hours > 0) {
             elements.timeHours.textContent = `${hours}s`;
@@ -1704,14 +1936,29 @@ function updateTimerDisplay() {
         }
     }
     
-    // Dakika gösterimi (her zaman görünür)
+    // Minutes display (always visible)
     if (elements.timeMinutes) {
         elements.timeMinutes.textContent = `${minutes}d`;
     }
     
-    // Update ring progress
-    const percentage = state.timeRemaining / state.timerDuration;
-    const circumference = 2 * Math.PI * 90; // r=90
+    // Timer label based on state
+    const timerLabel = document.querySelector('.timer-label');
+    if (timerLabel) {
+        const labels = {
+            'DISABLED': 'DEVRE DIŞI',
+            'RUNNING': 'KALAN SÜRE',
+            'WARNING': '⚠ UYARI',
+            'TRIGGERED': '🔴 TETİKLENDİ',
+            'PAUSED': 'DURAKLATILDI',
+            'VACATION': '🏖 TATİL MODU'
+        };
+        timerLabel.textContent = labels[state.timerState] || 'KALAN SÜRE';
+    }
+    
+    // Ring progress
+    const intervalMs = state.intervalHours * 3600 * 1000;
+    const percentage = intervalMs > 0 ? Math.min(1, totalMs / intervalMs) : 0;
+    const circumference = 2 * Math.PI * 90;
     const offset = circumference * (1 - percentage);
     
     const ringProgress = document.querySelector('.ring-progress');
@@ -1719,12 +1966,16 @@ function updateTimerDisplay() {
         ringProgress.style.strokeDashoffset = offset;
     }
     
-    // Update ring color based on remaining time
+    // Ring color
     if (elements.timerRing) {
         elements.timerRing.classList.remove('warning', 'danger');
-        if (percentage <= 0.25) {
+        if (state.timerState === 'TRIGGERED') {
             elements.timerRing.classList.add('danger');
-        } else if (percentage <= 0.5) {
+        } else if (state.timerState === 'WARNING') {
+            elements.timerRing.classList.add('warning');
+        } else if (percentage <= 0.25 && state.timerState === 'RUNNING') {
+            elements.timerRing.classList.add('danger');
+        } else if (percentage <= 0.5 && state.timerState === 'RUNNING') {
             elements.timerRing.classList.add('warning');
         }
     }
@@ -1742,16 +1993,7 @@ function updateUI() {
 }
 
 function updateInfoCards() {
-    // Son sıfırlama
-    if (elements.lastResetTime) {
-        elements.lastResetTime.textContent = formatTimeAgo(state.lastReset);
-    }
-    
-    // Sonraki aksiyon
-    if (elements.nextActionTime) {
-        const nextAction = new Date(Date.now() + state.timeRemaining * 1000);
-        elements.nextActionTime.textContent = formatTime(nextAction);
-    }
+    // These are no longer needed since data comes from polling
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1978,9 +2220,59 @@ function updateCarouselPosition(instant = false) {
 }
 
 function handleSaveSettings() {
-    // Demo: Ayarları kaydet
-    showToast('Ayarlar kaydedildi', 'success');
-    closeSettings();
+    // Convert unit+value to intervalHours
+    const { unit, value, alarmCount } = state.timerConfig;
+    let intervalHours = value;
+    if (unit === 'days') intervalHours = value * 24;
+    else if (unit === 'minutes') intervalHours = value / 60;
+    
+    // Calculate warningMinutes: spread alarms evenly over the interval
+    let warningMinutes = 60; // default 60 min before deadline
+    if (alarmCount > 0) {
+        if (unit === 'hours') warningMinutes = alarmCount * 60;
+        else if (unit === 'days') warningMinutes = alarmCount * 24 * 60;
+        else if (unit === 'minutes') warningMinutes = alarmCount;
+    }
+    
+    const timerPayload = {
+        enabled: state.timerEnabled || state.timerState !== 'DISABLED',
+        intervalHours: intervalHours,
+        warningMinutes: warningMinutes,
+        alarmCount: alarmCount
+    };
+    
+    // Save timer config
+    fetch('/api/config/timer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(timerPayload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // Handle vacation mode change
+            const vacAction = state.vacationMode.enabled
+                ? fetch('/api/timer/vacation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: true, days: state.vacationMode.days })
+                  })
+                : fetch('/api/timer/vacation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: false })
+                  });
+            
+            return vacAction.then(() => {
+                showToast('Ayarlar kaydedildi', 'success');
+                pollTimerStatus();
+                closeSettings();
+            });
+        } else {
+            showToast(data.error || 'Kaydetme hatası', 'error');
+        }
+    })
+    .catch(() => showToast('Bağlantı hatası', 'error'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
