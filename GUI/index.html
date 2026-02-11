@@ -1,0 +1,2486 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="description" content="LebensSpur - Dead Man's Switch Timer">
+    
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <title>LebensSpur</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         LOGIN PAGE - Giriş sayfası (auth olmadan görünen tek sayfa)
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="login-page" class="page">
+        <div class="login-container">
+            <div class="login-brand">
+                <img src="../logo.png" alt="LebensSpur Logo" class="logo-image">
+                <h1>LebensSpur</h1>
+                <span class="login-brand-sub">SmartKraft</span>
+            </div>
+            
+            <form class="login-form" id="login-form">
+                <div class="input-group">
+                    <input type="password" id="password" required placeholder=" " autocomplete="current-password">
+                    <label for="password">Şifre</label>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    Giriş
+                </button>
+            </form>
+            
+            <div class="login-footer">
+                <span class="version">v1.0.0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MAIN APP - Ana uygulama (giriş sonrası)
+         Tam ekran ortalanmış timer görünümü
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="app-page" class="page hidden">
+        
+        <!-- Centered Container - Her cihazda yatay ve dikey ortalanmış -->
+        <main class="app-main">
+            
+            <!-- Brand Title -->
+            <div class="app-brand">
+                <span class="brand-main">LebensSpur</span>
+                <span class="brand-sub">SmartKraft</span>
+            </div>
+            
+            <!-- Timer Display -->
+            <section class="timer-section">
+                <div class="timer-ring" id="timerRing">
+                    <svg viewBox="0 0 200 200">
+                        <circle class="ring-bg" cx="100" cy="100" r="90" />
+                        <circle class="ring-progress" cx="100" cy="100" r="90" id="progressRing" />
+                    </svg>
+                    <div class="timer-content">
+                        <div class="timer-value" id="timerValue">
+                            <span class="time-days" id="timeDays">2g</span>
+                            <span class="time-hours" id="timeHours">14s</span>
+                            <span class="time-minutes" id="timeMinutes">32d</span>
+                        </div>
+                        <span class="timer-label">KALAN SÜRE</span>
+                    </div>
+                </div>
+                
+                <!-- Tatil Modu Göstergesi -->
+                <div class="vacation-indicator" id="vacationIndicator">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <span>Tatil: <strong id="vacationRemaining">14 gün</strong> kaldı</span>
+                </div>
+            </section>
+            
+            <!-- Action Buttons - Ayarlar, Stop/Start, Reset, Çıkış -->
+            <section class="timer-actions">
+                <button class="action-btn" id="settingsBtn" title="Ayarlar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+                <button class="action-btn action-btn-pause" id="pauseBtn" title="Durdur">
+                    <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                    <svg class="play-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </button>
+                <button class="action-btn" id="resetBtn" title="Sıfırla">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                        <path d="M3 3v5h5"></path>
+                    </svg>
+                </button>
+                <button class="action-btn" id="logoutBtn" title="Çıkış">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+            </section>
+            
+        </main>
+
+        <!-- ═══════════════════════════════════════════════════════════════════
+             SETTINGS MODAL - Ayarlar paneli (overlay)
+             ═══════════════════════════════════════════════════════════════════ -->
+        <div class="modal-overlay hidden" id="settingsModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <button class="btn btn-icon btn-ghost modal-back-btn hidden" id="modalBackBtn" title="Geri">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <span class="modal-breadcrumb hidden" id="modalBreadcrumb"></span>
+                    </div>
+                    
+                    <!-- Root: Carousel görünür, Alt sayfa: Başlık görünür -->
+                    <h2 id="modalTitle" class="hidden">Ayarlar</h2>
+                    
+                    <!-- Settings Tabs - Carousel (Header içinde) -->
+                    <nav class="settings-nav-carousel header-carousel" id="settingsNavCarousel">
+                        <button class="carousel-arrow carousel-prev" id="carouselPrev">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <div class="carousel-track">
+                            <div class="carousel-items" id="carouselItems">
+                                <button class="nav-item" data-tab="timer" data-index="0">Zamanlayıcı</button>
+                                <button class="nav-item" data-tab="mail" data-index="1">Bağlantılar</button>
+                                <button class="nav-item" data-tab="actions" data-index="2">Aksiyonlar</button>
+                                <button class="nav-item" data-tab="system" data-index="3">Sistem</button>
+                                <button class="nav-item" data-tab="info" data-index="4">Info</button>
+                            </div>
+                        </div>
+                        <button class="carousel-arrow carousel-next" id="carouselNext">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </nav>
+                    
+                    <div class="modal-header-right"></div>
+                </div>
+                
+                <div class="modal-body">
+
+                    <!-- Tab: Timer Settings -->
+                    <div class="settings-panel active" id="panel-timer">
+                        
+                        <!-- Geri Sayım Süresi -->
+                        <div class="setting-section">
+                            <h4 class="section-title">Geri Sayım Süresi</h4>
+                            <p class="section-desc">Sıfırlama yapılmazsa tetikleme ne kadar sürede gerçekleşir</p>
+                            
+                            <div class="timer-config">
+                                <div class="timer-unit-selector">
+                                    <button class="unit-btn" data-unit="days">Gün</button>
+                                    <button class="unit-btn active" data-unit="hours">Saat</button>
+                                    <button class="unit-btn" data-unit="minutes">Dakika</button>
+                                </div>
+                                <div class="timer-value-input">
+                                    <button class="timer-adjust-btn" id="timerDecrease">−</button>
+                                    <input type="number" id="timerDuration" min="1" max="60" value="24">
+                                    <button class="timer-adjust-btn" id="timerIncrease">+</button>
+                                </div>
+                                <p class="timer-info" id="timerInfo">Minimum: 1, Maksimum: 60</p>
+                            </div>
+                        </div>
+
+                        <!-- Alarm Ayarları -->
+                        <div class="setting-section">
+                            <h4 class="section-title">Alarm Bildirimleri</h4>
+                            <p class="section-desc">Tetiklemeden önce kaç kez uyarı gönderilsin</p>
+                            
+                            <div class="alarm-config">
+                                <div class="alarm-slider-container">
+                                    <input type="range" id="alarmCount" min="0" max="10" value="3" class="alarm-slider">
+                                    <div class="alarm-value">
+                                        <span id="alarmCountValue">3</span>
+                                        <span class="alarm-unit">alarm</span>
+                                    </div>
+                                </div>
+                                <p class="alarm-info" id="alarmInfo">23. 22. 21. saatlerde alarm çalar</p>
+                                <p class="alarm-note">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                    </svg>
+                                    Alarm sayısı sürenin yarısını geçemez
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Tatil Modu -->
+                        <div class="setting-section">
+                            <h4 class="section-title">Tatil Modu</h4>
+                            <p class="section-desc">Geri sayımı geçici olarak ertele</p>
+                            
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Tatil Modunu Etkinleştir</h3>
+                                    <p class="setting-desc">Tatil süresince geri sayım başlamaz</p>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="vacationMode">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="vacation-days-group hidden" id="vacationDaysGroup">
+                                <div class="setting-header">
+                                    <h3>Tatil Süresi</h3>
+                                    <p class="setting-desc">Kaç gün tatildesiniz? (maks. 60 gün)</p>
+                                </div>
+                                <div class="vacation-input">
+                                    <button class="timer-adjust-btn" id="vacationDecrease">−</button>
+                                    <input type="number" id="vacationDays" min="1" max="60" value="7">
+                                    <button class="timer-adjust-btn" id="vacationIncrease">+</button>
+                                    <span class="vacation-unit">gün</span>
+                                </div>
+                                <p class="vacation-info">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                    </svg>
+                                    Tatil bitiminde geri sayım otomatik başlar
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Mail Settings -->
+                    <div class="settings-panel" id="panel-mail">
+                        
+                        <!-- Mail Ana İçerik (Detay açıldığında gizlenecek) -->
+                        <div id="mailMainContent">
+
+                        <!-- Mail Ayarları - Accordion -->
+                        <div class="setting-section">
+                            <div class="accordion" id="smtpAccordion">
+                                <div class="accordion-header" id="smtpAccordionHeader">
+                                    <h4 class="section-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                            <polyline points="22,6 12,13 2,6"></polyline>
+                                        </svg>
+                                        Mail Ayarları
+                                    </h4>
+                                    <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="accordion-content" id="smtpAccordionContent">
+                                    <p class="section-desc">SMTP sunucu yapılandırması</p>
+                                    
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>SMTP Sunucu</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input" id="smtpServer" placeholder="smtp.gmail.com">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Port</h3>
+                                        </div>
+                                        <div class="setting-control">
+                                            <input type="number" class="input input-sm" id="smtpPort" value="465">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Gönderici Email</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="email" class="input" id="smtpUser" placeholder="email@example.com">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>API Anahtarı</h3>
+                                            <p class="setting-desc">Gmail için App Password kullanın</p>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input" id="smtpApiKey" placeholder="xxxx xxxx xxxx xxxx">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Bağlantıyı Test Et</h3>
+                                        </div>
+                                        <div class="setting-control">
+                                            <button class="btn btn-ghost btn-sm" id="testSmtpBtn">Test Gönder</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WiFi Ayarları - Accordion -->
+                        <div class="setting-section">
+                            <div class="accordion" id="wifiAccordion">
+                                <div class="accordion-header">
+                                    <h4 class="section-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                                            <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                                            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                                        </svg>
+                                        WiFi
+                                    </h4>
+                                    <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="accordion-content">
+                                    <p class="section-desc">Ana WiFi ağ bağlantısı yapılandırması</p>
+                                    
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Ağ Adı (SSID)</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input" id="wifiSsid" placeholder="Ağ adı">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Şifre</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="password" class="input" id="wifiPass" placeholder="WiFi şifresi">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Statik IP Kullan</h3>
+                                            <p class="setting-desc">DHCP yerine sabit IP adresi ata</p>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="wifiStaticIpEnabled">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="static-ip-fields hidden" id="wifiStaticIpFields">
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>IP Adresi</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiStaticIp" placeholder="192.168.1.100">
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>Ağ Geçidi (Gateway)</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiGateway" placeholder="192.168.1.1">
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>Alt Ağ Maskesi</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiSubnet" placeholder="255.255.255.0">
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>DNS Sunucu</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiDns" placeholder="8.8.8.8">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>mDNS Hostname</h3>
+                                            <p class="setting-desc">Yerel ağda erişim için (.local)</p>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <div class="input-with-suffix">
+                                                <input type="text" class="input" id="wifiMdnsHostname" placeholder="LS-XXXXXXXXXX">
+                                                <span class="input-suffix">.local</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Bağlantıyı Test Et</h3>
+                                        </div>
+                                        <div class="setting-control">
+                                            <button class="btn btn-ghost btn-sm" id="testWifiBtn">Test Et</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WiFi (Yedek) - Accordion -->
+                        <div class="setting-section">
+                            <div class="accordion" id="wifiBackupAccordion">
+                                <div class="accordion-header">
+                                    <h4 class="section-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                                            <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+                                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                                            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                                        </svg>
+                                        WiFi (Yedek)
+                                    </h4>
+                                    <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="accordion-content">
+                                    <p class="section-desc">Ana bağlantı başarısız olursa kullanılacak yedek ağ</p>
+                                    
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Ağ Adı (SSID)</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input" id="wifiBackupSsid" placeholder="Yedek ağ adı">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Şifre</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="password" class="input" id="wifiBackupPass" placeholder="WiFi şifresi">
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Statik IP Kullan</h3>
+                                            <p class="setting-desc">DHCP yerine sabit IP adresi ata</p>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="wifiBackupStaticIpEnabled">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="static-ip-fields hidden" id="wifiBackupStaticIpFields">
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>IP Adresi</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiBackupStaticIp" placeholder="192.168.1.101">
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>Ağ Geçidi (Gateway)</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiBackupGateway" placeholder="192.168.1.1">
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>Alt Ağ Maskesi</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiBackupSubnet" placeholder="255.255.255.0">
+                                            </div>
+                                        </div>
+
+                                        <div class="setting-group">
+                                            <div class="setting-header">
+                                                <h3>DNS Sunucu</h3>
+                                            </div>
+                                            <div class="setting-control full">
+                                                <input type="text" class="input" id="wifiBackupDns" placeholder="8.8.8.8">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>mDNS Hostname</h3>
+                                            <p class="setting-desc">Yerel ağda erişim için (.local)</p>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <div class="input-with-suffix">
+                                                <input type="text" class="input" id="wifiBackupMdnsHostname" placeholder="LS-XXXXXXXXXX">
+                                                <span class="input-suffix">.local</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AP Mod - Accordion -->
+                        <div class="setting-section">
+                            <div class="accordion configured" id="apModeAccordion">
+                                <div class="accordion-header">
+                                    <h4 class="section-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <circle cx="12" cy="12" r="2"></circle>
+                                            <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"></path>
+                                        </svg>
+                                        AP Mod
+                                    </h4>
+                                    <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="accordion-content">
+                                    <p class="section-desc">Cihazın kendi erişim noktası ayarları (değiştirilemez)</p>
+                                    
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>AP Mod Aktif</h3>
+                                            <p class="setting-desc">Kurulum sonrası kapatılabilir</p>
+                                        </div>
+                                        <div class="setting-control">
+                                            <label class="toggle">
+                                                <input type="checkbox" id="apModeEnabled" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- AP Mod Kapatma Uyarısı -->
+                                    <div class="warning-banner hidden" id="apModeWarning">
+                                        <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                        <div class="warning-content">
+                                            <strong>Dikkat: Erişim Kaybı Riski!</strong>
+                                            <p>WiFi bağlantısı yapılandırılmadan AP Mod kapatılırsa cihaza erişilemez hale gelir. <strong>Factory reset</strong> veya <strong>yeniden programlama</strong> gerekir.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Ağ Adı (SSID)</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input input-readonly" id="apSsid" value="LS-XXXXXXXXXX" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Şifre</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input input-readonly" id="apPass" value="smartkraft" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>mDNS Adresi</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input input-readonly" id="apMdns" value="LS-XXXXXXXXXX.local" readonly>
+                                        </div>
+                                    </div>
+
+                                    <div class="info-box info-box-muted">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                        </svg>
+                                        <span>Bu değerler cihaz kimliğinden üretilir ve değiştirilemez</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Public! WiFi - Accordion -->
+                        <div class="setting-section">
+                            <div class="accordion" id="publicWifiAccordion">
+                                <div class="accordion-header">
+                                    <h4 class="section-title">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                        </svg>
+                                        Public! WiFi
+                                    </h4>
+                                    <svg class="accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="accordion-content">
+                                    <p class="section-desc">Captive portal destekli açık ağ bağlantısı</p>
+                                    
+                                    <div class="setting-group">
+                                        <div class="setting-header">
+                                            <h3>Ağ Adı (SSID)</h3>
+                                        </div>
+                                        <div class="setting-control full">
+                                            <input type="text" class="input" id="publicWifiSsid" placeholder="Açık ağ adı">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        </div><!-- /mailMainContent -->
+                    </div>
+
+                    <!-- Tab: Actions -->
+                    <div class="settings-panel" id="panel-actions">
+                        
+                        <!-- Aksiyonlar Ana İçerik -->
+                        <div id="actionsMainContent">
+
+                        <!-- Erken Uyarı Aksiyonları -->
+                        <div class="setting-section">
+                            <div class="section-header-inline">
+                                <h4 class="section-title">Erken Uyarı Aksiyonları</h4>
+                                <span class="section-subtitle">Alarm tetiklendiğinde çalışacak aksiyonlar</span>
+                            </div>
+                            
+                            <div class="action-cards">
+                                <div class="action-card has-settings" data-action="early-telegram" data-active="true">
+                                    <div class="action-card-main">
+                                        <div class="action-card-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                <path d="M21 2L9 14"></path>
+                                                <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="action-card-name">Telegram</span>
+                                    </div>
+                                    <button class="action-card-settings" data-config="telegram" title="Yapılandır">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <div class="action-card has-settings" data-action="early-mail" data-active="true">
+                                    <div class="action-card-main">
+                                        <div class="action-card-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                <polyline points="22,6 12,13 2,6"></polyline>
+                                            </svg>
+                                        </div>
+                                        <span class="action-card-name">Hatırlatma Maili</span>
+                                    </div>
+                                    <button class="action-card-settings" data-config="early-mail" title="Yapılandır">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <div class="action-card has-settings" data-action="early-api" data-active="false">
+                                    <div class="action-card-main">
+                                        <div class="action-card-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="action-card-name">Alarm API</span>
+                                    </div>
+                                    <button class="action-card-settings" data-config="early-api" title="Yapılandır">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tetikleme Aksiyonları -->
+                        <div class="setting-section">
+                            <div class="section-header-inline">
+                                <h4 class="section-title">Tetikleme Aksiyonları</h4>
+                                <span class="section-subtitle">Süre dolduğunda çalışacak aksiyonlar</span>
+                            </div>
+                            
+                            <div class="action-cards">
+                                <div class="action-card has-settings" data-action="trigger-mail" data-active="true">
+                                    <div class="action-card-main">
+                                        <div class="action-card-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                <polyline points="22,6 12,13 2,6"></polyline>
+                                            </svg>
+                                        </div>
+                                        <span class="action-card-name">Mail Grupları</span>
+                                    </div>
+                                    <button class="action-card-settings" data-config="trigger-mail" title="Yapılandır">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <div class="action-card has-settings trigger-settings" data-action="trigger-api" data-active="true">
+                                    <div class="action-card-main">
+                                        <div class="action-card-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="action-card-name">LS API</span>
+                                    </div>
+                                    <button class="action-card-settings" data-config="trigger-api" title="Yapılandır">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <div class="action-card has-settings trigger-settings" data-action="trigger-relay" data-active="true">
+                                    <div class="action-card-main">
+                                        <div class="action-card-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                                <line x1="12" y1="2" x2="12" y2="12"></line>
+                                            </svg>
+                                        </div>
+                                        <span class="action-card-name">Röle</span>
+                                    </div>
+                                    <button class="action-card-settings" data-config="relay" title="Yapılandır">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        </div><!-- /actionsMainContent -->
+
+                        <!-- API Yapılandırma (Panel Kaplama) -->
+                        <div class="setting-section action-detail-view hidden" id="apiConfigView">
+                            <p class="section-desc">Webhook, MQTT ve diğer API entegrasyonları</p>
+                            
+                            <!-- Webhook -->
+                            <div class="config-subsection">
+                                <h5 class="subsection-title">Webhook</h5>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>URL</h3>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="url" class="input" id="webhookUrl" placeholder="https://example.com/webhook">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>HTTP Method</h3>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select class="select" id="webhookMethod">
+                                            <option value="POST">POST</option>
+                                            <option value="GET">GET</option>
+                                            <option value="PUT">PUT</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Headers (JSON)</h3>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <textarea class="input" id="webhookHeaders" rows="2" placeholder='{"Authorization": "Bearer xxx"}'></textarea>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Body (JSON)</h3>
+                                        <p class="setting-desc">Değişkenler: {status}, {time}, {device}</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <textarea class="input" id="webhookBody" rows="3" placeholder='{"event": "triggered", "device": "{device}"}'></textarea>
+                                    </div>
+                                </div>
+
+                                <button class="btn btn-ghost btn-sm" id="testWebhookBtn">Test Gönder</button>
+                            </div>
+
+                            <!-- MQTT -->
+                            <div class="config-subsection">
+                                <h5 class="subsection-title">MQTT (Home Assistant)</h5>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Broker URL</h3>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="text" class="input" id="mqttBroker" placeholder="mqtt://192.168.1.100:1883">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Topic</h3>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="text" class="input" id="mqttTopic" placeholder="homeassistant/lebensspur/state">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Kullanıcı / Şifre</h3>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <div class="input-row">
+                                            <input type="text" class="input" id="mqttUser" placeholder="Kullanıcı (opsiyonel)">
+                                            <input type="password" class="input" id="mqttPass" placeholder="Şifre (opsiyonel)">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Mesaj (JSON)</h3>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <textarea class="input" id="mqttPayload" rows="2" placeholder='{"state": "triggered"}'></textarea>
+                                    </div>
+                                </div>
+
+                                <button class="btn btn-ghost btn-sm" id="testMqttBtn">Test Gönder</button>
+                            </div>
+
+                            <div class="view-footer">
+                                <div class="view-footer-left">
+                                    <button class="btn btn-ghost" id="apiConfigCancelBtn">İptal</button>
+                                    <button class="btn btn-primary" id="apiConfigSaveBtn">Kaydet</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Röle Yapılandırma (Panel Kaplama) -->
+                        <div class="setting-section action-detail-view hidden" id="relayConfigView">
+                            <p class="section-desc">Röle tetikleme ve zamanlama ayarları</p>
+
+                            <!-- Sabit Pin Bilgisi -->
+                            <div class="info-box info-box-muted" style="margin-top: 0; margin-bottom: var(--space-4);">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                                    <rect x="9" y="9" width="6" height="6"></rect>
+                                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                                </svg>
+                                <span><strong>Röle:</strong> D10 (GPIO 18) &nbsp;|&nbsp; <strong>Buton:</strong> D7 (GPIO 17)</span>
+                            </div>
+
+                            <!-- Enerji Mantığı -->
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Röleyi Ters Çevir</h3>
+                                    <p class="setting-desc">Varsayılan: Tetiklenince enerji verilir</p>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="relayInverted">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Enerji Durumu Açıklaması -->
+                            <div class="relay-state-info" id="relayStateInfo">
+                                <div class="relay-state-row">
+                                    <span class="relay-state-label">Şu an (bekleme):</span>
+                                    <span class="relay-state-value" id="relayIdleState">Enerji YOK</span>
+                                </div>
+                                <div class="relay-state-row">
+                                    <span class="relay-state-label">Tetiklendiğinde:</span>
+                                    <span class="relay-state-value relay-state-active" id="relayActiveState">Enerji VAR</span>
+                                </div>
+                            </div>
+
+                            <!-- Gecikme (Delay) -->
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Başlama Gecikmesi</h3>
+                                    <p class="setting-desc">Tetiklemeden sonra bekleme süresi</p>
+                                </div>
+                                <div class="setting-control">
+                                    <select class="select" id="relayDelay">
+                                        <option value="0" selected>Gecikme yok</option>
+                                        <option value="1">1 saniye</option>
+                                        <option value="2">2 saniye</option>
+                                        <option value="3">3 saniye</option>
+                                        <option value="5">5 saniye</option>
+                                        <option value="10">10 saniye</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Aktif Kalma Süresi (her zaman görünür) -->
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Aktif Kalma Süresi</h3>
+                                    <p class="setting-desc">Rölenin toplam çalışma süresi</p>
+                                </div>
+                                <div class="setting-control">
+                                    <div class="duration-input-group">
+                                        <input type="number" class="input input-sm" id="relayDurationValue" min="1" max="60" value="1">
+                                        <select class="select" id="relayDurationUnit">
+                                            <option value="seconds">Saniye</option>
+                                            <option value="minutes" selected>Dakika</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="field-hint">Saniye: 1-59, Dakika: 1-60 (maks. 60 dakika)</p>
+
+                            <!-- Tetikleme Modu -->
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Pulse Modu</h3>
+                                    <p class="setting-desc">Aç/kapa döngüsü ile çalıştır</p>
+                                </div>
+                                <div class="setting-control">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="relayPulseEnabled">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Pulse Süresi (sadece pulse aktifken görünür) -->
+                            <div class="pulse-duration-fields hidden" id="relayPulseFields">
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Pulse Süresi</h3>
+                                        <p class="setting-desc">Açık/kapalı döngü süresi</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select class="select" id="relayPulseDuration">
+                                            <option value="1">1 saniye</option>
+                                            <option value="3">3 saniye</option>
+                                            <option value="5" selected>5 saniye</option>
+                                            <option value="10">10 saniye</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Pulse Döngü Bilgisi -->
+                                <div class="relay-cycle-info" id="relayCycleInfo">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                    <span id="relayCycleText">5 sn açık → 5 sn kapalı × 6 döngü = 1 dakika</span>
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Test Et</h3>
+                                </div>
+                                <div class="setting-control">
+                                    <button class="btn btn-ghost btn-sm" id="testRelayBtn">Röleyi Test Et</button>
+                                </div>
+                            </div>
+
+                            <div class="view-footer">
+                                <div class="view-footer-left">
+                                    <button class="btn btn-ghost" id="relayConfigCancelBtn">İptal</button>
+                                    <button class="btn btn-primary" id="relayConfigSaveBtn">Kaydet</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Telegram Yapılandırma (Panel Kaplama) -->
+                        <div class="setting-section action-detail-view hidden" id="telegramConfigView">
+                            <p class="section-desc">Erken hatırlatma bildirimleri için Telegram botu</p>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Bot Token</h3>
+                                </div>
+                                <div class="setting-control full">
+                                    <input type="text" class="input" id="telegramToken" placeholder="123456:ABC-DEF...">
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Chat ID</h3>
+                                </div>
+                                <div class="setting-control full">
+                                    <input type="text" class="input" id="telegramChat" placeholder="-100123456789">
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Hatırlatma Mesajı</h3>
+                                    <p class="setting-desc">Alarm tetiklendiğinde Telegram'a gönderilecek mesaj</p>
+                                </div>
+                                <div class="setting-control full">
+                                    <textarea class="input" id="telegramMessage" rows="2" placeholder="⚠️ LebensSpur: Zamanlayıcınız yakında sona erecek!"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Test Et</h3>
+                                </div>
+                                <div class="setting-control">
+                                    <button class="btn btn-ghost btn-sm" id="testTelegramBtn">Test Mesajı Gönder</button>
+                                </div>
+                            </div>
+
+                            <div class="view-footer">
+                                <div class="view-footer-left">
+                                    <button class="btn btn-ghost" id="telegramConfigCancelBtn">İptal</button>
+                                    <button class="btn btn-primary" id="telegramConfigSaveBtn">Kaydet</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Erken Uyarı Mail Yapılandırma (Panel Kaplama) -->
+                        <div class="setting-section action-detail-view hidden" id="earlyMailConfigView">
+                            <p class="section-desc">Alarm tetiklendiğinde size gönderilecek hatırlatma maili</p>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Alıcı Email</h3>
+                                    <p class="setting-desc">Hatırlatma mailinizin gideceği adres</p>
+                                </div>
+                                <div class="setting-control full">
+                                    <input type="email" class="input" id="earlyMailRecipient" placeholder="you@example.com">
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Mail Başlığı</h3>
+                                </div>
+                                <div class="setting-control full">
+                                    <input type="text" class="input" id="earlyMailSubject" placeholder="LebensSpur: Hatırlatma">
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Hatırlatma Mesajı</h3>
+                                    <p class="setting-desc">Alarm tetiklendiğinde size gönderilecek mesaj</p>
+                                </div>
+                                <div class="setting-control full">
+                                    <textarea class="input" id="earlyReminderMessage" rows="3" placeholder="Merhaba, LebensSpur zamanlayıcınız yakında sona erecek. Lütfen sıfırlamayı unutmayın."></textarea>
+                                </div>
+                            </div>
+
+                            <div class="view-footer">
+                                <div class="view-footer-left">
+                                    <button class="btn btn-ghost" id="earlyMailConfigCancelBtn">İptal</button>
+                                    <button class="btn btn-primary" id="earlyMailConfigSaveBtn">Kaydet</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tetikleme Mail Yapılandırma (Panel Kaplama) - Mail Grupları -->
+                        <div class="setting-section action-detail-view hidden" id="triggerMailConfigView">
+                            <p class="section-desc">Süre dolduğunda mail gönderilecek gruplar (max 10 grup)</p>
+                            
+                            <div class="mail-group-list" id="mailGroupList">
+                                <div class="mail-group-item" data-group-id="1">
+                                    <div class="mail-group-info">
+                                        <span class="mail-group-name">Aile</span>
+                                        <span class="mail-group-count">3 alıcı</span>
+                                    </div>
+                                    <button class="btn btn-ghost btn-sm" data-action="view-group">Görüntüle</button>
+                                </div>
+                                <div class="mail-group-item" data-group-id="2">
+                                    <div class="mail-group-info">
+                                        <span class="mail-group-name">İş Arkadaşları</span>
+                                        <span class="mail-group-count">2 alıcı</span>
+                                    </div>
+                                    <button class="btn btn-ghost btn-sm" data-action="view-group">Görüntüle</button>
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-outline btn-add-group" id="createMailGroup">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Yeni Mail Grubu Oluştur
+                            </button>
+
+                            <div class="view-footer">
+                                <button class="btn btn-ghost" id="triggerMailConfigCancelBtn">Geri</button>
+                            </div>
+                        </div>
+
+                        <!-- Mail Grubu Detay (Panel Kaplama - ikinci seviye) -->
+                        <div class="setting-section action-detail-view hidden" id="mailGroupDetailView">
+                            
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Grup Adı</h3>
+                                </div>
+                                <div class="setting-control full">
+                                    <input type="text" class="input" id="mailGroupName" placeholder="Örn: Aile, İş Arkadaşları">
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Mail Başlığı</h3>
+                                    <p class="setting-desc">Gönderilecek e-postanın konu satırı</p>
+                                </div>
+                                <div class="setting-control full">
+                                    <input type="text" class="input" id="mailGroupSubject" placeholder="Örn: LebensSpur Bildirimi">
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Mail İçeriği</h3>
+                                    <p class="setting-desc">Tetikleme sonrası gönderilecek mesaj</p>
+                                </div>
+                                <div class="setting-control full">
+                                    <textarea class="input" id="mailGroupContent" rows="4" placeholder="Merhaba,&#10;LebensSpur zamanlayıcısı tetiklendi..."></textarea>
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <div class="setting-header">
+                                    <h3>Dosya Ekleri</h3>
+                                    <p class="setting-desc">Resim, ses veya metin dosyası ekleyin</p>
+                                </div>
+                                <div class="setting-control full">
+                                    <div class="file-upload-area" id="mailGroupFileArea">
+                                        <input type="file" id="mailGroupFile" multiple accept="image/*,audio/*,.txt,.pdf,.doc,.docx" hidden>
+                                        <button class="btn btn-ghost btn-sm" id="mailGroupFileBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="17 8 12 3 7 8"></polyline>
+                                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                            </svg>
+                                            Dosya Seç
+                                        </button>
+                                        <span class="file-hint">Resim, ses, metin dosyaları</span>
+                                    </div>
+                                    <div class="file-list" id="mailGroupFileList"></div>
+                                </div>
+                            </div>
+
+                            <div class="setting-group" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle);">
+                                <div class="setting-header">
+                                    <h3>Alıcı Listesi</h3>
+                                    <p class="setting-desc">Bu gruba mail gönderilecek adresler</p>
+                                </div>
+                            </div>
+                            
+                            <div class="recipient-list" id="mailGroupRecipients">
+                                <!-- Dynamic recipient items -->
+                            </div>
+                            
+                            <div class="add-recipient-row">
+                                <input type="email" class="input" id="newRecipientEmail" placeholder="email@example.com">
+                                <button class="btn btn-ghost btn-sm" id="addRecipientBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    Ekle
+                                </button>
+                            </div>
+
+                            <div class="view-footer">
+                                <div class="view-footer-left">
+                                    <button class="btn btn-ghost" id="mailGroupCancelBtn">İptal</button>
+                                    <button class="btn btn-primary" id="mailGroupSaveBtn">Kaydet</button>
+                                </div>
+                                <div class="view-footer-right">
+                                    <button class="btn btn-danger btn-sm" id="mailGroupDeleteBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Sil
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: System -->
+                    <div class="settings-panel" id="panel-system">
+                        
+                        <!-- Sistem Ana İçerik (Alt sayfa açıldığında gizlenecek) -->
+                        <div id="systemMainContent">
+
+                        <!-- Arayüz Ayarları -->
+                        <div class="setting-section">
+                            <h4 class="section-title">Arayüz Ayarları</h4>
+                            
+                            <div class="setting-row-inline">
+                                <div class="setting-inline-item">
+                                    <label class="setting-inline-label">Tema</label>
+                                    <select class="select" id="themeSelect">
+                                        <option value="dark" selected>Koyu</option>
+                                        <option value="light">Açık</option>
+                                        <option value="auto">Otomatik</option>
+                                    </select>
+                                </div>
+                                <div class="setting-inline-item">
+                                    <label class="setting-inline-label">Dil</label>
+                                    <select class="select" id="languageSelect">
+                                        <option value="en">English</option>
+                                        <option value="tr" selected>Türkçe</option>
+                                        <option value="de">Deutsch</option>
+                                        <option value="es">Español</option>
+                                        <option value="fr">Français</option>
+                                        <option value="it">Italiano</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Güvenlik ve PWA Butonları (yan yana) -->
+                        <div class="setting-section">
+                            <div class="setting-row-inline">
+                                <div class="setting-inline-item">
+                                    <label class="setting-inline-label">Tarayıcı Güvenliği</label>
+                                    <button class="btn btn-ghost btn-block" id="securityToggleBtn" data-subpage="securitySubpage">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                        </svg>
+                                        Şifre ve Oturum
+                                    </button>
+                                </div>
+                                <div class="setting-inline-item">
+                                    <label class="setting-inline-label">Uygulama İndir</label>
+                                    <button class="btn btn-ghost btn-block" id="pwaInstallBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        Ana Ekrana Ekle
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- OTA Güncelleme -->
+                        <div class="setting-section">
+                            <h4 class="section-title">Güncelleme</h4>
+                            
+                            <div class="action-buttons">
+                                <button class="btn btn-ghost" id="otaFirmwareBtn" data-subpage="hwOtaSubpage">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                                        <rect x="9" y="9" width="6" height="6"></rect>
+                                        <line x1="9" y1="1" x2="9" y2="4"></line>
+                                        <line x1="15" y1="1" x2="15" y2="4"></line>
+                                        <line x1="9" y1="20" x2="9" y2="23"></line>
+                                        <line x1="15" y1="20" x2="15" y2="23"></line>
+                                        <line x1="20" y1="9" x2="23" y2="9"></line>
+                                        <line x1="20" y1="14" x2="23" y2="14"></line>
+                                        <line x1="1" y1="9" x2="4" y2="9"></line>
+                                        <line x1="1" y1="14" x2="4" y2="14"></line>
+                                    </svg>
+                                    HW
+                                </button>
+                                <button class="btn btn-ghost" id="otaWebBtn" data-subpage="guiOtaSubpage">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="3" y1="9" x2="21" y2="9"></line>
+                                        <line x1="9" y1="21" x2="9" y2="9"></line>
+                                    </svg>
+                                    GUI
+                                </button>
+                            </div>
+                            <p class="setting-desc" style="margin-top: var(--space-2); text-align: center;">HW: ESP32-C6 firmware | GUI: Web arayüzü</p>
+                        </div>
+
+                        <!-- Yedekleme (yan yana) -->
+                        <div class="setting-section">
+                            <h4 class="section-title">Yedekleme</h4>
+                            
+                            <div class="action-buttons">
+                                <button class="btn btn-ghost" id="importSettingsBtn" data-subpage="importSubpage">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    İçe Aktar
+                                </button>
+                                <button class="btn btn-ghost" id="exportSettingsBtn" data-subpage="exportSubpage">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    Dışa Aktar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Ayırıcı Çizgi -->
+                        <hr class="section-divider">
+
+                        <!-- Bakım (yan yana) -->
+                        <div class="setting-section">
+                            <div class="action-buttons">
+                                <button class="btn btn-ghost" id="rebootBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                    </svg>
+                                    Yeniden Başlat
+                                </button>
+                                <button class="btn btn-danger" id="factoryResetBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                    </svg>
+                                    Fabrika Ayarları
+                                </button>
+                            </div>
+                        </div>
+
+                        </div><!-- /systemMainContent -->
+
+                        <!-- Güvenlik Alt Sayfası (Subpage) -->
+                        <div class="subpage hidden" id="securitySubpage" data-title="Güvenlik" data-breadcrumb="Sistem">
+                            
+                            <div class="setting-section">
+                                <p class="section-desc">Web arayüzüne erişim güvenliğini yönetin. Şifrenizi değiştirin, otomatik çıkış süresini ayarlayın ve giriş korumasını aktifleştirin.</p>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Şifre Değiştir</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Mevcut Şifre</h3>
+                                        <p class="setting-desc">Önce mevcut şifrenizi girin</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="currentPassword" placeholder="Mevcut şifre">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Yeni Şifre</h3>
+                                        <p class="setting-desc">En az 8 karakter önerilir</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="newPassword" placeholder="Yeni şifre">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Yeni Şifre Tekrar</h3>
+                                        <p class="setting-desc">Yeni şifreyi doğrulayın</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="confirmPassword" placeholder="Yeni şifre tekrar">
+                                    </div>
+                                </div>
+
+                                <div class="action-buttons" style="margin-top: var(--space-4);">
+                                    <button class="btn btn-primary" id="changePasswordBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                        </svg>
+                                        Şifreyi Değiştir
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Oturum Ayarları</h4>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Otomatik Çıkış</h3>
+                                        <p class="setting-desc">İşlem yapılmadığında otomatik çıkış</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <div class="time-input">
+                                            <input type="number" id="autoLogoutTime" min="1" max="60" value="10">
+                                            <span>dakika</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Giriş Koruması</h3>
+                                        <p class="setting-desc">5 başarısız denemeden sonra hesabı kilitle</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="loginProtection" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Kilitleme Süresi</h3>
+                                        <p class="setting-desc">Başarısız deneme sonrası bekleme</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <div class="time-input">
+                                            <input type="number" id="lockoutTime" min="5" max="60" value="15">
+                                            <span>dakika</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Uzaktan Sıfırlama API'si</h4>
+                                <p class="section-desc">Harici uygulamalar veya cihazlar üzerinden zamanlayıcıyı sıfırlayabilirsiniz (butona basmak gibi).</p>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>API Durumu</h3>
+                                        <p class="setting-desc">Uzaktan sıfırlamayı etkinleştir</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="resetApiEnabled">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>API Anahtarı</h3>
+                                        <p class="setting-desc">Bu anahtarı gizli tutun</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <div class="input-with-action">
+                                            <input type="text" class="input" id="resetApiKey" value="ls_xxxxxxxxxxxx" readonly>
+                                            <button class="btn btn-ghost btn-sm" id="copyApiKeyBtn" title="Kopyala">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                </svg>
+                                            </button>
+                                            <button class="btn btn-ghost btn-sm" id="refreshApiKeyBtn" title="Yenile">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Endpoint</h3>
+                                        <p class="setting-desc">Sıfırlama isteği için URL</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <code class="code-block">POST /api/reset?key=YOUR_API_KEY</code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- HW OTA Alt Sayfası -->
+                        <div class="subpage hidden" id="hwOtaSubpage" data-title="Firmware Güncelleme" data-breadcrumb="Sistem">
+                            
+                            <div class="setting-section">
+                                <p class="section-desc">Cihazınızın firmware'ini güncelleyin. Yeni özellikler, hata düzeltmeleri ve güvenlik yamaları içeren güncellemeleri buradan yükleyebilirsiniz.</p>
+                            </div>
+
+                            <div class="setting-section">
+                                <div class="ota-status-card">
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Mevcut Sürüm</span>
+                                        <span class="ota-status-value" id="currentFirmwareVersion">v1.0.0</span>
+                                    </div>
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Son Kontrol</span>
+                                        <span class="ota-status-value" id="lastOtaCheck">Hiç kontrol edilmedi</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Güncelleme Kaynağı</h4>
+                                <p class="section-desc">Güncellemeleri nereden alacağınızı seçin</p>
+                                
+                                <div class="source-selector" id="hwOtaSourceSelector">
+                                    <label class="source-option">
+                                        <input type="radio" name="hwOtaSource" value="official" checked>
+                                        <div class="source-card">
+                                            <div class="source-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                                    <polyline points="9 12 11 14 15 10"></polyline>
+                                                </svg>
+                                            </div>
+                                            <div class="source-info">
+                                                <span class="source-title">Üretici Güncellemeleri</span>
+                                                <span class="source-desc">Resmi, test edilmiş ve güvenli güncellemeler</span>
+                                            </div>
+                                            <span class="source-badge">Önerilen</span>
+                                        </div>
+                                    </label>
+                                    <label class="source-option">
+                                        <input type="radio" name="hwOtaSource" value="custom">
+                                        <div class="source-card">
+                                            <div class="source-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="source-info">
+                                                <span class="source-title">Özel Kaynak</span>
+                                                <span class="source-desc">Kendi GitHub repo'nuzdan güncelleyin</span>
+                                            </div>
+                                            <span class="source-badge developer">Geliştirici</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Özel Kaynak Uyarısı -->
+                            <div class="warning-banner hidden" id="hwOtaWarning">
+                                <div class="warning-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                </div>
+                                <div class="warning-content">
+                                    <strong>Dikkat: Gelişmiş Kullanıcı Özelliği</strong>
+                                    <p>Bu seçenek cihazınızı <strong>resmi güncelleme akışından çıkaracaktır</strong>. Özel kaynak kullanırken sorun yaşarsanız, geri dönmek için <strong>USB/seri bağlantı ile firmware'i sıfırdan yüklemeniz</strong> gerekecektir. Sadece ne yaptığınızı biliyorsanız devam edin.</p>
+                                </div>
+                            </div>
+
+                            <!-- Özel Kaynak Ayarları -->
+                            <div class="setting-section hidden" id="hwOtaCustomSection">
+                                <h4 class="section-title">Özel Kaynak Yapılandırması</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>OTA Sunucu URL</h3>
+                                        <p class="setting-desc">Firmware dosyasının alınacağı adres</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="url" class="input" id="otaServerUrl" placeholder="https://github.com/user/repo/releases">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Ortak Ayarlar -->
+                            <div class="setting-section">
+                                <h4 class="section-title">Güncelleme Ayarları</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Otomatik Kontrol</h3>
+                                        <p class="setting-desc">Güncellemeleri otomatik kontrol et</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="autoCheckOta">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Kontrol Sıklığı</h3>
+                                        <p class="setting-desc">Ne sıklıkla güncelleme kontrol edilsin</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select class="select" id="otaCheckInterval">
+                                            <option value="weekly" selected>Haftalık</option>
+                                            <option value="monthly">Aylık</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <div class="action-buttons">
+                                    <button class="btn btn-primary btn-block" id="checkFirmwareUpdateBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <polyline points="23 4 23 10 17 10"></polyline>
+                                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                        </svg>
+                                        Güncelleme Kontrol Et
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- GUI OTA Alt Sayfası -->
+                        <div class="subpage hidden" id="guiOtaSubpage" data-title="Web Arayüzü Güncelleme" data-breadcrumb="Sistem">
+                            
+                            <div class="setting-section">
+                                <p class="section-desc">Web arayüzünü güncelleyin. Yeni tasarım iyileştirmeleri, dil dosyaları ve kullanıcı deneyimi güncellemelerini buradan yükleyebilirsiniz.</p>
+                            </div>
+
+                            <div class="setting-section">
+                                <div class="ota-status-card">
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Web UI Sürümü</span>
+                                        <span class="ota-status-value" id="currentGuiVersion">v1.0.0</span>
+                                    </div>
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Harici Flash</span>
+                                        <span class="ota-status-value" id="extFlashStatus">32 MB - Hazır</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Güncelleme Kaynağı</h4>
+                                <p class="section-desc">Güncellemeleri nereden alacağınızı seçin</p>
+                                
+                                <div class="source-selector" id="guiOtaSourceSelector">
+                                    <label class="source-option">
+                                        <input type="radio" name="guiOtaSource" value="official" checked>
+                                        <div class="source-card">
+                                            <div class="source-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                                    <polyline points="9 12 11 14 15 10"></polyline>
+                                                </svg>
+                                            </div>
+                                            <div class="source-info">
+                                                <span class="source-title">Üretici Güncellemeleri</span>
+                                                <span class="source-desc">Resmi, test edilmiş ve güvenli güncellemeler</span>
+                                            </div>
+                                            <span class="source-badge">Önerilen</span>
+                                        </div>
+                                    </label>
+                                    <label class="source-option">
+                                        <input type="radio" name="guiOtaSource" value="custom">
+                                        <div class="source-card">
+                                            <div class="source-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="source-info">
+                                                <span class="source-title">Özel Kaynak</span>
+                                                <span class="source-desc">Kendi GitHub repo'nuzdan güncelleyin</span>
+                                            </div>
+                                            <span class="source-badge developer">Geliştirici</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Özel Kaynak Uyarısı -->
+                            <div class="warning-banner hidden" id="guiOtaWarning">
+                                <div class="warning-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                </div>
+                                <div class="warning-content">
+                                    <strong>Dikkat: Gelişmiş Kullanıcı Özelliği</strong>
+                                    <p>Bu seçenek cihazınızı <strong>resmi güncelleme akışından çıkaracaktır</strong>. Özel kaynak kullanırken sorun yaşarsanız, geri dönmek için <strong>USB/seri bağlantı ile web dosyalarını sıfırdan yüklemeniz</strong> gerekecektir. Sadece ne yaptığınızı biliyorsanız devam edin.</p>
+                                </div>
+                            </div>
+
+                            <!-- Özel Kaynak Ayarları -->
+                            <div class="setting-section hidden" id="guiOtaCustomSection">
+                                <h4 class="section-title">Özel Kaynak Yapılandırması</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>GitHub Repository</h3>
+                                        <p class="setting-desc">Web arayüzü dosyalarının alınacağı repo</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="url" class="input" id="guiRepoUrl" placeholder="https://github.com/user/repo">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Branch</h3>
+                                        <p class="setting-desc">Hangi branch'ten çekilsin</p>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select class="select" id="guiBranch">
+                                            <option value="main" selected>main</option>
+                                            <option value="develop">develop</option>
+                                            <option value="release">release</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Güncellenecek Dosyalar</h4>
+                                
+                                <div class="checkbox-list">
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>index.html</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>style.css</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>app.js</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>Dil dosyaları (i18n/)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <div class="action-buttons">
+                                    <button class="btn btn-primary btn-block" id="updateGuiBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        Web Arayüzünü Güncelle
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- İçe Aktar Alt Sayfası -->
+                        <div class="subpage hidden" id="importSubpage" data-title="Ayarları İçe Aktar" data-breadcrumb="Sistem">
+                            
+                            <div class="setting-section">
+                                <p class="section-desc">Daha önce dışa aktarılmış şifreli yedek dosyasından ayarları geri yükleyin.</p>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Yedek Dosyası</h4>
+                                
+                                <div class="file-upload-area" id="importFileArea">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    <p>Dosya seçmek için tıklayın veya sürükleyip bırakın</p>
+                                    <span class="file-types">.lsbackup dosyası</span>
+                                    <input type="file" id="importFileInput" accept=".lsbackup" hidden>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Şifre Çözme</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Yedek Şifresi</h3>
+                                        <p class="setting-desc">Dışa aktarma sırasında belirlenen şifre</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="importPassword" placeholder="Şifre">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">İçe Aktarma Seçenekleri</h4>
+                                
+                                <div class="checkbox-list">
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>WiFi ayarları</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>SMTP ayarları</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>Mail grupları ve içerikleri</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>Zamanlayıcı ayarları</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox">
+                                        <span>Güvenlik ayarları (şifre dahil)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <div class="action-buttons">
+                                    <button class="btn btn-primary btn-block" id="startImportBtn" disabled>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg>
+                                        İçe Aktarmayı Başlat
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dışa Aktar Alt Sayfası -->
+                        <div class="subpage hidden" id="exportSubpage" data-title="Ayarları Dışa Aktar" data-breadcrumb="Sistem">
+                            
+                            <div class="setting-section">
+                                <p class="section-desc">Tüm ayarlarınızı şifreli bir dosya olarak yedekleyin. Bu dosya ile başka bir cihaza veya fabrika ayarlarına dönüş sonrası geri yükleme yapabilirsiniz.</p>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Dışa Aktarma Seçenekleri</h4>
+                                
+                                <div class="checkbox-list">
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>WiFi ayarları</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>SMTP ayarları</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>Mail grupları ve içerikleri</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" checked>
+                                        <span>Zamanlayıcı ayarları</span>
+                                    </label>
+                                    <label class="checkbox-item">
+                                        <input type="checkbox">
+                                        <span>Güvenlik ayarları (şifre dahil)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Şifreleme</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Yedek Şifresi</h3>
+                                        <p class="setting-desc">Yedek dosyasını korumak için güçlü bir şifre belirleyin</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="exportPassword" placeholder="Şifre">
+                                    </div>
+                                </div>
+
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Şifre Tekrar</h3>
+                                        <p class="setting-desc">Şifreyi doğrulamak için tekrar girin</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="exportPasswordConfirm" placeholder="Şifre tekrar">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Kimlik Doğrulama</h4>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Tarayıcı Şifresi</h3>
+                                        <p class="setting-desc">Dışa aktarmak için mevcut şifrenizi girin</p>
+                                    </div>
+                                    <div class="setting-control full">
+                                        <input type="password" class="input" id="exportAuthPassword" placeholder="Tarayıcı şifresi">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <div class="action-buttons">
+                                    <button class="btn btn-primary btn-block" id="startExportBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        Dışa Aktarmayı Başlat
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Info -->
+                    <div class="settings-panel" id="panel-info">
+                        
+                        <!-- Ana İçerik - Info Kutuları -->
+                        <div class="info-main-content" id="infoMainContent">
+                            
+                            <!-- İki Kutu Yan Yana -->
+                            <div class="info-cards-row">
+                                <button class="info-card" data-subpage="deviceInfoSubpage">
+                                    <div class="info-card-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                                            <rect x="9" y="9" width="6" height="6"></rect>
+                                            <line x1="9" y1="1" x2="9" y2="4"></line>
+                                            <line x1="15" y1="1" x2="15" y2="4"></line>
+                                            <line x1="9" y1="20" x2="9" y2="23"></line>
+                                            <line x1="15" y1="20" x2="15" y2="23"></line>
+                                            <line x1="20" y1="9" x2="23" y2="9"></line>
+                                            <line x1="20" y1="14" x2="23" y2="14"></line>
+                                            <line x1="1" y1="9" x2="4" y2="9"></line>
+                                            <line x1="1" y1="14" x2="4" y2="14"></line>
+                                        </svg>
+                                    </div>
+                                    <span class="info-card-title">Cihaz Bilgisi</span>
+                                    <span class="info-card-desc">Donanım ve bağlantı durumu</span>
+                                </button>
+                                
+                                <button class="info-card" data-subpage="logsSubpage">
+                                    <div class="info-card-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            <polyline points="10 9 9 9 8 9"></polyline>
+                                        </svg>
+                                    </div>
+                                    <span class="info-card-title">Loglar</span>
+                                    <span class="info-card-desc">Sistem ve kullanıcı kayıtları</span>
+                                </button>
+                            </div>
+
+                            <!-- Proje Bilgisi -->
+                            <div class="setting-section">
+                                <h4 class="section-title">Proje Bilgisi</h4>
+                                <p class="section-desc">LebensSpur hakkında bilgiler ve geliştirme notları</p>
+                            </div>
+
+                            <div class="dev-note">
+                                <h5 class="dev-note-title">
+                                    <span class="dev-note-icon">📱</span>
+                                    Çoklu Cihaz Yönetimi
+                                </h5>
+                                <p class="dev-note-content">
+                                    Birden fazla LebensSpur cihazını tek bir arayüzden yönetme.<br><br>
+                                    <strong>Planlanan özellikler:</strong>
+                                    <ul>
+                                        <li>Otomatik cihaz keşfi (mDNS/Bonjour)</li>
+                                        <li>Merkezi kontrol paneli</li>
+                                        <li>Cihazlar arası ayar senkronizasyonu</li>
+                                        <li>Grup aksiyonları (tüm cihazları sıfırla)</li>
+                                        <li>Cihaz durumu özeti (dashboard)</li>
+                                    </ul>
+                                </p>
+                            </div>
+
+                            <div class="dev-note">
+                                <h5 class="dev-note-title">
+                                    <span class="dev-note-icon">🌍</span>
+                                    Çoklu Dil Desteği
+                                </h5>
+                                <p class="dev-note-content">
+                                    JSON tabanlı i18n sistemi kullanılmaktadır.<br><br>
+                                    <strong>Yeni dil eklemek için:</strong>
+                                    <ol>
+                                        <li><code>i18n/</code> klasöründe yeni JSON dosyası oluşturun (örn: <code>de.json</code>)</li>
+                                        <li><code>en.json</code> yapısını kopyalayın</li>
+                                        <li>Tüm metinleri tercüme edin</li>
+                                        <li>GitHub'a pull request gönderin</li>
+                                    </ol>
+                                    <br>
+                                    <strong>Mevcut diller:</strong> İngilizce (en), Türkçe (tr)<br>
+                                    <strong>Planlanan:</strong> Almanca (de), İspanyolca (es), Fransızca (fr), İtalyanca (it)
+                                </p>
+                            </div>
+
+                            <div class="dev-note">
+                                <h5 class="dev-note-title">
+                                    <span class="dev-note-icon">🔑</span>
+                                    Üçüncü Parti API Erişimi
+                                </h5>
+                                <p class="dev-note-content">
+                                    Harici uygulamalar için API anahtarı sistemi.<br><br>
+                                    <strong>Güvenlik değerlendirmeleri:</strong>
+                                    <ul>
+                                        <li><strong>Kapsam:</strong> Salt okunur, zamanlayıcı sıfırlama, tam erişim</li>
+                                        <li><strong>Rate Limiting:</strong> Dakikada maksimum istek sayısı</li>
+                                        <li><strong>İptal edilebilir:</strong> Tehlike durumunda anında devre dışı</li>
+                                    </ul>
+                                    <br>
+                                    <strong>Erişim yöntemleri:</strong>
+                                    <ul>
+                                        <li><strong>REST API:</strong> Basit, HTTP tabanlı (önerilen)</li>
+                                        <li><strong>WebSocket:</strong> Gerçek zamanlı güncellemeler için</li>
+                                    </ul>
+                                    <br>
+                                    <strong>⚠️ Güvenlik Uyarısı:</strong><br>
+                                    Cihazı doğrudan internete açmak <strong>ÖNERİLMEZ</strong>.<br>
+                                    Uzaktan erişim için önerilen yöntemler:
+                                    <ul>
+                                        <li><strong>Cloudflare Tunnel:</strong> Zero Trust güvenlik</li>
+                                        <li><strong>VPN:</strong> WireGuard veya OpenVPN</li>
+                                        <li><strong>MQTT Broker:</strong> Home Assistant entegrasyonu için</li>
+                                    </ul>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Cihaz Bilgisi Subpage -->
+                        <div class="subpage hidden" id="deviceInfoSubpage" data-title="Cihaz Bilgisi" data-breadcrumb="Info">
+                            <div class="setting-section">
+                                <h4 class="section-title">Donanım Bilgileri</h4>
+                                
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">Cihaz ID</span>
+                                        <span class="system-value" id="sysDeviceId">LS-12SE4F6K32</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">MAC Adresi</span>
+                                        <span class="system-value" id="sysMac">A4:CF:12:xx:xx:xx</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Çip Modeli</span>
+                                        <span class="system-value" id="sysChip">ESP32-C6</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Çekirdek Sayısı</span>
+                                        <span class="system-value" id="sysCores">1</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">CPU Frekansı</span>
+                                        <span class="system-value" id="sysCpuFreq">160 MHz</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Flash Boyutu</span>
+                                        <span class="system-value" id="sysFlashSize">4 MB</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Bellek Yönetimi</h4>
+                                
+                                <!-- RAM -->
+                                <h5 class="subsection-title">RAM (Heap)</h5>
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">Toplam</span>
+                                        <span class="system-value" id="sysRamTotal">320 KB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Kullanılan</span>
+                                        <span class="system-value" id="sysRamUsed">178 KB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Boş</span>
+                                        <span class="system-value" id="sysRamFree">142 KB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Min. Boş (Watermark)</span>
+                                        <span class="system-value" id="sysRamMinFree">98 KB</span>
+                                    </div>
+                                </div>
+                                <div class="storage-bar">
+                                    <div class="storage-bar-fill" style="width: 55.6%;" id="ramBarFill"></div>
+                                </div>
+                                <p class="storage-bar-label"><span id="ramUsagePercent">55.6%</span> kullanımda</p>
+
+                                <!-- Dahili Flash -->
+                                <h5 class="subsection-title">Dahili Flash</h5>
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">Toplam</span>
+                                        <span class="system-value" id="sysIntFlashTotal">4 MB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Firmware</span>
+                                        <span class="system-value" id="sysIntFlashFirmware">1.8 MB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">NVS (Ayarlar)</span>
+                                        <span class="system-value" id="sysIntFlashNvs">24 KB / 64 KB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">OTA Partition</span>
+                                        <span class="system-value" id="sysIntFlashOta">1.5 MB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Boş</span>
+                                        <span class="system-value" id="sysIntFlashFree">0.6 MB</span>
+                                    </div>
+                                </div>
+                                <div class="storage-bar">
+                                    <div class="storage-bar-fill" style="width: 85%;" id="intFlashBarFill"></div>
+                                </div>
+                                <p class="storage-bar-label"><span id="intFlashUsagePercent">85%</span> kullanımda</p>
+
+                                <!-- Harici Flash -->
+                                <h5 class="subsection-title">Harici Flash (W25Q256)</h5>
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">Toplam</span>
+                                        <span class="system-value" id="sysExtFlashTotal">32 MB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Web Arayüzü</span>
+                                        <span class="system-value" id="sysExtFlashWeb">512 KB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Loglar</span>
+                                        <span class="system-value" id="sysExtFlashLogs">2.1 MB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Yedekler</span>
+                                        <span class="system-value" id="sysExtFlashBackup">128 KB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Kullanılan</span>
+                                        <span class="system-value" id="sysExtFlashUsed">2.7 MB</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Boş</span>
+                                        <span class="system-value" id="sysExtFlashFree">29.3 MB</span>
+                                    </div>
+                                </div>
+                                <div class="storage-bar">
+                                    <div class="storage-bar-fill storage-bar-success" style="width: 8.4%;" id="extFlashBarFill"></div>
+                                </div>
+                                <p class="storage-bar-label"><span id="extFlashUsagePercent">8.4%</span> kullanımda</p>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Bağlantı Durumu</h4>
+                                
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">WiFi Durumu</span>
+                                        <span class="system-value status-connected" id="sysWifiStatus">Bağlı</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">SSID</span>
+                                        <span class="system-value" id="sysWifiSsid">MyNetwork</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">WiFi Sinyali</span>
+                                        <span class="system-value" id="sysRssi">-45 dBm (Mükemmel)</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">IP Adresi</span>
+                                        <span class="system-value" id="sysIp">192.168.1.105</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">AP Modu</span>
+                                        <span class="system-value status-active" id="sysApStatus">Aktif</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">AP IP</span>
+                                        <span class="system-value" id="sysApIp">192.168.4.1</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-section">
+                                <h4 class="section-title">Çalışma Bilgileri</h4>
+                                
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">Çalışma Süresi</span>
+                                        <span class="system-value" id="sysUptime">3 gün 14 saat 22 dk</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Yeniden Başlatma</span>
+                                        <span class="system-value" id="sysResetReason">Güç açıldı</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">NTP Durumu</span>
+                                        <span class="system-value status-connected" id="sysNtpStatus">Senkronize</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Sistem Saati</span>
+                                        <span class="system-value" id="sysTime">11.02.2026 15:42:31</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">Firmware</span>
+                                        <span class="system-value" id="sysFirmware">v1.0.0</span>
+                                    </div>
+                                    <div class="system-row">
+                                        <span class="system-label">GUI Versiyon</span>
+                                        <span class="system-value" id="sysGuiVersion">v1.0.0</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Loglar Subpage -->
+                        <div class="subpage hidden" id="logsSubpage" data-title="Loglar" data-breadcrumb="Info">
+                            
+                            <!-- Denetim Logu -->
+                            <div class="setting-section">
+                                <h4 class="section-title">Denetim Logu</h4>
+                                <p class="section-desc">Kullanıcı işlemleri ve kimlik doğrulama kayıtları</p>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Filtrele</h3>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select class="select" id="auditLogFilter">
+                                            <option value="all">Tümü</option>
+                                            <option value="auth">Kimlik Doğrulama</option>
+                                            <option value="settings">Ayar Değişiklikleri</option>
+                                            <option value="timer">Zamanlayıcı</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="log-list" id="auditLogList">
+                                    <div class="log-item">
+                                        <span class="log-time">15:42:31</span>
+                                        <span class="log-type auth">AUTH</span>
+                                        <span class="log-message">Kullanıcı giriş yaptı</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">15:40:12</span>
+                                        <span class="log-type timer">TIMER</span>
+                                        <span class="log-message">Manuel sıfırlama</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">15:38:45</span>
+                                        <span class="log-type settings">SET</span>
+                                        <span class="log-message">Tema değiştirildi: Koyu</span>
+                                    </div>
+                                    <div class="log-item warning">
+                                        <span class="log-time">10:30:22</span>
+                                        <span class="log-type auth">AUTH</span>
+                                        <span class="log-message">Başarısız giriş (3/5)</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">10:28:15</span>
+                                        <span class="log-type auth">AUTH</span>
+                                        <span class="log-message">Oturum kapatıldı</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="action-buttons">
+                                    <button class="btn btn-ghost btn-sm" id="exportAuditLogs">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        Dışa Aktar
+                                    </button>
+                                    <button class="btn btn-ghost btn-sm" id="clearAuditLogs">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Temizle
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Cihaz Logu -->
+                            <div class="setting-section">
+                                <h4 class="section-title">Cihaz Logu</h4>
+                                <p class="section-desc">Sistem olayları ve hata kayıtları</p>
+                                
+                                <div class="setting-group">
+                                    <div class="setting-header">
+                                        <h3>Filtrele</h3>
+                                    </div>
+                                    <div class="setting-control">
+                                        <select class="select" id="deviceLogFilter">
+                                            <option value="all">Tümü</option>
+                                            <option value="wifi">WiFi</option>
+                                            <option value="system">Sistem</option>
+                                            <option value="error">Hatalar</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="log-list" id="deviceLogList">
+                                    <div class="log-item">
+                                        <span class="log-time">15:30:15</span>
+                                        <span class="log-type wifi">WIFI</span>
+                                        <span class="log-message">Sinyal: -45 dBm</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">15:00:00</span>
+                                        <span class="log-type system">SYS</span>
+                                        <span class="log-message">NTP senkronize edildi</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">14:00:00</span>
+                                        <span class="log-type system">SYS</span>
+                                        <span class="log-message">Heap: 142KB boş</span>
+                                    </div>
+                                    <div class="log-item error">
+                                        <span class="log-time">08:12:44</span>
+                                        <span class="log-type error">ERR</span>
+                                        <span class="log-message">SMTP timeout</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">08:00:00</span>
+                                        <span class="log-type wifi">WIFI</span>
+                                        <span class="log-message">MyNetwork ağına bağlandı</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="log-time">07:59:55</span>
+                                        <span class="log-type system">SYS</span>
+                                        <span class="log-message">Sistem başlatıldı</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="action-buttons">
+                                    <button class="btn btn-ghost btn-sm" id="exportDeviceLogs">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        Dışa Aktar
+                                    </button>
+                                    <button class="btn btn-ghost btn-sm" id="clearDeviceLogs">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Temizle
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" id="cancelSettings">İptal</button>
+                    <button class="btn btn-primary" id="saveSettings">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Export Password Modal -->
+    <div class="modal-overlay hidden" id="exportModal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Ayarları Dışa Aktar</h2>
+                <button class="icon-btn modal-close" id="closeExportModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="setting-desc" style="margin-bottom: 16px;">
+                    Yedek dosyası şifrelenecektir. Güçlü bir şifre seçin.
+                </p>
+                <div class="input-group" style="margin-bottom: 12px;">
+                    <input type="password" id="exportPassword" required placeholder=" ">
+                    <label for="exportPassword">Şifre</label>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="exportPasswordConfirm" required placeholder=" ">
+                    <label for="exportPasswordConfirm">Şifre Tekrar</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="cancelExport">İptal</button>
+                <button class="btn btn-primary" id="confirmExport">Dışa Aktar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
