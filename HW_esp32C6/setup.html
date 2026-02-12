@@ -533,6 +533,14 @@
             prevBtn.addEventListener('click', prevStep);
             nextBtn.addEventListener('click', nextStep);
             
+            // Enter key: WiFi password → Continue, Device password confirm → Continue
+            document.getElementById('wifiPassword').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); nextBtn.click(); }
+            });
+            document.getElementById('devicePasswordConfirm').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); nextBtn.click(); }
+            });
+            
             // İlk WiFi taramasını yap
             await scanWifi();
             

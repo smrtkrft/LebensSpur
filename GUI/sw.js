@@ -14,11 +14,12 @@ const STATIC_ASSETS = [
     '/',
     '/index.html',
     '/style.css',
-    '/app.js',
-    '/i18n.js',
+    '/js/app.js',
+    '/js/i18n.js',
     '/manifest.json',
-    '/logo.png',
-    '/darklogo.png'
+    '/sw.js',
+    '/pic/logo.png',
+    '/pic/darklogo.png'
 ];
 
 // API endpoint'leri (cache'lenmeyecek, sadece network)

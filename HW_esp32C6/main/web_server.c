@@ -1868,13 +1868,13 @@ typedef struct {
 
 static const gui_file_t s_gui_files[] = {
     { "index.html", NULL },
-    { "app.js", NULL },
     { "style.css", NULL },
-    { "i18n.js", NULL },
     { "manifest.json", NULL },
     { "sw.js", NULL },
-    { "logo.png", NULL },
-    { "darklogo.png", NULL },
+    { "app.js", "js" },
+    { "i18n.js", "js" },
+    { "logo.png", "pic" },
+    { "darklogo.png", "pic" },
     { "en.json", "i18n" },
     { "tr.json", "i18n" },
 };
@@ -1893,10 +1893,7 @@ static esp_err_t download_one_file(const char *filename, const char *subdir)
     char path[80];
     if (subdir) {
         snprintf(url, sizeof(url), GUI_REPO_BASE "%s/%s", subdir, filename);
-        // Create subdir on SPIFFS (mkdir may fail silently if exists)
-        char dirpath[64];
-        snprintf(dirpath, sizeof(dirpath), GUI_DEST_DIR "/%s", subdir);
-        mkdir(dirpath, 0775);
+        // SPIFFS is flat - no mkdir needed, '/' is part of filename
         snprintf(path, sizeof(path), GUI_DEST_DIR "/%s/%s", subdir, filename);
     } else {
         snprintf(url, sizeof(url), GUI_REPO_BASE "%s", filename);
