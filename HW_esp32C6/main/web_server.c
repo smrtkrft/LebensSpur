@@ -970,6 +970,235 @@ static esp_err_t api_device_info(httpd_req_t *req)
 }
 
 /* ============================================
+ * PASSWORD CHANGE
+ * ============================================ */
+
+// POST /api/config/password (requires auth)
+static esp_err_t api_change_password(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[256];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    cJSON *current = cJSON_GetObjectItem(json, "currentPassword");
+    cJSON *newpw = cJSON_GetObjectItem(json, "newPassword");
+    
+    if (!current || !cJSON_IsString(current) || !newpw || !cJSON_IsString(newpw)) {
+        cJSON_Delete(json);
+        return web_send_error(req, 400, "Missing fields");
+    }
+    
+    if (!config_verify_password(current->valuestring)) {
+        cJSON_Delete(json);
+        return web_send_error(req, 403, "Current password incorrect");
+    }
+    
+    auth_config_t auth;
+    config_load_auth(&auth);
+    strncpy(auth.password, newpw->valuestring, MAX_PASSWORD_LEN);
+    auth.password[MAX_PASSWORD_LEN] = '\0';
+    config_save_auth(&auth);
+    
+    cJSON_Delete(json);
+    LOG_CONFIG(LOG_LEVEL_INFO, "Password changed");
+    return web_send_success(req, "Password changed");
+}
+
+/* ============================================
+ * MAIL GROUPS CONFIG
+ * ============================================ */
+
+// GET /api/config/mail-groups (requires auth)
+static esp_err_t api_get_mail_groups(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    mail_config_t mail_cfg;
+    config_load_mail(&mail_cfg);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON *groups = cJSON_CreateArray();
+    
+    for (int i = 0; i < mail_cfg.group_count && i < MAX_MAIL_GROUPS; i++) {
+        cJSON *g = cJSON_CreateObject();
+        cJSON_AddStringToObject(g, "name", mail_cfg.groups[i].name);
+        cJSON_AddStringToObject(g, "subject", mail_cfg.groups[i].subject);
+        cJSON_AddStringToObject(g, "content", mail_cfg.groups[i].body);
+        cJSON *recips = cJSON_CreateArray();
+        for (int j = 0; j < mail_cfg.groups[i].recipient_count && j < MAX_RECIPIENTS; j++) {
+            cJSON_AddItemToArray(recips, cJSON_CreateString(mail_cfg.groups[i].recipients[j]));
+        }
+        cJSON_AddItemToObject(g, "recipients", recips);
+        cJSON_AddItemToArray(groups, g);
+    }
+    
+    cJSON_AddItemToObject(json, "groups", groups);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/config/mail-groups (requires auth)
+static esp_err_t api_set_mail_groups(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char *body = malloc(4096);
+    if (!body) return web_send_error(req, 500, "Memory error");
+    
+    int len = web_get_body(req, body, 4096);
+    if (len <= 0) { free(body); return web_send_error(req, 400, "No body"); }
+    
+    cJSON *json = cJSON_Parse(body);
+    free(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    mail_config_t mail_cfg;
+    config_load_mail(&mail_cfg);
+    
+    cJSON *groups = cJSON_GetObjectItem(json, "groups");
+    if (groups && cJSON_IsArray(groups)) {
+        int count = cJSON_GetArraySize(groups);
+        if (count > MAX_MAIL_GROUPS) count = MAX_MAIL_GROUPS;
+        mail_cfg.group_count = count;
+        
+        for (int i = 0; i < count; i++) {
+            cJSON *g = cJSON_GetArrayItem(groups, i);
+            mail_group_t *mg = &mail_cfg.groups[i];
+            
+            cJSON *name = cJSON_GetObjectItem(g, "name");
+            if (name && cJSON_IsString(name))
+                strncpy(mg->name, name->valuestring, MAX_GROUP_NAME_LEN);
+            
+            cJSON *subj = cJSON_GetObjectItem(g, "subject");
+            if (subj && cJSON_IsString(subj))
+                strncpy(mg->subject, subj->valuestring, MAX_SUBJECT_LEN);
+            
+            cJSON *content = cJSON_GetObjectItem(g, "content");
+            if (content && cJSON_IsString(content))
+                strncpy(mg->body, content->valuestring, MAX_BODY_LEN);
+            
+            mg->enabled = true;
+            
+            cJSON *recips = cJSON_GetObjectItem(g, "recipients");
+            if (recips && cJSON_IsArray(recips)) {
+                int rc = cJSON_GetArraySize(recips);
+                if (rc > MAX_RECIPIENTS) rc = MAX_RECIPIENTS;
+                mg->recipient_count = rc;
+                for (int j = 0; j < rc; j++) {
+                    cJSON *r = cJSON_GetArrayItem(recips, j);
+                    if (r && cJSON_IsString(r))
+                        strncpy(mg->recipients[j], r->valuestring, MAX_EMAIL_LEN);
+                }
+            }
+        }
+    }
+    
+    cJSON_Delete(json);
+    config_save_mail(&mail_cfg);
+    LOG_CONFIG(LOG_LEVEL_INFO, "Mail groups updated");
+    return web_send_success(req, "Mail groups saved");
+}
+
+/* ============================================
+ * TELEGRAM CONFIG
+ * ============================================ */
+
+// POST /api/config/telegram (requires auth) - stub for future
+static esp_err_t api_set_telegram_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[512];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    // TODO: Store telegram config when telegram support is added
+    LOG_CONFIG(LOG_LEVEL_INFO, "Telegram config saved (placeholder)");
+    return web_send_success(req, "Telegram config saved");
+}
+
+/* ============================================
+ * WEBHOOK CONFIG
+ * ============================================ */
+
+// POST /api/config/webhook (requires auth) - stub for future
+static esp_err_t api_set_webhook_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[512];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    // TODO: Store webhook config when webhook support is added
+    LOG_CONFIG(LOG_LEVEL_INFO, "Webhook config saved (placeholder)");
+    return web_send_success(req, "Webhook config saved");
+}
+
+/* ============================================
+ * EARLY MAIL CONFIG
+ * ============================================ */
+
+// POST /api/config/early-mail (requires auth) - stub for future
+static esp_err_t api_set_early_mail_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[1024];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    // TODO: Store early warning mail config
+    LOG_CONFIG(LOG_LEVEL_INFO, "Early mail config saved (placeholder)");
+    return web_send_success(req, "Early mail config saved");
+}
+
+/* ============================================
+ * OTA CHECK
+ * ============================================ */
+
+// GET /api/ota/check (requires auth)
+static esp_err_t api_ota_check(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    // Currently no OTA server configured - report up to date
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "updateAvailable", false);
+    cJSON_AddStringToObject(json, "currentVersion", FIRMWARE_VERSION);
+    cJSON_AddStringToObject(json, "message", "System is up to date");
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+/* ============================================
  * GUI DOWNLOAD FROM GITHUB
  * ============================================ */
 
@@ -1387,6 +1616,61 @@ void web_register_api_routes(httpd_handle_t server)
         .handler = api_gui_download_status
     };
     httpd_register_uri_handler(server, &gui_download_status);
+    
+    // Password change endpoint
+    httpd_uri_t password_change = {
+        .uri = "/api/config/password",
+        .method = HTTP_POST,
+        .handler = api_change_password
+    };
+    httpd_register_uri_handler(server, &password_change);
+    
+    // Mail groups endpoints
+    httpd_uri_t mail_groups_get = {
+        .uri = "/api/config/mail-groups",
+        .method = HTTP_GET,
+        .handler = api_get_mail_groups
+    };
+    httpd_register_uri_handler(server, &mail_groups_get);
+    
+    httpd_uri_t mail_groups_set = {
+        .uri = "/api/config/mail-groups",
+        .method = HTTP_POST,
+        .handler = api_set_mail_groups
+    };
+    httpd_register_uri_handler(server, &mail_groups_set);
+    
+    // Telegram config endpoint
+    httpd_uri_t telegram_config = {
+        .uri = "/api/config/telegram",
+        .method = HTTP_POST,
+        .handler = api_set_telegram_config
+    };
+    httpd_register_uri_handler(server, &telegram_config);
+    
+    // Webhook config endpoint
+    httpd_uri_t webhook_config = {
+        .uri = "/api/config/webhook",
+        .method = HTTP_POST,
+        .handler = api_set_webhook_config
+    };
+    httpd_register_uri_handler(server, &webhook_config);
+    
+    // Early mail config endpoint
+    httpd_uri_t early_mail_config = {
+        .uri = "/api/config/early-mail",
+        .method = HTTP_POST,
+        .handler = api_set_early_mail_config
+    };
+    httpd_register_uri_handler(server, &early_mail_config);
+    
+    // OTA check endpoint
+    httpd_uri_t ota_check = {
+        .uri = "/api/ota/check",
+        .method = HTTP_GET,
+        .handler = api_ota_check
+    };
+    httpd_register_uri_handler(server, &ota_check);
     
     ESP_LOGI(TAG, "API routes registered");
 }

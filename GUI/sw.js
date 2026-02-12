@@ -16,9 +16,9 @@ const STATIC_ASSETS = [
     '/style.css',
     '/app.js',
     '/i18n.js',
-    '/i18n/en.json',
-    '/i18n/tr.json',
-    '/manifest.json'
+    '/manifest.json',
+    '/logo.png',
+    '/darklogo.png'
 ];
 
 // API endpoint'leri (cache'lenmeyecek, sadece network)
@@ -146,8 +146,8 @@ async function syncTimerReset() {
             // Kullanıcıya bildir
             self.registration.showNotification('LebensSpur', {
                 body: 'Timer reset successful',
-                icon: '/icons/icon-192.png',
-                badge: '/icons/badge-72.png'
+                icon: '/logo.png',
+                badge: '/logo.png'
             });
         }
     } catch (error) {
@@ -174,8 +174,8 @@ self.addEventListener('push', (event) => {
     
     const options = {
         body: data.body,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/badge-72.png',
+        icon: '/logo.png',
+        badge: '/logo.png',
         vibrate: [200, 100, 200],
         tag: data.tag || 'default',
         requireInteraction: data.critical || false,
@@ -241,7 +241,8 @@ async function updateCache(request) {
 
 function offlineFallback(request) {
     // HTML istekleri için offline sayfası
-    if (request.headers.get('Accept').includes('text/html')) {
+    const accept = request.headers.get('Accept') || '';
+    if (accept.includes('text/html')) {
         return caches.match('/index.html');
     }
     

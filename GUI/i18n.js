@@ -16,14 +16,11 @@ const I18n = (function() {
     let fallbackLang = 'en';
     let loadedLanguages = new Set();
     
-    // Desteklenen diller (daha fazlası JSON ile eklenebilir)
+    // Desteklenen diller
     const availableLanguages = [
         { code: 'en', name: 'English', native: 'English' },
         { code: 'tr', name: 'Turkish', native: 'Türkçe' },
-        { code: 'de', name: 'German', native: 'Deutsch' },
-        { code: 'es', name: 'Spanish', native: 'Español' },
-        { code: 'fr', name: 'French', native: 'Français' },
-        { code: 'it', name: 'Italian', native: 'Italiano' }
+        { code: 'de', name: 'German', native: 'Deutsch' }
     ];
 
     // ─────────────────────────────────────────────────────────────────────────

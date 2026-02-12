@@ -61,25 +61,8 @@ const state = {
     auditLogs: [],
     deviceLogs: [],
     
-    // Mail Groups (max 10)
-    mailGroups: [
-        {
-            id: 1,
-            name: 'Aile',
-            subject: 'LebensSpur - Önemli Bildirim',
-            content: 'Merhaba,\n\nLebensSpur zamanlayıcısı tetiklendi. Bu otomatik bir bildirimdir.',
-            files: [],
-            recipients: ['anne@example.com', 'baba@example.com', 'kardes@example.com']
-        },
-        {
-            id: 2,
-            name: 'İş Arkadaşları',
-            subject: 'LebensSpur Bildirimi',
-            content: 'Merhaba,\n\nBu bir LebensSpur bildirimidir.',
-            files: [],
-            recipients: ['is1@company.com', 'is2@company.com']
-        }
-    ],
+    // Mail Groups (max 10) - loaded from ESP32 via /api/config/mail
+    mailGroups: [],
     currentEditingGroup: null,
     isCreatingNewGroup: false,
 
@@ -97,10 +80,7 @@ const state = {
             telegramChatId: '',
             warningAt: 50,
             tieredEnabled: true,
-            recipients: [
-                { email: 'primary@example.com', type: 'primary' },
-                { email: 'contact@family.com', type: 'secondary' }
-            ]
+            recipients: []
         },
         actions: {
             sendEmail: true,
@@ -115,10 +95,7 @@ const state = {
             autoLogoutTime: 10,
             loginProtection: true,
             lockoutTime: 15,
-            trustedContacts: [
-                { name: 'Alice', code: '****', access: 'read-only' },
-                { name: 'Bob', code: '****', access: 'full' }
-            ]
+            trustedContacts: []
         }
     }
 };
@@ -148,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initAutoLogout();
     initPWA();
-    initDemoLogs();
+    initLogs();
     updateUI();
     startTimerUpdate();
     fetchDeviceInfo();
@@ -381,14 +358,24 @@ function handlePasswordChange() {
         return;
     }
     
-    // TODO: Backend'e şifre değiştirme isteği gönder
-    // Şimdilik simüle ediyoruz
-    showToast('Şifre başarıyla değiştirildi', 'success');
-    
-    // Alanları temizle
-    document.getElementById('currentPassword').value = '';
-    document.getElementById('newPassword').value = '';
-    document.getElementById('confirmPassword').value = '';
+    // Send to backend
+    fetch('/api/config/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Şifre başarıyla değiştirildi', 'success');
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+        } else {
+            showToast(data.error || 'Şifre değiştirilemedi', 'error');
+        }
+    })
+    .catch(() => showToast('Bağlantı hatası', 'error'));
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -405,29 +392,28 @@ function handleExport() {
         return;
     }
     
-    // TODO: Backend'ten tarayıcı şifresi doğrulaması
-    // Şimdilik sadece boş olmadığını kontrol ediyoruz
+    // Send export request to backend
+    fetch('/api/config/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authPassword, exportPassword })
+    })
+    .then(res => {
+        if (!res.ok) return res.json().then(d => { throw new Error(d.error || 'Export failed'); });
+        return res.blob();
+    })
+    .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lebensspur-backup-${new Date().toISOString().slice(0,10)}.lsb`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Ayarlar dışa aktarıldı', 'success');
+    })
+    .catch(err => showToast(err.message || 'Dışa aktarma başarısız', 'error'));
     
-    // Yedek şifresi doğrulaması
-    if (!exportPassword) {
-        showToast('Yedek şifresi belirleyin', 'error');
-        return;
-    }
-    
-    if (exportPassword.length < 4) {
-        showToast('Yedek şifresi en az 4 karakter olmalı', 'error');
-        return;
-    }
-    
-    if (exportPassword !== exportPasswordConfirm) {
-        showToast('Yedek şifreleri eşleşmiyor', 'error');
-        return;
-    }
-    
-    // TODO: Backend'e dışa aktarma isteği gönder
-    showToast('Ayarlar dışa aktarılıyor...', 'success');
-    
-    // Alanları temizle
+    // Clear fields
     document.getElementById('exportAuthPassword').value = '';
     document.getElementById('exportPassword').value = '';
     document.getElementById('exportPasswordConfirm').value = '';
@@ -461,14 +447,8 @@ function saveMailGroup() {
     if (state.isCreatingNewGroup) {
         // Create new group
         const newId = Math.max(0, ...state.mailGroups.map(g => g.id)) + 1;
-        state.mailGroups.push({
-            id: newId,
-            name,
-            subject,
-            content,
-            files,
-            recipients
-        });
+        const newGroup = { id: newId, name, subject, content, files, recipients };
+        state.mailGroups.push(newGroup);
         showToast('Mail grubu oluşturuldu', 'success');
     } else {
         // Update existing group
@@ -483,6 +463,9 @@ function saveMailGroup() {
         }
     }
     
+    // Persist mail groups to ESP32
+    persistMailGroups();
+    
     // Refresh list view
     renderMailGroupList();
     handleModalBack();
@@ -494,10 +477,45 @@ function deleteMailGroup() {
     const groupIndex = state.mailGroups.findIndex(g => g.id === state.currentEditingGroup);
     if (groupIndex > -1) {
         state.mailGroups.splice(groupIndex, 1);
+        persistMailGroups();
         showToast('Mail grubu silindi', 'success');
         renderMailGroupList();
         handleModalBack();
     }
+}
+
+function persistMailGroups() {
+    const groups = state.mailGroups.map(g => ({
+        name: g.name,
+        subject: g.subject,
+        content: g.content,
+        recipients: g.recipients
+    }));
+    fetch('/api/config/mail-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groups })
+    }).catch(err => console.error('Mail group save failed:', err));
+}
+
+function loadMailGroups() {
+    fetch('/api/config/mail-groups')
+        .then(res => res.json())
+        .then(data => {
+            if (data.groups && Array.isArray(data.groups)) {
+                state.mailGroups = data.groups.map((g, i) => ({
+                    id: i + 1,
+                    name: g.name || '',
+                    subject: g.subject || '',
+                    content: g.content || '',
+                    files: [],
+                    recipients: g.recipients || []
+                }));
+                renderMailGroupList();
+            }
+        })
+        .catch(err => console.error('Mail groups load failed:', err));
+}
 }
 
 function renderMailGroupList() {
@@ -728,22 +746,26 @@ function initConnectionConfigCheck() {
 
 // AP Mode değerlerini Device ID'den ayarla
 function initApModeValues() {
-    // Gerçek uygulamada bu değer cihazdan gelecek
-    // Şimdilik demo için örnek bir Device ID kullanıyoruz
-    const deviceId = 'LS-12SE4F6K32'; // Demo Device ID
-    
-    const apSsidInput = document.getElementById('apSsid');
-    const apMdnsInput = document.getElementById('apMdns');
-    const wifiMdnsInput = document.getElementById('wifiMdnsHostname');
-    const wifiBackupMdnsInput = document.getElementById('wifiBackupMdnsHostname');
-    
-    // AP Mod değerlerini ayarla (readonly)
-    if (apSsidInput) apSsidInput.value = deviceId;
-    if (apMdnsInput) apMdnsInput.value = deviceId + '.local';
-    
-    // WiFi mDNS placeholder'larını ayarla
-    if (wifiMdnsInput) wifiMdnsInput.placeholder = deviceId;
-    if (wifiBackupMdnsInput) wifiBackupMdnsInput.placeholder = deviceId;
+    // Fetch real device ID from ESP32 and use for AP mode fields
+    fetch('/api/device/info')
+        .then(res => res.json())
+        .then(data => {
+            const deviceId = data.device_id || 'LS-UNKNOWN';
+            const hostname = data.hostname || deviceId;
+            
+            const apSsidInput = document.getElementById('apSsid');
+            const apPassInput = document.getElementById('apPass');
+            const apMdnsInput = document.getElementById('apMdns');
+            const wifiMdnsInput = document.getElementById('wifiMdnsHostname');
+            const wifiBackupMdnsInput = document.getElementById('wifiBackupMdnsHostname');
+            
+            if (apSsidInput) apSsidInput.value = hostname;
+            if (apPassInput) apPassInput.value = 'smartkraft';
+            if (apMdnsInput) apMdnsInput.value = hostname + '.local';
+            if (wifiMdnsInput) wifiMdnsInput.placeholder = hostname;
+            if (wifiBackupMdnsInput) wifiBackupMdnsInput.placeholder = hostname;
+        })
+        .catch(() => {}); // Ignore - will be populated on fetchDeviceInfo    
     
     // AP Mode toggle event listener - uyarıyı göster/gizle
     const apModeToggle = document.getElementById('apModeEnabled');
@@ -964,8 +986,21 @@ function initActionCards() {
     
     if (apiCancelBtn) apiCancelBtn.addEventListener('click', handleModalBack);
     if (apiSaveBtn) apiSaveBtn.addEventListener('click', () => {
-        showToast('API ayarları kaydedildi', 'success');
-        handleModalBack();
+        const webhookUrl = document.getElementById('webhookUrl')?.value || '';
+        const webhookSecret = document.getElementById('webhookSecret')?.value || '';
+        fetch('/api/config/webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ webhookUrl, webhookSecret })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('API ayarları kaydedildi', 'success');
+                handleModalBack();
+            } else showToast(data.error || 'Hata', 'error');
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
     });
     
     // Relay Config cancel/save buttons
@@ -1070,8 +1105,21 @@ function initActionCards() {
     
     if (telegramCancelBtn) telegramCancelBtn.addEventListener('click', handleModalBack);
     if (telegramSaveBtn) telegramSaveBtn.addEventListener('click', () => {
-        showToast('Telegram ayarları kaydedildi', 'success');
-        handleModalBack();
+        const botToken = document.getElementById('telegramBotToken')?.value || '';
+        const chatId = document.getElementById('telegramChatId')?.value || '';
+        fetch('/api/config/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ botToken, chatId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Telegram ayarları kaydedildi', 'success');
+                handleModalBack();
+            } else showToast(data.error || 'Hata', 'error');
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
     });
     
     // Early Mail Config cancel/save buttons
@@ -1080,8 +1128,22 @@ function initActionCards() {
     
     if (earlyMailCancelBtn) earlyMailCancelBtn.addEventListener('click', handleModalBack);
     if (earlyMailSaveBtn) earlyMailSaveBtn.addEventListener('click', () => {
-        showToast('Erken uyarı mail ayarları kaydedildi', 'success');
-        handleModalBack();
+        const earlyRecipient = document.getElementById('earlyWarningEmail')?.value || '';
+        const earlySubject = document.getElementById('earlyReminderSubject')?.value || '';
+        const earlyMessage = document.getElementById('earlyReminderMessage')?.value || '';
+        fetch('/api/config/early-mail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipient: earlyRecipient, subject: earlySubject, message: earlyMessage })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Erken uyarı mail ayarları kaydedildi', 'success');
+                handleModalBack();
+            } else showToast(data.error || 'Hata', 'error');
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
     });
     
     // Trigger Mail Config back button
@@ -1094,8 +1156,7 @@ function initActionCards() {
     
     if (mailGroupCancelBtn) mailGroupCancelBtn.addEventListener('click', handleModalBack);
     if (mailGroupSaveBtn) mailGroupSaveBtn.addEventListener('click', () => {
-        showToast('Mail grubu kaydedildi', 'success');
-        handleModalBack();
+        saveMailGroup();
     });
     
     // Mail Group list item clicks
@@ -1589,6 +1650,9 @@ function handleLogin(e) {
             startAutoLogoutTimer();
             pollTimerStatus();
             loadTimerConfig();
+            loadMailGroups();
+            fetchLogs();
+            fetchDeviceInfo();
         } else if (data.lockoutSeconds) {
             const mins = Math.ceil(data.lockoutSeconds / 60);
             state.lockoutUntil = Date.now() + (data.lockoutSeconds * 1000);
@@ -1764,8 +1828,8 @@ function fetchDeviceInfo() {
             // System time
             setTxt('sysTime', data.time || '-');
 
-            // GUI version
-            setTxt('sysGuiVersion', 'v0.1.0');
+            // GUI version (from sw.js cache version)
+            setTxt('sysGuiVersion', data.firmware ? 'v' + data.firmware : '-');
         })
         .catch(err => {
             console.error('Device info fetch failed:', err);
@@ -1982,7 +2046,7 @@ function updateTimerDisplay() {
 }
 
 function updateStatusPill() {
-    // Status pill artık kullanılmıyor - sadece uyumluluk için tutuldu
+    // Removed - no longer used
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1993,7 +2057,7 @@ function updateUI() {
 }
 
 function updateInfoCards() {
-    // These are no longer needed since data comes from polling
+    // Removed - data comes from polling
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2287,8 +2351,7 @@ function toggleActivity() {
 }
 
 function addActivityItem(text) {
-    // Activity list artık kullanılmıyor - sadece uyumluluk için tutuldu
-    console.log('Activity:', text);
+    // Activity logged via addAuditLog instead
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2374,26 +2437,6 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Demo: Simülasyon için rastgele aktivite ekle
-// ─────────────────────────────────────────────────────────────────────────────
-const demoActivities = [
-    'Otomatik sıfırlama (API)',
-    'E-posta bildirimi gönderildi',
-    'Uyarı seviyesine ulaşıldı',
-    'Kritik seviyeye ulaşıldı',
-    'Webhook tetiklendi',
-    'Telegram bildirimi gönderildi'
-];
-
-// Her 30 saniyede rastgele bir aktivite ekle (demo için)
-setInterval(() => {
-    if (state.isAuthenticated && Math.random() > 0.7) {
-        const randomActivity = demoActivities[Math.floor(Math.random() * demoActivities.length)];
-        addActivityItem(randomActivity);
-    }
-}, 30000);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme Management
@@ -2627,25 +2670,39 @@ async function importSettings() {
     input.click();
 }
 
-// Simple encryption helpers (demo - production'da Web Crypto API kullanılmalı)
+// Encryption helpers using Web Crypto API (AES-GCM)
 async function encryptData(data, password) {
-    // Demo: Base64 encode with simple XOR
-    const encoded = btoa(unescape(encodeURIComponent(data)));
-    let result = '';
-    for (let i = 0; i < encoded.length; i++) {
-        result += String.fromCharCode(encoded.charCodeAt(i) ^ password.charCodeAt(i % password.length));
-    }
-    return btoa(result);
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+    );
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(data));
+    // Combine salt + iv + ciphertext and base64 encode
+    const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
+    combined.set(salt, 0);
+    combined.set(iv, salt.length);
+    combined.set(new Uint8Array(encrypted), salt.length + iv.length);
+    return btoa(String.fromCharCode(...combined));
 }
 
 async function decryptData(data, password) {
     try {
-        const decoded = atob(data);
-        let result = '';
-        for (let i = 0; i < decoded.length; i++) {
-            result += String.fromCharCode(decoded.charCodeAt(i) ^ password.charCodeAt(i % password.length));
-        }
-        return decodeURIComponent(escape(atob(result)));
+        const enc = new TextEncoder();
+        const raw = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+        const salt = raw.slice(0, 16);
+        const iv = raw.slice(16, 28);
+        const ciphertext = raw.slice(28);
+        const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+        );
+        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+        return new TextDecoder().decode(decrypted);
     } catch {
         throw new Error('Decryption failed');
     }
@@ -2657,32 +2714,39 @@ async function decryptData(data, password) {
 async function checkForUpdates() {
     showToast('Güncelleme kontrol ediliyor...', 'success');
     
-    // Simulate OTA check
     const progressDiv = document.querySelector('.ota-progress');
     if (progressDiv) {
         progressDiv.classList.add('active');
-        
-        // Simulate progress
         const fill = progressDiv.querySelector('.ota-progress-fill');
         const text = progressDiv.querySelector('.ota-progress-text');
         
-        for (let i = 0; i <= 100; i += 10) {
-            await sleep(200);
-            fill.style.width = `${i}%`;
-            text.textContent = `Kontrol ediliyor... ${i}%`;
+        if (fill) fill.style.width = '50%';
+        if (text) text.textContent = 'Sunucu kontrol ediliyor...';
+        
+        try {
+            const res = await fetch('/api/ota/check');
+            const data = await res.json();
+            
+            if (fill) fill.style.width = '100%';
+            
+            if (data.updateAvailable) {
+                if (text) text.textContent = `Yeni sürüm mevcut: ${data.version}`;
+                if (fill) fill.style.background = 'var(--accent-warning)';
+            } else {
+                if (text) text.textContent = 'Güncelleme mevcut değil, sistem güncel.';
+                if (fill) fill.style.background = 'var(--accent-success)';
+            }
+            
+            addAuditLog('ota', 'Güncelleme kontrolü yapıldı');
+        } catch (err) {
+            if (fill) fill.style.width = '100%';
+            if (fill) fill.style.background = 'var(--accent-error)';
+            if (text) text.textContent = 'Güncelleme kontrolü başarısız';
         }
-        
-        await sleep(500);
-        text.textContent = 'Güncelleme mevcut değil, sistem güncel.';
-        fill.style.width = '100%';
-        fill.style.background = 'var(--accent-success)';
-        
-        addAuditLog('ota', 'Güncelleme kontrolü yapıldı');
         
         setTimeout(() => {
             progressDiv.classList.remove('active');
-            fill.style.width = '0%';
-            fill.style.background = '';
+            if (fill) { fill.style.width = '0%'; fill.style.background = ''; }
         }, 3000);
     }
 }
@@ -2690,24 +2754,40 @@ async function checkForUpdates() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit & Device Logs
 // ─────────────────────────────────────────────────────────────────────────────
-function initDemoLogs() {
-    // Demo audit logs
-    state.auditLogs = [
-        { time: new Date(Date.now() - 3600000), type: 'login', text: 'Başarılı giriş', detail: 'IP: 192.168.1.100' },
-        { time: new Date(Date.now() - 7200000), type: 'settings', text: 'Zamanlayıcı süresi değiştirildi', detail: '24 saat → 12 saat' },
-        { time: new Date(Date.now() - 86400000), type: 'backup', text: 'Ayarlar dışa aktarıldı', detail: '' },
-    ];
-    
-    // Demo device logs
-    state.deviceLogs = [
-        { time: new Date(Date.now() - 1800000), type: 'info', text: 'WiFi bağlantısı kuruldu', detail: 'RSSI: -45 dBm' },
-        { time: new Date(Date.now() - 3600000), type: 'warning', text: 'Düşük bellek uyarısı', detail: 'Free heap: 45KB' },
-        { time: new Date(Date.now() - 7200000), type: 'success', text: 'NTP senkronizasyonu başarılı', detail: 'pool.ntp.org' },
-        { time: new Date(Date.now() - 86400000), type: 'error', text: 'E-posta gönderimi başarısız', detail: 'SMTP timeout' },
-    ];
-    
-    renderAuditLogs();
-    renderDeviceLogs();
+function initLogs() {
+    // Fetch real logs from ESP32
+    state.auditLogs = [];
+    state.deviceLogs = [];
+    fetchLogs();
+}
+
+function fetchLogs() {
+    fetch('/api/logs')
+        .then(res => res.json())
+        .then(data => {
+            if (data.entries && Array.isArray(data.entries)) {
+                state.auditLogs = [];
+                state.deviceLogs = [];
+                data.entries.forEach(entry => {
+                    const log = {
+                        time: new Date(entry.timestamp * 1000),
+                        type: entry.category || 'info',
+                        text: entry.message || '',
+                        detail: ''
+                    };
+                    // Separate audit (auth, config, timer) from device (system, wifi, error)
+                    const auditTypes = ['auth', 'config', 'login', 'settings', 'backup', 'timer'];
+                    if (auditTypes.includes(log.type)) {
+                        state.auditLogs.push(log);
+                    } else {
+                        state.deviceLogs.push(log);
+                    }
+                });
+                renderAuditLogs();
+                renderDeviceLogs();
+            }
+        })
+        .catch(err => console.error('Log fetch failed:', err));
 }
 
 function addAuditLog(type, text, detail = '') {

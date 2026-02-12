@@ -80,7 +80,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                     </svg>
-                    <span>Tatil: <strong id="vacationRemaining">14 gün</strong> kaldı</span>
+                    <span>Tatil: <strong id="vacationRemaining">-</strong> kaldı</span>
                 </div>
             </section>
             
@@ -593,7 +593,7 @@
                                             <h3>Ağ Adı (SSID)</h3>
                                         </div>
                                         <div class="setting-control full">
-                                            <input type="text" class="input input-readonly" id="apSsid" value="LS-XXXXXXXXXX" readonly>
+                                            <input type="text" class="input input-readonly" id="apSsid" value="-" readonly>
                                         </div>
                                     </div>
 
@@ -602,7 +602,7 @@
                                             <h3>Şifre</h3>
                                         </div>
                                         <div class="setting-control full">
-                                            <input type="text" class="input input-readonly" id="apPass" value="smartkraft" readonly>
+                                            <input type="text" class="input input-readonly" id="apPass" value="-" readonly>
                                         </div>
                                     </div>
 
@@ -611,7 +611,7 @@
                                             <h3>mDNS Adresi</h3>
                                         </div>
                                         <div class="setting-control full">
-                                            <input type="text" class="input input-readonly" id="apMdns" value="LS-XXXXXXXXXX.local" readonly>
+                                            <input type="text" class="input input-readonly" id="apMdns" value="-" readonly>
                                         </div>
                                     </div>
 
@@ -1023,7 +1023,7 @@
                                         <circle cx="12" cy="12" r="10"></circle>
                                         <polyline points="12 6 12 12 16 14"></polyline>
                                     </svg>
-                                    <span id="relayCycleText">5 sn açık → 5 sn kapalı × 6 döngü = 1 dakika</span>
+                                    <span id="relayCycleText">-</span>
                                 </div>
                             </div>
 
@@ -1139,20 +1139,6 @@
                             <p class="section-desc">Süre dolduğunda mail gönderilecek gruplar (max 10 grup)</p>
                             
                             <div class="mail-group-list" id="mailGroupList">
-                                <div class="mail-group-item" data-group-id="1">
-                                    <div class="mail-group-info">
-                                        <span class="mail-group-name">Aile</span>
-                                        <span class="mail-group-count">3 alıcı</span>
-                                    </div>
-                                    <button class="btn btn-ghost btn-sm" data-action="view-group">Görüntüle</button>
-                                </div>
-                                <div class="mail-group-item" data-group-id="2">
-                                    <div class="mail-group-info">
-                                        <span class="mail-group-name">İş Arkadaşları</span>
-                                        <span class="mail-group-count">2 alıcı</span>
-                                    </div>
-                                    <button class="btn btn-ghost btn-sm" data-action="view-group">Görüntüle</button>
-                                </div>
                             </div>
                             
                             <button class="btn btn-outline btn-add-group" id="createMailGroup">
@@ -1523,7 +1509,7 @@
                                     </div>
                                     <div class="setting-control full">
                                         <div class="input-with-action">
-                                            <input type="text" class="input" id="resetApiKey" value="ls_xxxxxxxxxxxx" readonly>
+                                            <input type="text" class="input" id="resetApiKey" value="-" readonly>
                                             <button class="btn btn-ghost btn-sm" id="copyApiKeyBtn" title="Kopyala">
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -1563,11 +1549,11 @@
                                 <div class="ota-status-card">
                                     <div class="ota-status-header">
                                         <span class="ota-status-label">Mevcut Sürüm</span>
-                                        <span class="ota-status-value" id="currentFirmwareVersion">v0.1.0</span>
+                                        <span class="ota-status-value" id="currentFirmwareVersion">-</span>
                                     </div>
                                     <div class="ota-status-header">
                                         <span class="ota-status-label">Son Kontrol</span>
-                                        <span class="ota-status-value" id="lastOtaCheck">Hiç kontrol edilmedi</span>
+                                        <span class="ota-status-value" id="lastOtaCheck">-</span>
                                     </div>
                                 </div>
                             </div>
@@ -1696,11 +1682,11 @@
                                 <div class="ota-status-card">
                                     <div class="ota-status-header">
                                         <span class="ota-status-label">Web UI Sürümü</span>
-                                        <span class="ota-status-value" id="currentGuiVersion">v0.1.0</span>
+                                        <span class="ota-status-value" id="currentGuiVersion">-</span>
                                     </div>
                                     <div class="ota-status-header">
                                         <span class="ota-status-label">Harici Flash</span>
-                                        <span class="ota-status-value" id="extFlashStatus">32 MB - Hazır</span>
+                                        <span class="ota-status-value" id="extFlashStatus">-</span>
                                     </div>
                                 </div>
                             </div>
@@ -2136,27 +2122,27 @@
                                 <div class="system-info">
                                     <div class="system-row">
                                         <span class="system-label">Cihaz ID</span>
-                                        <span class="system-value" id="sysDeviceId">LS-12SE4F6K32</span>
+                                        <span class="system-value" id="sysDeviceId">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">MAC Adresi</span>
-                                        <span class="system-value" id="sysMac">A4:CF:12:xx:xx:xx</span>
+                                        <span class="system-value" id="sysMac">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Çip Modeli</span>
-                                        <span class="system-value" id="sysChip">ESP32-C6</span>
+                                        <span class="system-value" id="sysChip">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Çekirdek Sayısı</span>
-                                        <span class="system-value" id="sysCores">1</span>
+                                        <span class="system-value" id="sysCores">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">CPU Frekansı</span>
-                                        <span class="system-value" id="sysCpuFreq">160 MHz</span>
+                                        <span class="system-value" id="sysCpuFreq">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Flash Boyutu</span>
-                                        <span class="system-value" id="sysFlashSize">4 MB</span>
+                                        <span class="system-value" id="sysFlashSize">-</span>
                                     </div>
                                 </div>
                             </div>
@@ -2169,54 +2155,54 @@
                                 <div class="system-info">
                                     <div class="system-row">
                                         <span class="system-label">Toplam</span>
-                                        <span class="system-value" id="sysRamTotal">320 KB</span>
+                                        <span class="system-value" id="sysRamTotal">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Kullanılan</span>
-                                        <span class="system-value" id="sysRamUsed">178 KB</span>
+                                        <span class="system-value" id="sysRamUsed">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Boş</span>
-                                        <span class="system-value" id="sysRamFree">142 KB</span>
+                                        <span class="system-value" id="sysRamFree">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Min. Boş (Watermark)</span>
-                                        <span class="system-value" id="sysRamMinFree">98 KB</span>
+                                        <span class="system-value" id="sysRamMinFree">-</span>
                                     </div>
                                 </div>
                                 <div class="storage-bar">
-                                    <div class="storage-bar-fill" style="width: 55.6%;" id="ramBarFill"></div>
+                                    <div class="storage-bar-fill" style="width: 0%;" id="ramBarFill"></div>
                                 </div>
-                                <p class="storage-bar-label"><span id="ramUsagePercent">55.6%</span> kullanımda</p>
+                                <p class="storage-bar-label"><span id="ramUsagePercent">-</span> kullanımda</p>
 
                                 <!-- Dahili Flash -->
                                 <h5 class="subsection-title">Dahili Flash</h5>
                                 <div class="system-info">
                                     <div class="system-row">
                                         <span class="system-label">Toplam</span>
-                                        <span class="system-value" id="sysIntFlashTotal">4 MB</span>
+                                        <span class="system-value" id="sysIntFlashTotal">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Firmware</span>
-                                        <span class="system-value" id="sysIntFlashFirmware">1.8 MB</span>
+                                        <span class="system-value" id="sysIntFlashFirmware">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">NVS (Ayarlar)</span>
-                                        <span class="system-value" id="sysIntFlashNvs">24 KB / 64 KB</span>
+                                        <span class="system-value" id="sysIntFlashNvs">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">OTA Partition</span>
-                                        <span class="system-value" id="sysIntFlashOta">1.5 MB</span>
+                                        <span class="system-value" id="sysIntFlashOta">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Boş</span>
-                                        <span class="system-value" id="sysIntFlashFree">0.6 MB</span>
+                                        <span class="system-value" id="sysIntFlashFree">-</span>
                                     </div>
                                 </div>
                                 <div class="storage-bar">
-                                    <div class="storage-bar-fill" style="width: 85%;" id="intFlashBarFill"></div>
+                                    <div class="storage-bar-fill" style="width: 0%;" id="intFlashBarFill"></div>
                                 </div>
-                                <p class="storage-bar-label"><span id="intFlashUsagePercent">85%</span> kullanımda</p>
+                                <p class="storage-bar-label"><span id="intFlashUsagePercent">-</span> kullanımda</p>
 
                                 <!-- Harici Flash -->
                                 <h5 class="subsection-title">Harici Flash (W25Q256)</h5>
@@ -2239,9 +2225,9 @@
                                     </div>
                                 </div>
                                 <div class="storage-bar">
-                                    <div class="storage-bar-fill storage-bar-success" style="width: 8.4%;" id="extFlashBarFill"></div>
+                                    <div class="storage-bar-fill storage-bar-success" style="width: 0%;" id="extFlashBarFill"></div>
                                 </div>
-                                <p class="storage-bar-label"><span id="extFlashUsagePercent">8.4%</span> kullanımda</p>
+                                <p class="storage-bar-label"><span id="extFlashUsagePercent">-</span> kullanımda</p>
                             </div>
 
                             <div class="setting-section">
@@ -2250,27 +2236,27 @@
                                 <div class="system-info">
                                     <div class="system-row">
                                         <span class="system-label">WiFi Durumu</span>
-                                        <span class="system-value status-connected" id="sysWifiStatus">Bağlı</span>
+                                        <span class="system-value status-connected" id="sysWifiStatus">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">SSID</span>
-                                        <span class="system-value" id="sysWifiSsid">MyNetwork</span>
+                                        <span class="system-value" id="sysWifiSsid">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">WiFi Sinyali</span>
-                                        <span class="system-value" id="sysRssi">-45 dBm (Mükemmel)</span>
+                                        <span class="system-value" id="sysRssi">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">IP Adresi</span>
-                                        <span class="system-value" id="sysIp">192.168.1.105</span>
+                                        <span class="system-value" id="sysIp">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">AP Modu</span>
-                                        <span class="system-value status-active" id="sysApStatus">Aktif</span>
+                                        <span class="system-value status-active" id="sysApStatus">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">AP IP</span>
-                                        <span class="system-value" id="sysApIp">192.168.4.1</span>
+                                        <span class="system-value" id="sysApIp">-</span>
                                     </div>
                                 </div>
                             </div>
@@ -2281,27 +2267,27 @@
                                 <div class="system-info">
                                     <div class="system-row">
                                         <span class="system-label">Çalışma Süresi</span>
-                                        <span class="system-value" id="sysUptime">3 gün 14 saat 22 dk</span>
+                                        <span class="system-value" id="sysUptime">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Yeniden Başlatma</span>
-                                        <span class="system-value" id="sysResetReason">Güç açıldı</span>
+                                        <span class="system-value" id="sysResetReason">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">NTP Durumu</span>
-                                        <span class="system-value status-connected" id="sysNtpStatus">Senkronize</span>
+                                        <span class="system-value status-connected" id="sysNtpStatus">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Sistem Saati</span>
-                                        <span class="system-value" id="sysTime">11.02.2026 15:42:31</span>
+                                        <span class="system-value" id="sysTime">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">Firmware</span>
-                                        <span class="system-value" id="sysFirmware">v0.1.0</span>
+                                        <span class="system-value" id="sysFirmware">-</span>
                                     </div>
                                     <div class="system-row">
                                         <span class="system-label">GUI Versiyon</span>
-                                        <span class="system-value" id="sysGuiVersion">v0.1.0</span>
+                                        <span class="system-value" id="sysGuiVersion">-</span>
                                     </div>
                                 </div>
                             </div>
@@ -2330,31 +2316,7 @@
                                 </div>
                                 
                                 <div class="log-list" id="auditLogList">
-                                    <div class="log-item">
-                                        <span class="log-time">15:42:31</span>
-                                        <span class="log-type auth">AUTH</span>
-                                        <span class="log-message">Kullanıcı giriş yaptı</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">15:40:12</span>
-                                        <span class="log-type timer">TIMER</span>
-                                        <span class="log-message">Manuel sıfırlama</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">15:38:45</span>
-                                        <span class="log-type settings">SET</span>
-                                        <span class="log-message">Tema değiştirildi: Koyu</span>
-                                    </div>
-                                    <div class="log-item warning">
-                                        <span class="log-time">10:30:22</span>
-                                        <span class="log-type auth">AUTH</span>
-                                        <span class="log-message">Başarısız giriş (3/5)</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">10:28:15</span>
-                                        <span class="log-type auth">AUTH</span>
-                                        <span class="log-message">Oturum kapatıldı</span>
-                                    </div>
+                                    <!-- Populated dynamically from /api/logs -->
                                 </div>
                                 
                                 <div class="action-buttons">
@@ -2396,36 +2358,7 @@
                                 </div>
                                 
                                 <div class="log-list" id="deviceLogList">
-                                    <div class="log-item">
-                                        <span class="log-time">15:30:15</span>
-                                        <span class="log-type wifi">WIFI</span>
-                                        <span class="log-message">Sinyal: -45 dBm</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">15:00:00</span>
-                                        <span class="log-type system">SYS</span>
-                                        <span class="log-message">NTP senkronize edildi</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">14:00:00</span>
-                                        <span class="log-type system">SYS</span>
-                                        <span class="log-message">Heap: 142KB boş</span>
-                                    </div>
-                                    <div class="log-item error">
-                                        <span class="log-time">08:12:44</span>
-                                        <span class="log-type error">ERR</span>
-                                        <span class="log-message">SMTP timeout</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">08:00:00</span>
-                                        <span class="log-type wifi">WIFI</span>
-                                        <span class="log-message">MyNetwork ağına bağlandı</span>
-                                    </div>
-                                    <div class="log-item">
-                                        <span class="log-time">07:59:55</span>
-                                        <span class="log-type system">SYS</span>
-                                        <span class="log-message">Sistem başlatıldı</span>
-                                    </div>
+                                    <!-- Populated dynamically from /api/logs -->
                                 </div>
                                 
                                 <div class="action-buttons">

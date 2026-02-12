@@ -12,52 +12,16 @@
     "categories": ["utilities", "productivity"],
     "icons": [
         {
-            "src": "icons/icon-72.png",
-            "sizes": "72x72",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icons/icon-96.png",
-            "sizes": "96x96",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icons/icon-128.png",
-            "sizes": "128x128",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icons/icon-144.png",
-            "sizes": "144x144",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icons/icon-152.png",
-            "sizes": "152x152",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icons/icon-192.png",
+            "src": "logo.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
         },
         {
-            "src": "icons/icon-384.png",
-            "sizes": "384x384",
+            "src": "darklogo.png",
+            "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "icons/icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "maskable"
         }
     ],
     "shortcuts": [
@@ -65,25 +29,13 @@
             "name": "Reset Timer",
             "short_name": "Reset",
             "description": "Reset the countdown timer",
-            "url": "/?action=reset",
-            "icons": [
-                {
-                    "src": "icons/shortcut-reset.png",
-                    "sizes": "96x96"
-                }
-            ]
+            "url": "/?action=reset"
         },
         {
             "name": "Settings",
             "short_name": "Settings",
             "description": "Open settings panel",
-            "url": "/?action=settings",
-            "icons": [
-                {
-                    "src": "icons/shortcut-settings.png",
-                    "sizes": "96x96"
-                }
-            ]
+            "url": "/?action=settings"
         }
     ],
     "related_applications": [],

@@ -25,7 +25,7 @@ extern "C" {
  * ============================================ */
 #define WEB_SERVER_PORT         80
 #define WEB_MAX_URI_LEN         128
-#define WEB_MAX_HANDLERS        32
+#define WEB_MAX_HANDLERS        40
 #define WEB_STATIC_DIR          "/ext/web"
 
 // MIME types
