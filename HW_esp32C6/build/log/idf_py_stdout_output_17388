@@ -1,7 +1,0 @@
-Command: C:\Espressif\python_env\idf5.5_py3.13_env\Scripts\python.exe C:\Espressif\frameworks\esp-idf-v5.5.2\components/esptool_py/esptool/esptool.py -p COM9 -b 460800 --before default_reset --after hard_reset --chip esp32c6 erase_flash
-esptool.py v4.12.dev1
-Serial port COM9
-
-A fatal error occurred: Could not open COM9, the port is busy or doesn't exist.
-(could not open port 'COM9': PermissionError(13, 'Eriim engellendi.', None, 5))
-

@@ -1,8 +1,0 @@
-Command: C:\Espressif\python_env\idf5.5_py3.13_env\Scripts\python.exe C:\Espressif\frameworks\esp-idf-v5.5.2\tools/idf_monitor.py -p COM9 -b 115200 --toolchain-prefix riscv32-esp-elf- --target esp32c6 --revision 0 --decode-panic backtrace C:\Users\SEU\Desktop\GitHub\2-LebensSpur\LebensSpur\HW_esp32C6\build\lebensspur.elf C:\Users\SEU\Desktop\GitHub\2-LebensSpur\LebensSpur\HW_esp32C6\build\bootloader\bootloader.elf --force-color -m 'C:\Espressif\python_env\idf5.5_py3.13_env\Scripts\python.exe' 'C:\Espressif\frameworks\esp-idf-v5.5.2\tools\idf.py' '-p' 'COM9'
-[0;33m--- Warning: GDB cannot open serial ports accessed as COMx[0m
-[0;33m--- Using \\.\COM9 instead...[0m
-[0;33m--- esp-idf-monitor 1.9.0 on \\.\COM9 115200[0m
-[0;33m--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H[0m
-[0;33m--- Connection to \\.\COM9 failed. Available ports:
---- COM9[0m
-[0m
