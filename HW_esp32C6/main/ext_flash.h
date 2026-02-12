@@ -3,10 +3,9 @@
  * @brief External Flash Manager - W25Q256 (32MB)
  * 
  * Manages external SPI flash for storing:
- * - Web GUI files (/ext/web)
- * - Configuration JSON files (/ext/config)
- * - Log files (/ext/logs)
- * - User data (/ext/data)
+ * - Settings & backups (/cfg)     - 1MB
+ * - Web GUI files & logs (/gui)   - 4MB
+ * - User data & attachments (/data) - 27MB
  */
 
 #ifndef EXT_FLASH_H

@@ -98,14 +98,14 @@ http://[device-ip-address]
 
 #### Hardware
 - **Processor:** ESP32-C6 (RISC-V, 160 MHz)
-- **Flash Memory:** 4MB (3MB APP / 1MB SPIFFS partitioning)
+- **Flash Memory:** 4MB internal (Dual OTA) + 32MB external (LittleFS)
 - **WiFi:** 2.4 GHz 802.11 b/g/n
 - **Power Input:** 5V USB-C or 230V AC
 
 #### Software
 - **OTA Update:** GitHub repository-based automatic updates
 - **Firmware Version:** v1.0.0
-- **Partition Scheme:** SmartKraft OTA (Dual APP + SPIFFS)
+- **Partition Scheme:** SmartKraft OTA (Dual APP) + External LittleFS (3 partitions)
 
 ### 📝 License
 
@@ -225,14 +225,14 @@ http://[gerät-ip-adresse]
 
 #### Hardware
 - **Prozessor:** ESP32-C6 (RISC-V, 160 MHz)
-- **Flash-Speicher:** 4MB (3MB APP / 1MB SPIFFS-Partitionierung)
+- **Flash-Speicher:** 4MB intern (Dual OTA) + 32MB extern (LittleFS)
 - **WiFi:** 2.4 GHz 802.11 b/g/n
 - **Stromeingang:** 5V USB-C oder 230V AC
 
 #### Software
 - **OTA-Update:** GitHub-Repository-basierte automatische Updates
 - **Firmware-Version:** v1.0.0
-- **Partitionsschema:** SmartKraft OTA (Dual APP + SPIFFS)
+- **Partitionsschema:** SmartKraft OTA (Dual APP) + Extern LittleFS (3 Partitionen)
 
 ### 📝 Lizenz
 
@@ -354,14 +354,14 @@ http://[cihaz-ip-adresi]
 
 #### Donanım
 - **İşlemci:** ESP32-C6 (RISC-V, 160 MHz)
-- **Flash Bellek:** 4MB (3MB APP / 1MB SPIFFS bölümleme)
+- **Flash Bellek:** 4MB dahili (Dual OTA) + 32MB harici (LittleFS)
 - **WiFi:** 2.4 GHz 802.11 b/g/n
 - **Güç Girişi:** 5V USB-C veya 230V AC
 
 #### Yazılım
 - **OTA Güncelleme:** GitHub repository tabanlı otomatik güncelleme
 - **Firmware Sürümü:** v1.0.0
-- **Partition Scheme:** SmartKraft OTA (Dual APP + SPIFFS)
+- **Partition Scheme:** SmartKraft OTA (Dual APP) + Harici LittleFS (3 bölüm)
 
 ### 📝 Lisans
 

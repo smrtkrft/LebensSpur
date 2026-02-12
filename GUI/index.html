@@ -2127,6 +2127,35 @@
                                     </ul>
                                 </p>
                             </div>
+
+                            <div class="dev-note">
+                                <h5 class="dev-note-title">
+                                    <span class="dev-note-icon">📁</span>
+                                    Dosya Yöneticisi
+                                </h5>
+                                <p class="dev-note-content">
+                                    Uzun vadede dosya yöneticisi oluşturarak kullanıcıya dosyaları düzenleme özelliği eklenebilir.<br><br>
+                                    <strong>Planlanan özellikler:</strong>
+                                    <ul>
+                                        <li>Web tabanlı dosya tarayıcısı (REST API + GUI)</li>
+                                        <li>Dosya yükleme, indirme, silme, yeniden adlandırma</li>
+                                        <li>Klasör oluşturma ve yönetimi (LittleFS desteği ile)</li>
+                                        <li>Sürükle-bırak yükleme desteği</li>
+                                        <li>Dosya önizleme (resim, metin)</li>
+                                        <li>Tek dosya max boyut limiti: 10MB</li>
+                                    </ul>
+                                    <br>
+                                    <strong>Flash bölümlendirme (32MB W25Q256):</strong>
+                                    <ul>
+                                        <li><strong>1MB (/cfg):</strong> Kullanıcı ayarları, export/import yedekleri</li>
+                                        <li><strong>4MB (/gui):</strong> Web arayüzü, JS, CSS, i18n, loglar</li>
+                                        <li><strong>27MB (/data):</strong> Kullanıcı dosyaları, mail içerikleri, ekler</li>
+                                    </ul>
+                                    <br>
+                                    <strong>Dosya sistemi:</strong> LittleFS (SPIFFS yerine - boyut limiti yok, gerçek klasör desteği)<br>
+                                    <strong>Erişim:</strong> WiFi üzerinden web arayüzü ile (telefon/tablet/bilgisayar)
+                                </p>
+                            </div>
                         </div>
 
                         <!-- Cihaz Bilgisi Subpage -->
@@ -2220,22 +2249,58 @@
                                 <p class="storage-bar-label"><span id="intFlashUsagePercent">-</span> kullanımda</p>
 
                                 <!-- Harici Flash -->
-                                <h5 class="subsection-title">Harici Flash (W25Q256)</h5>
+                                <h5 class="subsection-title">Harici Flash (W25Q256 - LittleFS)</h5>
                                 <div class="system-info">
                                     <div class="system-row">
                                         <span class="system-label">Çip Kapasitesi</span>
                                         <span class="system-value" id="sysExtFlashTotal">-</span>
                                     </div>
+                                </div>
+
+                                <!-- Partition: /cfg (Ayarlar) -->
+                                <h6 class="subsection-title" style="font-size: 0.8rem; margin-top: 0.5rem;">Ayarlar (/cfg)</h6>
+                                <div class="system-info">
                                     <div class="system-row">
-                                        <span class="system-label">SPIFFS Alanı</span>
-                                        <span class="system-value" id="sysExtFlashSpiffs">-</span>
+                                        <span class="system-label">Toplam / Kullanılan</span>
+                                        <span class="system-value" id="sysFsCfgInfo">-</span>
                                     </div>
+                                </div>
+                                <div class="storage-bar">
+                                    <div class="storage-bar-fill" style="width: 0%;" id="fsCfgBarFill"></div>
+                                </div>
+
+                                <!-- Partition: /gui (Arayüz) -->
+                                <h6 class="subsection-title" style="font-size: 0.8rem; margin-top: 0.5rem;">Arayüz (/gui)</h6>
+                                <div class="system-info">
                                     <div class="system-row">
-                                        <span class="system-label">Kullanılan</span>
+                                        <span class="system-label">Toplam / Kullanılan</span>
+                                        <span class="system-value" id="sysFsGuiInfo">-</span>
+                                    </div>
+                                </div>
+                                <div class="storage-bar">
+                                    <div class="storage-bar-fill storage-bar-success" style="width: 0%;" id="fsGuiBarFill"></div>
+                                </div>
+
+                                <!-- Partition: /data (Kullanıcı Verileri) -->
+                                <h6 class="subsection-title" style="font-size: 0.8rem; margin-top: 0.5rem;">Kullanıcı Verileri (/data)</h6>
+                                <div class="system-info">
+                                    <div class="system-row">
+                                        <span class="system-label">Toplam / Kullanılan</span>
+                                        <span class="system-value" id="sysFsDataInfo">-</span>
+                                    </div>
+                                </div>
+                                <div class="storage-bar">
+                                    <div class="storage-bar-fill storage-bar-success" style="width: 0%;" id="fsDataBarFill"></div>
+                                </div>
+
+                                <!-- Toplam -->
+                                <div class="system-info" style="margin-top: 0.5rem;">
+                                    <div class="system-row">
+                                        <span class="system-label"><strong>Toplam Kullanım</strong></span>
                                         <span class="system-value" id="sysExtFlashUsed">-</span>
                                     </div>
                                     <div class="system-row">
-                                        <span class="system-label">Boş</span>
+                                        <span class="system-label"><strong>Toplam Boş</strong></span>
                                         <span class="system-value" id="sysExtFlashFree">-</span>
                                     </div>
                                 </div>

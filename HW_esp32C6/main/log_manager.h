@@ -23,9 +23,9 @@ extern "C" {
 /* ============================================
  * CONFIGURATION
  * ============================================ */
-#define LOG_BASE_PATH           "/ext/logs"
-#define LOG_EVENT_FILE          "/ext/logs/events.log"
-#define LOG_ARCHIVE_FILE        "/ext/logs/events.old"
+#define LOG_BASE_PATH           "/gui/logs"
+#define LOG_EVENT_FILE          "/gui/logs/events.log"
+#define LOG_ARCHIVE_FILE        "/gui/logs/events.old"
 
 #define LOG_MAX_FILE_SIZE       (64 * 1024)     // 64KB per file
 #define LOG_MAX_ENTRIES         500             // Max entries before rotation

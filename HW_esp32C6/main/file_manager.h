@@ -1,14 +1,13 @@
 /**
  * @file file_manager.h
- * @brief File System Manager - SPIFFS on External Flash
- * 
- * Manages filesystem on external W25Q256 flash.
- * 
- * Directory Structure:
- * /ext/web     - GUI files (HTML, CSS, JS)
- * /ext/config  - JSON configuration files
- * /ext/logs    - System and audit logs
- * /ext/data    - User data, attachments
+ * @brief File System Manager - LittleFS on External Flash
+ *
+ * Manages 3 LittleFS partitions on external W25Q256 (32MB) flash.
+ *
+ * Partition Layout:
+ * /cfg   (1MB)  - Settings, export/import backups
+ * /gui   (4MB)  - Web UI files, logs
+ * /data  (27MB) - User data, mail content, attachments
  */
 
 #ifndef FILE_MANAGER_H
@@ -24,16 +23,21 @@
 extern "C" {
 #endif
 
-/** Mount points and paths */
-#define FILE_MGR_BASE_PATH      "/ext"
-#define FILE_MGR_WEB_PATH       "/ext/web"
-#define FILE_MGR_CONFIG_PATH    "/ext/config"
-#define FILE_MGR_LOG_PATH       "/ext/logs"
-#define FILE_MGR_DATA_PATH      "/ext/data"
+/** Partition mount points */
+#define FILE_MGR_SETTINGS_MOUNT "/cfg"
+#define FILE_MGR_GUI_MOUNT      "/gui"
+#define FILE_MGR_DATA_MOUNT     "/data"
+
+/** Convenience paths */
+#define FILE_MGR_CONFIG_PATH    "/cfg"
+#define FILE_MGR_WEB_PATH       "/gui/web"
+#define FILE_MGR_LOG_PATH       "/gui/logs"
+#define FILE_MGR_DATA_PATH      "/data"
 
 /** Filesystem limits */
 #define FILE_MGR_MAX_PATH_LEN   280
 #define FILE_MGR_MAX_FILES      256
+#define FILE_MGR_MAX_FILE_SIZE  (10 * 1024 * 1024)  // 10MB per file
 
 /** File info structure */
 typedef struct {
@@ -44,6 +48,7 @@ typedef struct {
 
 /**
  * @brief Initialize filesystem
+ * Registers 3 partitions on external flash and mounts LittleFS on each.
  * Must be called after ext_flash_init()
  * @return ESP_OK on success
  */
@@ -57,7 +62,7 @@ esp_err_t file_manager_deinit(void);
 
 /**
  * @brief Write data to file
- * @param path Full file path (e.g., /ext/config/timer.json)
+ * @param path Full file path (e.g., /cfg/timer.json)
  * @param data Data to write
  * @param size Data size in bytes
  * @return ESP_OK on success
@@ -89,7 +94,7 @@ bool file_manager_exists(const char *path);
 esp_err_t file_manager_delete(const char *path);
 
 /**
- * @brief Create directory (virtual in SPIFFS)
+ * @brief Create directory (LittleFS supports real directories)
  * @param path Directory path
  * @return ESP_OK on success
  */
@@ -113,7 +118,7 @@ esp_err_t file_manager_list_dir(const char *path, file_info_t *files, size_t max
 int32_t file_manager_get_size(const char *path);
 
 /**
- * @brief Get filesystem info
+ * @brief Get aggregate filesystem info (all partitions combined)
  * @param total_bytes Total space (output)
  * @param used_bytes Used space (output)
  * @return ESP_OK on success
@@ -121,13 +126,22 @@ int32_t file_manager_get_size(const char *path);
 esp_err_t file_manager_get_info(uint32_t *total_bytes, uint32_t *used_bytes);
 
 /**
+ * @brief Get info for a specific partition
+ * @param mount_point Partition mount point (e.g., "/cfg", "/gui", "/data")
+ * @param total_bytes Total space (output)
+ * @param used_bytes Used space (output)
+ * @return ESP_OK on success
+ */
+esp_err_t file_manager_get_partition_info(const char *mount_point, uint32_t *total_bytes, uint32_t *used_bytes);
+
+/**
  * @brief Print filesystem info to log
  */
 void file_manager_print_info(void);
 
 /**
- * @brief Format filesystem
- * @warning Erases all data!
+ * @brief Format all partitions
+ * @warning Erases all data on all partitions!
  * @return ESP_OK on success
  */
 esp_err_t file_manager_format(void);
@@ -176,7 +190,7 @@ esp_err_t file_manager_append_string(const char *path, const char *str);
 
 /**
  * @brief Check if filesystem is mounted
- * @return true if mounted
+ * @return true if all partitions are mounted
  */
 bool file_manager_is_mounted(void);
 

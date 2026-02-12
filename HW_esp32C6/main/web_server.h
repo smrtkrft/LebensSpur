@@ -3,7 +3,7 @@
  * @brief HTTP Web Server
  * 
  * Provides:
- * - Static file serving from SPIFFS
+ * - Static file serving from LittleFS
  * - REST API endpoints
  * - Session authentication middleware
  */
@@ -26,7 +26,7 @@ extern "C" {
 #define WEB_SERVER_PORT         80
 #define WEB_MAX_URI_LEN         128
 #define WEB_MAX_HANDLERS        56
-#define WEB_STATIC_DIR          "/ext/web"
+#define WEB_STATIC_DIR          "/gui/web"
 
 // MIME types
 #define MIME_HTML       "text/html"
@@ -90,9 +90,9 @@ esp_err_t web_send_error(httpd_req_t *req, int status_code, const char *error);
 esp_err_t web_send_success(httpd_req_t *req, const char *message);
 
 /**
- * @brief Send file from SPIFFS
+ * @brief Send file from LittleFS
  * @param req HTTP request
- * @param filepath Path on SPIFFS
+ * @param filepath Path on LittleFS
  */
 esp_err_t web_send_file(httpd_req_t *req, const char *filepath);
 

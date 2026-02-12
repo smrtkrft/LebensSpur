@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/tmp/partition_check.py:*)",
+      "Bash(python:*)",
+      "Bash(comm:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

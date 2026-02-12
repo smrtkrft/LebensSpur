@@ -196,14 +196,14 @@ static esp_err_t system_init(void)
         return ret;
     }
 
-    // 3. File Manager (SPIFFS on external flash)
+    // 3. File Manager (LittleFS on external flash, 3 partitions)
     ret = file_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "File manager init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    // 4. Config Manager (JSON on SPIFFS)
+    // 4. Config Manager (JSON on LittleFS)
     ret = config_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Config manager init failed: %s", esp_err_to_name(ret));

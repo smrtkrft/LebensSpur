@@ -34,7 +34,6 @@ idf_component_register(
         esp_https_ota
         esp_timer
         driver
-        spiffs
         spi_flash
         json
         mbedtls

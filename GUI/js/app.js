@@ -2378,12 +2378,12 @@ function fetchDeviceInfo() {
             // GUI version for OTA subpage
             setTxt('currentGuiVersion', fw || '-');
 
-            // External flash status for GUI OTA subpage  
+            // External flash status for GUI OTA subpage
             if (data.ext_flash_total) {
-                const spiffsTotal = data.ext_spiffs_total || 0;
-                const spiffsUsed = data.ext_spiffs_used || 0;
-                const spiffsFree = spiffsTotal > spiffsUsed ? spiffsTotal - spiffsUsed : 0;
-                setTxt('extFlashStatus', fmtBytes(spiffsFree) + ' boş / ' + fmtBytes(spiffsTotal));
+                const fsTotal = (data.fs_cfg_total || 0) + (data.fs_gui_total || 0) + (data.fs_data_total || 0);
+                const fsUsed = (data.fs_cfg_used || 0) + (data.fs_gui_used || 0) + (data.fs_data_used || 0);
+                const fsFree = fsTotal > fsUsed ? fsTotal - fsUsed : 0;
+                setTxt('extFlashStatus', fmtBytes(fsFree) + ' boş / ' + fmtBytes(fsTotal));
             } else {
                 setTxt('extFlashStatus', 'Algılanmadı');
             }
@@ -2425,16 +2425,38 @@ function fetchDeviceInfo() {
                 setTxt('intFlashUsagePercent', intPct + '%');
             }
 
-            // External Flash
+            // External Flash - 3 LittleFS partitions
             if (data.ext_flash_total) {
-                const spiffsTotal = data.ext_spiffs_total || 0;
-                const spiffsUsed = data.ext_spiffs_used || 0;
-                const spiffsFree = spiffsTotal > spiffsUsed ? spiffsTotal - spiffsUsed : 0;
-                const extPct = spiffsTotal ? (spiffsUsed / spiffsTotal * 100).toFixed(1) : '0';
+                const cfgTotal = data.fs_cfg_total || 0;
+                const cfgUsed = data.fs_cfg_used || 0;
+                const guiTotal = data.fs_gui_total || 0;
+                const guiUsed = data.fs_gui_used || 0;
+                const dataTotal = data.fs_data_total || 0;
+                const dataUsed = data.fs_data_used || 0;
+
+                const fsTotal = cfgTotal + guiTotal + dataTotal;
+                const fsUsed = cfgUsed + guiUsed + dataUsed;
+                const fsFree = fsTotal > fsUsed ? fsTotal - fsUsed : 0;
+                const extPct = fsTotal ? (fsUsed / fsTotal * 100).toFixed(1) : '0';
+
                 setTxt('sysExtFlashTotal', fmtBytes(data.ext_flash_total));
-                setTxt('sysExtFlashSpiffs', fmtBytes(spiffsTotal));
-                setTxt('sysExtFlashUsed', fmtBytes(spiffsUsed));
-                setTxt('sysExtFlashFree', fmtBytes(spiffsFree));
+
+                // Per-partition info
+                const cfgPct = cfgTotal ? (cfgUsed / cfgTotal * 100).toFixed(1) : '0';
+                setTxt('sysFsCfgInfo', fmtBytes(cfgUsed) + ' / ' + fmtBytes(cfgTotal));
+                setBar('fsCfgBarFill', cfgPct);
+
+                const guiPct = guiTotal ? (guiUsed / guiTotal * 100).toFixed(1) : '0';
+                setTxt('sysFsGuiInfo', fmtBytes(guiUsed) + ' / ' + fmtBytes(guiTotal));
+                setBar('fsGuiBarFill', guiPct);
+
+                const dataPct = dataTotal ? (dataUsed / dataTotal * 100).toFixed(1) : '0';
+                setTxt('sysFsDataInfo', fmtBytes(dataUsed) + ' / ' + fmtBytes(dataTotal));
+                setBar('fsDataBarFill', dataPct);
+
+                // Totals
+                setTxt('sysExtFlashUsed', fmtBytes(fsUsed));
+                setTxt('sysExtFlashFree', fmtBytes(fsFree));
                 setBar('extFlashBarFill', extPct);
                 setTxt('extFlashUsagePercent', extPct + '%');
             }

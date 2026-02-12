@@ -10,7 +10,12 @@
     "login": "Login",
     "wrongPassword": "Wrong password",
     "locked": "Too many attempts. Try again in {minutes} minutes.",
-    "logoutAuto": "Logged out due to inactivity"
+    "logoutAuto": "Logged out due to inactivity",
+    "passwordRequired": "Password required",
+    "loginBtn": "Login",
+    "accountLocked": "Account locked. Wait {mins} minutes.",
+    "invalidPassword": "Invalid password. {remaining} attempts left.",
+    "serverUnavailable": "Cannot connect to server"
   },
   "timer": {
     "title": "Dead Man's Switch",
@@ -41,7 +46,8 @@
     "hourShort": "h",
     "minShort": "m",
     "alarmNone": "No warning alarms",
-    "alarmAt": "alarm at"
+    "alarmAt": "alarm at",
+    "resetFailed": "Reset failed"
   },
   "settings": {
     "title": "Settings",
@@ -157,7 +163,12 @@
     "passwordSame": "New password must be different",
     "enterCurrentPassword": "Enter your current password",
     "enterNewPassword": "Enter a new password",
-    "securitySaved": "Security settings saved"
+    "securitySaved": "Security settings saved",
+    "passwordMinLength": "Password must be at least 4 characters",
+    "passwordsMismatch": "New passwords don't match",
+    "passwordSameAsOld": "New password must differ from current",
+    "passwordChangeFailed": "Password change failed",
+    "securitySaveFailed": "Security settings save failed"
   },
   "hwOta": {
     "title": "Firmware Update",
@@ -256,7 +267,9 @@
     "exportFailed": "Export failed",
     "passwordMismatch": "Export passwords don't match",
     "enterBrowserPassword": "Enter your browser password",
-    "enterExportPassword": "Enter a backup password"
+    "enterExportPassword": "Enter a backup password",
+    "enterAuthPassword": "Enter your account password",
+    "passwordsMismatch": "Passwords don't match"
   },
   "info": {
     "title": "Device Information",
@@ -279,7 +292,7 @@
     "nvsSize": "NVS",
     "otaSize": "OTA",
     "extFlash": "External Flash",
-    "spiffs": "SPIFFS",
+    "filesystem": "LittleFS",
     "wifi": "WiFi",
     "status": "Status",
     "connected": "Connected",
@@ -351,5 +364,133 @@
     "apiKeyCopied": "API key copied",
     "apiKeyRefreshed": "API key refreshed",
     "autoLogoutSaved": "Auto logout time saved"
+  },
+  "reboot": {
+    "rebootFailed": "Reboot failed",
+    "factoryConfirm2": "This action cannot be undone! Are you sure?",
+    "factoryFailed": "Factory reset failed"
+  },
+  "wifi": {
+    "ssidEmpty": "SSID cannot be empty",
+    "saveFailed": "Save failed"
+  },
+  "smtp": {
+    "serverEmpty": "SMTP server cannot be empty",
+    "saveFailed": "Save failed"
+  },
+  "ap": {
+    "enabled": "AP Mode enabled",
+    "disabled": "AP Mode disabled",
+    "error": "AP Mode error"
+  },
+  "mail": {
+    "recipientCount": "{count} recipients",
+    "viewBtn": "View",
+    "invalidEmail": "Enter a valid email address",
+    "emailExists": "This email is already added",
+    "groupNameRequired": "Group name is required",
+    "maxGroups": "Maximum 10 mail groups"
+  },
+  "relay": {
+    "saveFailed": "Save failed",
+    "energyOn": "Power ON",
+    "energyOff": "Power OFF",
+    "testSuccess": "Relay tested",
+    "testFailed": "Relay test failed",
+    "testBtn": "Test Relay",
+    "testing": "Testing...",
+    "min": "min",
+    "sec": "sec",
+    "minute": "minute",
+    "second": "second",
+    "cycle": "cycle",
+    "tooShort": "Duration too short! At least {seconds} seconds needed.",
+    "openClose": "{pulse}s ON → {pulse}s OFF × {cycles} {cycleWord}"
+  },
+  "guiUpdate": {
+    "updating": "Updating...",
+    "updatingMsg": "Web interface is being updated...",
+    "updateBtn": "Update Web Interface",
+    "success": "GUI updated! {count} files downloaded.",
+    "done": "GUI update completed",
+    "error": "GUI update error: {error}",
+    "startFailed": "GUI update could not start"
+  },
+  "ota": {
+    "checking": "Checking for updates...",
+    "serverCheck": "Checking server...",
+    "newVersion": "New version available: {version}",
+    "upToDate": "No update available, system is up to date.",
+    "checkDone": "Update check completed",
+    "checkFailed": "Update check failed",
+    "systemUpToDate": "System up to date"
+  },
+  "pwa": {
+    "installed": "App installed!",
+    "notAvailable": "PWA installation not available",
+    "installing": "Installing PWA..."
+  },
+  "deviceInfo": {
+    "connected": "Connected",
+    "disconnected": "Not Connected",
+    "excellent": "Excellent",
+    "veryGood": "Very Good",
+    "good": "Good",
+    "weak": "Weak",
+    "veryWeak": "Very Weak",
+    "active": "Active",
+    "inactive": "Inactive",
+    "synced": "Synced",
+    "notSynced": "Not Synced",
+    "day": "day",
+    "hour": "hour",
+    "notDetected": "Not detected",
+    "freeOf": "{free} free / {total}",
+    "resetPowerOn": "Power on",
+    "resetExternal": "External reset",
+    "resetSoftware": "Software reset",
+    "resetPanic": "Panic / Exception",
+    "resetIntWdt": "Watchdog (INT_WDT)",
+    "resetTaskWdt": "Watchdog (TASK_WDT)",
+    "resetWdtOther": "Watchdog (Other)",
+    "resetDeepSleep": "Deep sleep",
+    "resetBrownout": "Brownout",
+    "resetSdio": "SDIO",
+    "resetCode": "Code: {code}"
+  },
+  "logs": {
+    "auditDownloaded": "Audit logs downloaded",
+    "deviceDownloaded": "Device logs downloaded",
+    "confirmClearAudit": "Audit logs will be deleted. Continue?",
+    "confirmClearDevice": "Device logs will be deleted. Continue?"
+  },
+  "test": {
+    "sending": "{service} test sending...",
+    "success": "{service} test successful",
+    "failed": "{service} test failed"
+  },
+  "autoLogout": {
+    "message": "No activity for {minutes} minutes"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "auto": "Auto",
+    "changed": "Theme changed: {name}"
+  },
+  "configTitles": {
+    "telegram": "Telegram Configuration",
+    "earlyMail": "Early Warning Mail",
+    "api": "API Configuration",
+    "triggerMail": "Mail Groups",
+    "relay": "Relay Configuration",
+    "actions": "Actions"
+  },
+  "alarm": {
+    "noAlarm": "No warning alarm",
+    "alarmAt": "Alarm at",
+    "dayUnit": "day",
+    "hourUnit": "hour",
+    "minuteUnit": "minute"
   }
 }

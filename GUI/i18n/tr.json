@@ -10,7 +10,12 @@
     "login": "Giriş Yap",
     "wrongPassword": "Yanlış şifre",
     "locked": "Çok fazla deneme. {minutes} dakika sonra tekrar deneyin.",
-    "logoutAuto": "İşlem yapılmadığı için çıkış yapıldı"
+    "logoutAuto": "İşlem yapılmadığı için çıkış yapıldı",
+    "passwordRequired": "Şifre gerekli",
+    "loginBtn": "Giriş",
+    "accountLocked": "Hesap kilitli. {mins} dakika bekleyin.",
+    "invalidPassword": "Geçersiz şifre. {remaining} deneme kaldı.",
+    "serverUnavailable": "Sunucuya bağlanılamıyor"
   },
   "timer": {
     "title": "Ölü Adam Anahtarı",
@@ -41,7 +46,8 @@
     "hourShort": "s",
     "minShort": "d",
     "alarmNone": "Uyarı alarmı yok",
-    "alarmAt": "alarm çalar"
+    "alarmAt": "alarm çalar",
+    "resetFailed": "Sıfırlama başarısız"
   },
   "settings": {
     "title": "Ayarlar",
@@ -157,7 +163,12 @@
     "passwordSame": "Yeni şifre mevcut şifreden farklı olmalı",
     "enterCurrentPassword": "Mevcut şifrenizi girin",
     "enterNewPassword": "Yeni şifre girin",
-    "securitySaved": "Güvenlik ayarları kaydedildi"
+    "securitySaved": "Güvenlik ayarları kaydedildi",
+    "passwordMinLength": "Şifre en az 4 karakter olmalı",
+    "passwordsMismatch": "Yeni şifreler eşleşmiyor",
+    "passwordSameAsOld": "Yeni şifre mevcut şifreden farklı olmalı",
+    "passwordChangeFailed": "Şifre değiştirilemedi",
+    "securitySaveFailed": "Güvenlik ayarları kaydedilemedi"
   },
   "hwOta": {
     "title": "Firmware Güncelleme",
@@ -256,7 +267,9 @@
     "exportFailed": "Dışa aktarma başarısız",
     "passwordMismatch": "Dışa aktarma şifreleri eşleşmiyor",
     "enterBrowserPassword": "Tarayıcı şifrenizi girin",
-    "enterExportPassword": "Yedek şifresi girin"
+    "enterExportPassword": "Yedek şifresi girin",
+    "enterAuthPassword": "Tarayıcı şifrenizi girin",
+    "passwordsMismatch": "Şifreler eşleşmiyor"
   },
   "info": {
     "title": "Cihaz Bilgileri",
@@ -279,7 +292,7 @@
     "nvsSize": "NVS",
     "otaSize": "OTA",
     "extFlash": "Harici Flash",
-    "spiffs": "SPIFFS",
+    "filesystem": "LittleFS",
     "wifi": "WiFi",
     "status": "Durum",
     "connected": "Bağlı",
@@ -351,5 +364,133 @@
     "apiKeyCopied": "API anahtarı kopyalandı",
     "apiKeyRefreshed": "API anahtarı yenilendi",
     "autoLogoutSaved": "Otomatik çıkış süresi kaydedildi"
+  },
+  "reboot": {
+    "rebootFailed": "Yeniden başlatma başarısız",
+    "factoryConfirm2": "Bu işlem geri alınamaz! Emin misiniz?",
+    "factoryFailed": "Fabrika sıfırlama başarısız"
+  },
+  "wifi": {
+    "ssidEmpty": "SSID boş olamaz",
+    "saveFailed": "Kaydetme hatası"
+  },
+  "smtp": {
+    "serverEmpty": "SMTP sunucu boş olamaz",
+    "saveFailed": "Kaydetme hatası"
+  },
+  "ap": {
+    "enabled": "AP Mod açıldı",
+    "disabled": "AP Mod kapatıldı",
+    "error": "AP Mod hatası"
+  },
+  "mail": {
+    "recipientCount": "{count} alıcı",
+    "viewBtn": "Görüntüle",
+    "invalidEmail": "Geçerli bir email adresi girin",
+    "emailExists": "Bu email zaten ekli",
+    "groupNameRequired": "Grup adı gereklidir",
+    "maxGroups": "Maksimum 10 mail grubu oluşturabilirsiniz"
+  },
+  "relay": {
+    "saveFailed": "Kaydetme hatası",
+    "energyOn": "Enerji VAR",
+    "energyOff": "Enerji YOK",
+    "testSuccess": "Röle test edildi",
+    "testFailed": "Röle testi başarısız",
+    "testBtn": "Röleyi Test Et",
+    "testing": "Test ediliyor...",
+    "min": "dk",
+    "sec": "sn",
+    "minute": "dakika",
+    "second": "saniye",
+    "cycle": "döngü",
+    "tooShort": "Süre çok kısa! En az {seconds} saniye gerekli.",
+    "openClose": "{pulse} sn açık → {pulse} sn kapalı × {cycles} {cycleWord}"
+  },
+  "guiUpdate": {
+    "updating": "Güncelleniyor...",
+    "updatingMsg": "Web arayüzü güncelleniyor...",
+    "updateBtn": "Web Arayüzünü Güncelle",
+    "success": "GUI güncellendi! {count} dosya indirildi.",
+    "done": "GUI güncelleme tamamlandı",
+    "error": "GUI güncelleme hatası: {error}",
+    "startFailed": "GUI güncelleme başlatılamadı"
+  },
+  "ota": {
+    "checking": "Güncelleme kontrol ediliyor...",
+    "serverCheck": "Sunucu kontrol ediliyor...",
+    "newVersion": "Yeni sürüm mevcut: {version}",
+    "upToDate": "Güncelleme mevcut değil, sistem güncel.",
+    "checkDone": "Güncelleme kontrolü yapıldı",
+    "checkFailed": "Güncelleme kontrolü başarısız",
+    "systemUpToDate": "Sistem güncel"
+  },
+  "pwa": {
+    "installed": "Uygulama yüklendi!",
+    "notAvailable": "PWA kurulumu kullanılamıyor",
+    "installing": "PWA yükleniyor..."
+  },
+  "deviceInfo": {
+    "connected": "Bağlı",
+    "disconnected": "Bağlı Değil",
+    "excellent": "Mükemmel",
+    "veryGood": "Çok İyi",
+    "good": "İyi",
+    "weak": "Zayıf",
+    "veryWeak": "Çok Zayıf",
+    "active": "Aktif",
+    "inactive": "Kapalı",
+    "synced": "Senkronize",
+    "notSynced": "Senkronize Değil",
+    "day": "gün",
+    "hour": "saat",
+    "notDetected": "Algılanmadı",
+    "freeOf": "{free} boş / {total}",
+    "resetPowerOn": "Güç açıldı",
+    "resetExternal": "Harici reset",
+    "resetSoftware": "Yazılım reset",
+    "resetPanic": "Panik / İstisna",
+    "resetIntWdt": "Watchdog (INT_WDT)",
+    "resetTaskWdt": "Watchdog (TASK_WDT)",
+    "resetWdtOther": "Watchdog (Diğer)",
+    "resetDeepSleep": "Derin uyku",
+    "resetBrownout": "Brownout",
+    "resetSdio": "SDIO",
+    "resetCode": "Kod: {code}"
+  },
+  "logs": {
+    "auditDownloaded": "İşlem logları indirildi",
+    "deviceDownloaded": "Cihaz logları indirildi",
+    "confirmClearAudit": "İşlem logları silinecek. Devam edilsin mi?",
+    "confirmClearDevice": "Cihaz logları silinecek. Devam edilsin mi?"
+  },
+  "test": {
+    "sending": "{service} test gönderiliyor...",
+    "success": "{service} test başarılı",
+    "failed": "{service} test başarısız"
+  },
+  "autoLogout": {
+    "message": "{minutes} dakika işlem yapılmadı"
+  },
+  "theme": {
+    "dark": "Koyu",
+    "light": "Açık",
+    "auto": "Otomatik",
+    "changed": "Tema değiştirildi: {name}"
+  },
+  "configTitles": {
+    "telegram": "Telegram Yapılandırması",
+    "earlyMail": "Erken Uyarı Mail",
+    "api": "API Yapılandırması",
+    "triggerMail": "Mail Grupları",
+    "relay": "Röle Yapılandırması",
+    "actions": "Aksiyonlar"
+  },
+  "alarm": {
+    "noAlarm": "Uyarı alarmı yok",
+    "alarmAt": "alarm çalar",
+    "dayUnit": "gün",
+    "hourUnit": "saat",
+    "minuteUnit": "dakika"
   }
 }

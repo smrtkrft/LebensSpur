@@ -44,7 +44,7 @@ static const char *TAG = "web_server";
 
 static httpd_handle_t s_server = NULL;
 
-/* Embedded setup.html - available without SPIFFS */
+/* Embedded setup.html - available without LittleFS */
 extern const uint8_t setup_html_start[] asm("_binary_setup_html_start");
 extern const uint8_t setup_html_end[] asm("_binary_setup_html_end");
 
@@ -892,10 +892,14 @@ static esp_err_t api_device_info(httpd_req_t *req)
     const esp_partition_t *nvs_part = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);
 
-    // External flash
+    // External flash - 3 LittleFS partitions
     uint32_t ext_flash_total = ext_flash_get_size();
-    uint32_t ext_spiffs_total = 0, ext_spiffs_used = 0;
-    file_manager_get_info(&ext_spiffs_total, &ext_spiffs_used);
+    uint32_t fs_cfg_total = 0, fs_cfg_used = 0;
+    uint32_t fs_gui_total = 0, fs_gui_used = 0;
+    uint32_t fs_data_total = 0, fs_data_used = 0;
+    file_manager_get_partition_info(FILE_MGR_SETTINGS_MOUNT, &fs_cfg_total, &fs_cfg_used);
+    file_manager_get_partition_info(FILE_MGR_GUI_MOUNT, &fs_gui_total, &fs_gui_used);
+    file_manager_get_partition_info(FILE_MGR_DATA_MOUNT, &fs_data_total, &fs_data_used);
 
     // Uptime
     int64_t uptime_us = esp_timer_get_time();
@@ -945,10 +949,14 @@ static esp_err_t api_device_info(httpd_req_t *req)
     cJSON_AddNumberToObject(json, "ota_size", ota_part ? ota_part->size : 0);
     cJSON_AddNumberToObject(json, "nvs_size", nvs_part ? nvs_part->size : 0);
 
-    // External flash
+    // External flash - per-partition info
     cJSON_AddNumberToObject(json, "ext_flash_total", ext_flash_total);
-    cJSON_AddNumberToObject(json, "ext_spiffs_total", ext_spiffs_total);
-    cJSON_AddNumberToObject(json, "ext_spiffs_used", ext_spiffs_used);
+    cJSON_AddNumberToObject(json, "fs_cfg_total", fs_cfg_total);
+    cJSON_AddNumberToObject(json, "fs_cfg_used", fs_cfg_used);
+    cJSON_AddNumberToObject(json, "fs_gui_total", fs_gui_total);
+    cJSON_AddNumberToObject(json, "fs_gui_used", fs_gui_used);
+    cJSON_AddNumberToObject(json, "fs_data_total", fs_data_total);
+    cJSON_AddNumberToObject(json, "fs_data_used", fs_data_used);
 
     // WiFi
     cJSON_AddBoolToObject(json, "sta_connected", wifi_status.sta_connected);
@@ -1930,7 +1938,7 @@ static esp_err_t api_ota_check(httpd_req_t *req)
  * ============================================ */
 
 #define GUI_REPO_BASE  "https://raw.githubusercontent.com/smrtkrft/LebensSpur/main/GUI/"
-#define GUI_DEST_DIR   "/ext/web"
+#define GUI_DEST_DIR   "/gui/web"
 
 typedef struct {
     const char *filename;
@@ -1967,7 +1975,7 @@ static esp_err_t download_one_file(const char *filename, const char *subdir)
     } else {
         snprintf(url, sizeof(url), GUI_REPO_BASE "%s", filename);
     }
-    // Always store flat on SPIFFS (no subdirectories)
+    // Store in GUI partition (LittleFS supports subdirectories)
     snprintf(path, sizeof(path), GUI_DEST_DIR "/%s", filename);
 
     ESP_LOGI(TAG, "DL %s", filename);
@@ -1997,7 +2005,7 @@ static esp_err_t download_one_file(const char *filename, const char *subdir)
         return ESP_FAIL;
     }
 
-    /* Read into temp buffer and write to SPIFFS */
+    /* Read into temp buffer and write to LittleFS */
     FILE *f = fopen(path, "wb");
     if (!f) {
         ESP_LOGE(TAG, "Cannot create %s", path);

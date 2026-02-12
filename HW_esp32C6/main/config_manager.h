@@ -3,7 +3,7 @@
  * @brief Configuration Manager - JSON on External Flash
  * 
  * All settings stored as JSON files on external flash.
- * Path: /ext/config/
+ * Path: /cfg/
  * 
  * Security Notes:
  * - Passwords stored in plain text (device physical security assumed)
@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 /** Config file paths (on external flash) */
-#define CONFIG_BASE_PATH        "/ext/config"
+#define CONFIG_BASE_PATH        "/cfg"
 #define CONFIG_TIMER_FILE       CONFIG_BASE_PATH "/timer.json"
 #define CONFIG_WIFI_FILE        CONFIG_BASE_PATH "/wifi.json"
 #define CONFIG_WIFI_BACKUP_FILE CONFIG_BASE_PATH "/wifi_backup.json"
