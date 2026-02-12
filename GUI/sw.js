@@ -6,7 +6,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-const CACHE_VERSION = 'v0.1.0';
+const CACHE_VERSION = 'v0.2.0';
 const CACHE_NAME = `lebensspur-${CACHE_VERSION}`;
 
 // Cache'lenecek statik dosyalar

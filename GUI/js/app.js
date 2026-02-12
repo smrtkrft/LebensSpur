@@ -5,6 +5,13 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Safe i18n helper — fallback if i18n.js not loaded yet
+// ─────────────────────────────────────────────────────────────────────────────
+if (typeof window.t !== 'function') {
+    window.t = function(key) { return key; };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Authenticated Fetch Helper
 // ─────────────────────────────────────────────────────────────────────────────
 function authFetch(url, options = {}) {
@@ -2964,60 +2971,72 @@ function updateCarouselPosition(instant = false) {
 }
 
 function handleSaveSettings() {
-    // Convert unit+value to intervalMinutes
-    const { unit, value, alarmCount } = state.timerConfig;
-    let intervalMinutes = value;
-    if (unit === 'days') intervalMinutes = value * 24 * 60;
-    else if (unit === 'hours') intervalMinutes = value * 60;
-    // minutes stays as-is
+    console.log('[LebensSpur] handleSaveSettings called', JSON.stringify(state.timerConfig));
     
-    // Calculate warningMinutes: spread alarms evenly over the interval
-    let warningMinutes = 60; // default 60 min before deadline
-    if (alarmCount > 0) {
-        if (unit === 'hours') warningMinutes = alarmCount * 60;
-        else if (unit === 'days') warningMinutes = alarmCount * 24 * 60;
-        else if (unit === 'minutes') warningMinutes = alarmCount;
-    }
-    
-    const timerPayload = {
-        enabled: state.timerEnabled || state.timerState !== 'DISABLED',
-        intervalMinutes: intervalMinutes,
-        warningMinutes: warningMinutes,
-        alarmCount: alarmCount
-    };
-    
-    // Save timer config
-    authFetch('/api/config/timer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(timerPayload)
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            // Handle vacation mode change
-            const vacAction = state.vacationMode.enabled
-                ? authFetch('/api/timer/vacation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: true, days: state.vacationMode.days })
-                  })
-                : authFetch('/api/timer/vacation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: false })
-                  });
-            
-            return vacAction.then(() => {
-                showToast(t('toast.settingsSaved'), 'success');
-                pollTimerStatus();
-                closeSettings();
-            });
-        } else {
-            showToast(data.error || t('toast.saveError'), 'error');
+    try {
+        // Convert unit+value to intervalMinutes
+        const { unit, value, alarmCount } = state.timerConfig;
+        let intervalMinutes = value;
+        if (unit === 'days') intervalMinutes = value * 24 * 60;
+        else if (unit === 'hours') intervalMinutes = value * 60;
+        // minutes stays as-is
+        
+        // Calculate warningMinutes: spread alarms evenly over the interval
+        let warningMinutes = 60; // default 60 min before deadline
+        if (alarmCount > 0) {
+            if (unit === 'hours') warningMinutes = alarmCount * 60;
+            else if (unit === 'days') warningMinutes = alarmCount * 24 * 60;
+            else if (unit === 'minutes') warningMinutes = alarmCount;
         }
-    })
-    .catch(() => showToast(t('toast.connectionError'), 'error'));
+        
+        const timerPayload = {
+            enabled: state.timerEnabled || state.timerState !== 'DISABLED',
+            intervalMinutes: intervalMinutes,
+            warningMinutes: warningMinutes,
+            alarmCount: alarmCount
+        };
+        
+        console.log('[LebensSpur] Saving timer:', JSON.stringify(timerPayload));
+        
+        // Save timer config
+        authFetch('/api/config/timer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(timerPayload)
+        })
+        .then(res => {
+            console.log('[LebensSpur] Timer save response:', res.status);
+            return res.json();
+        })
+        .then(data => {
+            console.log('[LebensSpur] Timer save result:', JSON.stringify(data));
+            if (data.success) {
+                // Handle vacation mode change
+                const vacPayload = state.vacationMode.enabled
+                    ? { enabled: true, days: state.vacationMode.days }
+                    : { enabled: false };
+                
+                return authFetch('/api/timer/vacation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(vacPayload)
+                }).then(() => {
+                    showToast(t('toast.settingsSaved'), 'success');
+                    pollTimerStatus();
+                    closeSettings();
+                });
+            } else {
+                showToast(data.error || t('toast.saveError'), 'error');
+            }
+        })
+        .catch(err => {
+            console.error('[LebensSpur] Save error:', err);
+            showToast(t('toast.connectionError'), 'error');
+        });
+    } catch (e) {
+        console.error('[LebensSpur] handleSaveSettings exception:', e);
+        showToast('Save failed: ' + e.message, 'error');
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
