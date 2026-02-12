@@ -1753,10 +1753,10 @@ static esp_err_t api_config_import(httpd_req_t *req)
         return web_send_error(req, 401, "Unauthorized");
     }
     
-    char *body = malloc(4096);
+    char *body = malloc(16384);
     if (!body) return web_send_error(req, 500, "Out of memory");
     
-    int len = web_get_body(req, body, 4096);
+    int len = web_get_body(req, body, 16384);
     if (len <= 0) {
         free(body);
         return web_send_error(req, 400, "No body");
@@ -1766,23 +1766,18 @@ static esp_err_t api_config_import(httpd_req_t *req)
     free(body);
     if (!json) return web_send_error(req, 400, "Invalid JSON");
     
-    // The body contains {data: base64_encoded_json, password: "..."}
+    // The body contains {data: raw_json_string, password: "..."}
     cJSON *data_item = cJSON_GetObjectItem(json, "data");
     if (!data_item || !cJSON_IsString(data_item)) {
         cJSON_Delete(json);
         return web_send_error(req, 400, "Missing data field");
     }
     
-    // The data is base64-encoded JSON (the actual backup content)
-    // For now we decode the base64 and treat it as direct JSON
-    // (Browser sends base64 from FileReader.readAsDataURL)
-    const char *b64_data = data_item->valuestring;
+    // The data field contains the raw JSON backup text
+    // (Browser sends raw text via FileReader.readAsText)
+    const char *raw_data = data_item->valuestring;
     
-    // Simple base64 decode - we just parse the raw JSON backup
-    // Since handleImport sends base64 from readAsDataURL, we need to decode it
-    // For simplicity, we'll use a smaller approach: just try parsing as JSON 
-    // (the frontend can also send raw JSON)
-    cJSON *backup = cJSON_Parse(b64_data);
+    cJSON *backup = cJSON_Parse(raw_data);
     if (!backup) {
         // Try treating as a raw backup JSON string  
         cJSON_Delete(json);

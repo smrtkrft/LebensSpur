@@ -596,6 +596,12 @@ function handleExport() {
         return;
     }
     
+    // Export şifreleri eşleşme kontrolü
+    if (exportPassword && exportPassword !== exportPasswordConfirm) {
+        showToast('Şifreler eşleşmiyor', 'error');
+        return;
+    }
+    
     // Send export request to backend
     fetch('/api/config/export', {
         method: 'POST',
@@ -639,12 +645,12 @@ function handleImport() {
     const reader = new FileReader();
     
     reader.onload = function(e) {
-        const base64 = e.target.result.split(',')[1] || btoa(e.target.result);
+        const text = e.target.result;
         
         fetch('/api/config/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: base64, password: password || '' })
+            body: JSON.stringify({ data: text, password: password || '' })
         })
         .then(res => res.json())
         .then(data => {
@@ -658,7 +664,7 @@ function handleImport() {
         .catch(() => showToast('Bağlantı hatası', 'error'));
     };
     
-    reader.readAsDataURL(file);
+    reader.readAsText(file);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1338,6 +1344,14 @@ function initApModeValues() {
             if (apMdnsInput) apMdnsInput.value = hostname + '.local';
             if (wifiMdnsInput) wifiMdnsInput.placeholder = hostname;
             if (wifiBackupMdnsInput) wifiBackupMdnsInput.placeholder = hostname;
+            
+            // AP mode toggle durumunu backend'den yükle
+            const apToggle = document.getElementById('apModeEnabled');
+            if (apToggle && data.ap_active !== undefined) {
+                apToggle.checked = data.ap_active;
+                const apWarn = document.getElementById('apModeWarning');
+                if (apWarn) apWarn.classList.toggle('hidden', apToggle.checked);
+            }
         })
         .catch(() => {}); // Ignore - will be populated on fetchDeviceInfo    
     
@@ -2257,6 +2271,7 @@ function handleLogin(e) {
             loadMailGroups();
             loadWifiConfig();
             loadSmtpConfig();
+            loadSecuritySettings();
             fetchLogs();
             fetchDeviceInfo();
         } else if (data.lockoutSeconds) {
