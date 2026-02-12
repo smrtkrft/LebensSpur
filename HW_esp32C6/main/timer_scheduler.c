@@ -363,6 +363,44 @@ bool timer_scheduler_is_vacation(void)
 }
 
 /* ============================================
+ * CONFIG RELOAD (called after web API save)
+ * ============================================ */
+
+void timer_scheduler_reload_config(void)
+{
+    timer_config_t old_config = s_config;
+    config_load_timer(&s_config);
+    
+    // If timer was disabled and now enabled
+    if (!old_config.enabled && s_config.enabled) {
+        s_state = TIMER_STATE_RUNNING;
+        s_runtime.triggered = false;
+        calculate_next_deadline();
+        LOG_TIMER(LOG_LEVEL_INFO, "Timer enabled via config reload");
+        return;
+    }
+    
+    // If timer was enabled and now disabled
+    if (old_config.enabled && !s_config.enabled) {
+        s_state = TIMER_STATE_DISABLED;
+        LOG_TIMER(LOG_LEVEL_INFO, "Timer disabled via config reload");
+        return;
+    }
+    
+    // If interval changed while timer is running
+    if (s_config.enabled && old_config.interval_minutes != s_config.interval_minutes) {
+        if (s_state != TIMER_STATE_TRIGGERED) {
+            calculate_next_deadline();
+            if (s_state == TIMER_STATE_DISABLED) {
+                s_state = TIMER_STATE_RUNNING;
+            }
+            LOG_TIMER(LOG_LEVEL_INFO, "Timer interval changed to %lu min, deadline recalculated",
+                       (unsigned long)s_config.interval_minutes);
+        }
+    }
+}
+
+/* ============================================
  * STATUS
  * ============================================ */
 

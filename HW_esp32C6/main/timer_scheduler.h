@@ -166,6 +166,12 @@ void timer_scheduler_time_remaining_str(char *buffer, size_t size);
  * ============================================ */
 
 /**
+ * @brief Reload config from NVS and recalculate deadline
+ * Call after saving timer config via web API
+ */
+void timer_scheduler_reload_config(void);
+
+/**
  * @brief Get state name string
  */
 const char* timer_scheduler_state_name(timer_state_t state);

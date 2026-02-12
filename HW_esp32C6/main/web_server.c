@@ -408,6 +408,7 @@ static esp_err_t api_set_timer_config(httpd_req_t *req)
     cJSON_Delete(json);
     
     config_save_timer(&config);
+    timer_scheduler_reload_config();
     LOG_CONFIG(LOG_LEVEL_INFO, "Timer config updated");
     
     return web_send_success(req, "Timer config saved");

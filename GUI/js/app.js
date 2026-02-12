@@ -18,7 +18,7 @@ function authFetch(url, options = {}) {
                 timerPollInterval = null;
             }
             showPage('login');
-            showToast('Oturum süresi doldu, lütfen tekrar giriş yapın', 'warning');
+            showToast(t('toast.sessionExpired'), 'warning');
             throw new Error('SESSION_EXPIRED');
         }
         return res;
@@ -156,6 +156,10 @@ document.addEventListener('DOMContentLoaded', () => {
         I18n.init().then(() => {
             const sel = document.getElementById('languageSelect');
             if (sel) sel.value = I18n.getLanguage();
+        });
+        // Re-render dynamic content when language changes
+        window.addEventListener('languageChanged', () => {
+            if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
         });
     }
 });
@@ -417,7 +421,7 @@ function initEventListeners() {
             state.autoLogoutTime = Math.max(1, Math.min(60, val));
             localStorage.setItem('autoLogoutTime', state.autoLogoutTime);
             autoLogoutInput.value = state.autoLogoutTime;
-            showToast('Otomatik çıkış süresi kaydedildi', 'success');
+            showToast(t('toast.autoLogoutSaved'), 'success');
         });
     }
     
@@ -445,7 +449,7 @@ function initEventListeners() {
         copyApiKeyBtn.addEventListener('click', () => {
             const key = document.getElementById('resetApiKey')?.value;
             if (key && key !== '-') {
-                navigator.clipboard.writeText(key).then(() => showToast('API anahtarı kopyalandı', 'success'));
+                navigator.clipboard.writeText(key).then(() => showToast(t('toast.apiKeyCopied'), 'success'));
             }
         });
     }
@@ -592,7 +596,7 @@ function handlePasswordChange() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showToast('Şifre başarıyla değiştirildi', 'success');
+            showToast(t('toast.passwordChanged'), 'success');
             document.getElementById('currentPassword').value = '';
             document.getElementById('newPassword').value = '';
             document.getElementById('confirmPassword').value = '';
@@ -600,7 +604,7 @@ function handlePasswordChange() {
             showToast(data.error || 'Şifre değiştirilemedi', 'error');
         }
     })
-    .catch(() => showToast('Bağlantı hatası', 'error'));
+    .catch(() => showToast(t('toast.connectionError'), 'error'));
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -640,7 +644,7 @@ function handleExport() {
         a.download = `lebensspur-backup-${new Date().toISOString().slice(0,10)}.lsbackup`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('Ayarlar dışa aktarıldı', 'success');
+        showToast(t('importExport.exportSuccess'), 'success');
     })
     .catch(err => showToast(err.message || 'Dışa aktarma başarısız', 'error'));
     
@@ -676,7 +680,7 @@ function handleImport() {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                showToast('Ayarlar başarıyla içe aktarıldı. Cihaz yeniden başlatılacak.', 'success');
+                showToast(t('importExport.importSuccess'), 'success');
                 setTimeout(() => location.reload(), 3000);
             } else {
                 showToast(data.error || 'İçe aktarma başarısız', 'error');
@@ -692,13 +696,13 @@ function handleImport() {
 // Reboot & Factory Reset
 // ─────────────────────────────────────────────────────────────────────────────
 function handleReboot() {
-    if (!confirm('Cihaz yeniden başlatılacak. Devam edilsin mi?')) return;
+    if (!confirm(t('settingsSys.confirmReboot'))) return;
     
     fetch('/api/reboot', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                showToast('Cihaz yeniden başlatılıyor...', 'success');
+                showToast(t('toast.rebootStarted'), 'info');
                 setTimeout(() => location.reload(), 5000);
             } else {
                 showToast(data.error || 'Yeniden başlatma başarısız', 'error');
@@ -708,14 +712,14 @@ function handleReboot() {
 }
 
 function handleFactoryReset() {
-    if (!confirm('TÜM ayarlar silinecek! Bu işlem geri alınamaz. Devam edilsin mi?')) return;
+    if (!confirm(t('settingsSys.confirmFactoryReset'))) return;
     if (!confirm('Bu işlem geri alınamaz! Emin misiniz?')) return;
     
     fetch('/api/factory-reset', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                showToast('Fabrika ayarlarına sıfırlama yapılıyor...', 'success');
+                showToast(t('toast.factoryResetStarted'), 'info');
                 localStorage.clear();
                 setTimeout(() => location.reload(), 5000);
             } else {
@@ -765,7 +769,7 @@ function saveSecuritySettings() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showToast('Güvenlik ayarları kaydedildi', 'success');
+            showToast(t('toast.securitySaved'), 'success');
         } else {
             showToast(data.error || 'Güvenlik ayarları kaydedilemedi', 'error');
         }
@@ -779,7 +783,7 @@ function handleRefreshApiKey() {
         .then(data => {
             if (data.apiKey) {
                 document.getElementById('resetApiKey').value = data.apiKey;
-                showToast('API anahtarı yenilendi', 'success');
+                showToast(t('toast.apiKeyRefreshed'), 'success');
             }
         })
         .catch(() => showToast('Bağlantı hatası', 'error'));
@@ -860,7 +864,7 @@ function saveMailGroup() {
         const newId = Math.max(0, ...state.mailGroups.map(g => g.id)) + 1;
         const newGroup = { id: newId, name, subject, content, files, recipients };
         state.mailGroups.push(newGroup);
-        showToast('Mail grubu oluşturuldu', 'success');
+        showToast(t('toast.mailGroupCreated'), 'success');
     } else {
         // Update existing group
         const group = state.mailGroups.find(g => g.id === state.currentEditingGroup);
@@ -870,7 +874,7 @@ function saveMailGroup() {
             group.content = content;
             group.files = files;
             group.recipients = recipients;
-            showToast('Mail grubu güncellendi', 'success');
+            showToast(t('toast.mailGroupUpdated'), 'success');
         }
     }
     
@@ -889,7 +893,7 @@ function deleteMailGroup() {
     if (groupIndex > -1) {
         state.mailGroups.splice(groupIndex, 1);
         persistMailGroups();
-        showToast('Mail grubu silindi', 'success');
+        showToast(t('toast.mailGroupDeleted'), 'success');
         renderMailGroupList();
         handleModalBack();
     }
@@ -1038,7 +1042,7 @@ function saveWifiConfig(type) {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showToast(isBackup ? 'Yedek WiFi kaydedildi' : 'WiFi kaydedildi', 'success');
+            showToast(isBackup ? t('toast.backupWifiSaved') : t('toast.wifiSaved'), 'success');
             initConnectionConfigCheck();
         } else {
             showToast(data.error || 'Kaydetme hatası', 'error');
@@ -1096,7 +1100,7 @@ function saveSmtpConfig() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showToast('SMTP ayarları kaydedildi', 'success');
+            showToast(t('toast.smtpSaved'), 'success');
             initConnectionConfigCheck();
         } else {
             showToast(data.error || 'Kaydetme hatası', 'error');
@@ -1455,7 +1459,7 @@ function saveRelayConfig() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showToast('Röle ayarları kaydedildi', 'success');
+            showToast(t('toast.relaySaved'), 'success');
             handleModalBack();
         } else {
             showToast(data.error || 'Kaydetme hatası', 'error');
@@ -1644,7 +1648,7 @@ function initActionCards() {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                showToast('API ayarları kaydedildi', 'success');
+                showToast(t('toast.apiSaved'), 'success');
                 handleModalBack();
             } else showToast(data.error || 'Hata', 'error');
         })
@@ -1764,7 +1768,7 @@ function initActionCards() {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                showToast('Telegram ayarları kaydedildi', 'success');
+                showToast(t('toast.telegramSaved'), 'success');
                 handleModalBack();
             } else showToast(data.error || 'Hata', 'error');
         })
@@ -1788,7 +1792,7 @@ function initActionCards() {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                showToast('Erken uyarı mail ayarları kaydedildi', 'success');
+                showToast(t('toast.earlyMailSaved'), 'success');
                 handleModalBack();
             } else showToast(data.error || 'Hata', 'error');
         })
@@ -2298,7 +2302,7 @@ function handleLogin(e) {
             state.loginAttempts = 0;
             state.lockoutUntil = null;
             showPage('app');
-            showToast('Giriş başarılı', 'success');
+            showToast(t('toast.loginSuccess'), 'success');
             startAutoLogoutTimer();
             pollTimerStatus();
             loadTimerConfig();
@@ -2335,7 +2339,7 @@ function handleLogout() {
     state.isAuthenticated = false;
     stopAutoLogoutTimer();
     showPage('login');
-    showToast('Çıkış yapıldı', 'success');
+    showToast(t('toast.loggedOut'), 'info');
 }
 
 function fetchDeviceInfo() {
@@ -2523,7 +2527,7 @@ function handleReset() {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast('Tetikleme onaylandı, zamanlayıcı yeniden başlatıldı', 'success');
+                    showToast(t('toast.triggerAcknowledged'), 'success');
                     pollTimerStatus();
                 } else {
                     showToast(data.error || 'Hata', 'error');
@@ -2536,7 +2540,7 @@ function handleReset() {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast('Zamanlayıcı etkinleştirildi', 'success');
+                    showToast(t('toast.timerEnabled'), 'success');
                     pollTimerStatus();
                 }
             })
@@ -2547,7 +2551,7 @@ function handleReset() {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast('Zamanlayıcı sıfırlandı', 'success');
+                    showToast(t('toast.timerReset'), 'success');
                     pollTimerStatus();
                 } else {
                     showToast(data.error || 'Sıfırlama başarısız', 'error');
@@ -2563,7 +2567,7 @@ function handlePause() {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast('Geri sayım başlatıldı', 'success');
+                    showToast(t('toast.countStarted'), 'success');
                     pollTimerStatus();
                 }
             })
@@ -2573,7 +2577,7 @@ function handlePause() {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    showToast('Geri sayım durduruldu', 'warning');
+                    showToast(t('toast.countStopped'), 'info');
                     pollTimerStatus();
                 }
             })
@@ -2652,7 +2656,7 @@ function updateTimerDisplay() {
     // Days display
     if (elements.timeDays) {
         if (days > 0) {
-            elements.timeDays.textContent = `${days}g`;
+            elements.timeDays.textContent = `${days}${t('timer.dayShort')}`;
             elements.timeDays.classList.remove('hidden');
         } else {
             elements.timeDays.classList.add('hidden');
@@ -2662,7 +2666,7 @@ function updateTimerDisplay() {
     // Hours display
     if (elements.timeHours) {
         if (days > 0 || hours > 0) {
-            elements.timeHours.textContent = `${hours}s`;
+            elements.timeHours.textContent = `${hours}${t('timer.hourShort')}`;
             elements.timeHours.classList.remove('hidden');
         } else {
             elements.timeHours.classList.add('hidden');
@@ -2671,21 +2675,21 @@ function updateTimerDisplay() {
     
     // Minutes display (always visible)
     if (elements.timeMinutes) {
-        elements.timeMinutes.textContent = `${minutes}d`;
+        elements.timeMinutes.textContent = `${minutes}${t('timer.minShort')}`;
     }
     
     // Timer label based on state
     const timerLabel = document.querySelector('.timer-label');
     if (timerLabel) {
         const labels = {
-            'DISABLED': 'DEVRE DIŞI',
-            'RUNNING': 'KALAN SÜRE',
-            'WARNING': '⚠ UYARI',
-            'TRIGGERED': '🔴 TETİKLENDİ',
-            'PAUSED': 'DURAKLATILDI',
-            'VACATION': '🏖 TATİL MODU'
+            'DISABLED': t('timer.stateDisabled'),
+            'RUNNING': t('timer.stateRunning'),
+            'WARNING': t('timer.stateWarning'),
+            'TRIGGERED': t('timer.stateTriggered'),
+            'PAUSED': t('timer.statePaused'),
+            'VACATION': t('timer.stateVacation')
         };
-        timerLabel.textContent = labels[state.timerState] || 'KALAN SÜRE';
+        timerLabel.textContent = labels[state.timerState] || t('timer.stateRunning');
     }
     
     // Ring progress
@@ -3005,15 +3009,15 @@ function handleSaveSettings() {
                   });
             
             return vacAction.then(() => {
-                showToast('Ayarlar kaydedildi', 'success');
+                showToast(t('toast.settingsSaved'), 'success');
                 pollTimerStatus();
                 closeSettings();
             });
         } else {
-            showToast(data.error || 'Kaydetme hatası', 'error');
+            showToast(data.error || t('toast.saveError'), 'error');
         }
     })
-    .catch(() => showToast('Bağlantı hatası', 'error'));
+    .catch(() => showToast(t('toast.connectionError'), 'error'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3219,7 +3223,7 @@ function resetAutoLogoutTimer() {
 }
 
 function handleAutoLogout() {
-    showToast('İşlem yapılmadığı için çıkış yapıldı', 'warning');
+    showToast(t('toast.autoLogoutMsg'), 'warning');
     addAuditLog('auto_logout', `${state.autoLogoutTime} dakika işlem yapılmadı`);
     handleLogout();
 }
@@ -3533,7 +3537,7 @@ function clearLogs(type) {
                 state.deviceLogs = [];
                 renderAuditLogs();
                 renderDeviceLogs();
-                showToast('Loglar temizlendi', 'success');
+                showToast(t('toast.logsCleared'), 'success');
             } else showToast(data.error || 'Hata', 'error');
         })
         .catch(() => showToast('Bağlantı hatası', 'error'));
