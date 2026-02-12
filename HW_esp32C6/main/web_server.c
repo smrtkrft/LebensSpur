@@ -2044,6 +2044,9 @@ static void gui_download_task(void *arg)
     s_dl_done    = false;
     s_dl_error   = false;
 
+    /* Create destination directory (LittleFS requires explicit mkdir) */
+    file_manager_mkdir(GUI_DEST_DIR);
+
     /* Ensure DNS is configured (fallback to Google DNS if empty) */
     const ip_addr_t *d0 = dns_getserver(0);
     if (ip_addr_isany(d0)) {

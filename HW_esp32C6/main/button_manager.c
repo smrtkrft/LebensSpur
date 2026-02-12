@@ -75,8 +75,7 @@ static void button_task(void *arg)
             } else if (!pressed && s_pressed) {
                 // Button released
                 s_pressed = false;
-                uint32_t duration = (uint32_t)(now - s_press_time);
-                
+
                 if (s_long_press_fired) {
                     fire_event(BUTTON_EVENT_LONG_RELEASE);
                     s_click_count = 0;
