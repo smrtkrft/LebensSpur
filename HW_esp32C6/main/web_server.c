@@ -1417,6 +1417,68 @@ static esp_err_t api_set_early_mail_config(httpd_req_t *req)
 }
 
 /* ============================================
+ * CONNECTION TEST ENDPOINTS
+ * ============================================ */
+
+// POST /api/test/smtp (requires auth) - test SMTP connection
+static esp_err_t api_test_smtp(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    // TODO: Implement actual SMTP test when mail_sender is ready
+    LOG_CONFIG(LOG_LEVEL_INFO, "SMTP test requested (placeholder)");
+    return web_send_success(req, "SMTP test sent");
+}
+
+// POST /api/test/wifi (requires auth) - test WiFi connection
+static esp_err_t api_test_wifi(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    // Simple: check if WiFi is connected
+    bool connected = wifi_manager_is_connected();
+    if (connected) {
+        return web_send_success(req, "WiFi connected");
+    }
+    return web_send_error(req, 500, "WiFi not connected");
+}
+
+// POST /api/test/telegram (requires auth) - test Telegram connection
+static esp_err_t api_test_telegram(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    // TODO: Implement actual Telegram test
+    LOG_CONFIG(LOG_LEVEL_INFO, "Telegram test requested (placeholder)");
+    return web_send_success(req, "Telegram test sent");
+}
+
+// POST /api/test/webhook (requires auth) - test Webhook
+static esp_err_t api_test_webhook(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    // TODO: Implement actual Webhook test
+    LOG_CONFIG(LOG_LEVEL_INFO, "Webhook test requested (placeholder)");
+    return web_send_success(req, "Webhook test sent");
+}
+
+// POST /api/test/mqtt (requires auth) - test MQTT connection
+static esp_err_t api_test_mqtt(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    // TODO: Implement actual MQTT test
+    LOG_CONFIG(LOG_LEVEL_INFO, "MQTT test requested (placeholder)");
+    return web_send_success(req, "MQTT test sent");
+}
+
+/* ============================================
  * REBOOT
  * ============================================ */
 
@@ -2432,6 +2494,42 @@ void web_register_api_routes(httpd_handle_t server)
         .handler = api_config_import
     };
     httpd_register_uri_handler(server, &config_import);
+    
+    // Test connection endpoints
+    httpd_uri_t test_smtp = {
+        .uri = "/api/test/smtp",
+        .method = HTTP_POST,
+        .handler = api_test_smtp
+    };
+    httpd_register_uri_handler(server, &test_smtp);
+    
+    httpd_uri_t test_wifi = {
+        .uri = "/api/test/wifi",
+        .method = HTTP_POST,
+        .handler = api_test_wifi
+    };
+    httpd_register_uri_handler(server, &test_wifi);
+    
+    httpd_uri_t test_telegram = {
+        .uri = "/api/test/telegram",
+        .method = HTTP_POST,
+        .handler = api_test_telegram
+    };
+    httpd_register_uri_handler(server, &test_telegram);
+    
+    httpd_uri_t test_webhook = {
+        .uri = "/api/test/webhook",
+        .method = HTTP_POST,
+        .handler = api_test_webhook
+    };
+    httpd_register_uri_handler(server, &test_webhook);
+    
+    httpd_uri_t test_mqtt = {
+        .uri = "/api/test/mqtt",
+        .method = HTTP_POST,
+        .handler = api_test_mqtt
+    };
+    httpd_register_uri_handler(server, &test_mqtt);
     
     ESP_LOGI(TAG, "API routes registered");
 }

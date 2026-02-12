@@ -77,7 +77,7 @@ const state = {
         notifications: {
             emailEnabled: true,
             telegramEnabled: false,
-            telegramChatId: '',
+            telegramChat: '',
             warningAt: 50,
             tieredEnabled: true,
             recipients: []
@@ -282,13 +282,19 @@ function initEventListeners() {
         updateGuiBtn.addEventListener('click', handleGuiUpdate);
     }
 
-    // Log Filter Buttons
-    document.querySelectorAll('[data-log-filter]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const filter = e.target.dataset.logFilter;
-            filterLogs(filter, e.target.closest('.setting-section'));
+    // Log Filter Selects
+    const auditLogFilter = document.getElementById('auditLogFilter');
+    if (auditLogFilter) {
+        auditLogFilter.addEventListener('change', () => {
+            filterLogs(auditLogFilter.value, auditLogFilter.closest('.setting-section'));
         });
-    });
+    }
+    const deviceLogFilter = document.getElementById('deviceLogFilter');
+    if (deviceLogFilter) {
+        deviceLogFilter.addEventListener('change', () => {
+            filterLogs(deviceLogFilter.value, deviceLogFilter.closest('.setting-section'));
+        });
+    }
 
     // Export Logs Button
     const exportAuditBtn = document.getElementById('exportAuditLogs');
@@ -429,6 +435,58 @@ function initEventListeners() {
         refreshApiKeyBtn.addEventListener('click', handleRefreshApiKey);
     }
 
+    // Mail Group: Delete Button
+    const mailGroupDeleteBtn = document.getElementById('mailGroupDeleteBtn');
+    if (mailGroupDeleteBtn) {
+        mailGroupDeleteBtn.addEventListener('click', deleteMailGroup);
+    }
+
+    // Mail Group: Add Recipient Button
+    const addRecipientBtn = document.getElementById('addRecipientBtn');
+    if (addRecipientBtn) {
+        addRecipientBtn.addEventListener('click', addRecipient);
+    }
+
+    // Mail Group: File Upload
+    const mailGroupFileBtn = document.getElementById('mailGroupFileBtn');
+    const mailGroupFileInput = document.getElementById('mailGroupFile');
+    if (mailGroupFileBtn && mailGroupFileInput) {
+        mailGroupFileBtn.addEventListener('click', () => mailGroupFileInput.click());
+        mailGroupFileInput.addEventListener('change', handleFileUpload);
+    }
+
+    // Clear Logs Buttons
+    const clearAuditBtn = document.getElementById('clearAuditLogs');
+    if (clearAuditBtn) {
+        clearAuditBtn.addEventListener('click', () => clearLogs('audit'));
+    }
+    const clearDeviceBtn = document.getElementById('clearDeviceLogs');
+    if (clearDeviceBtn) {
+        clearDeviceBtn.addEventListener('click', () => clearLogs('device'));
+    }
+
+    // Test Buttons (SMTP, WiFi, Telegram, Webhook, MQTT)
+    const testSmtpBtn = document.getElementById('testSmtpBtn');
+    if (testSmtpBtn) {
+        testSmtpBtn.addEventListener('click', () => sendTest('smtp'));
+    }
+    const testWifiBtn = document.getElementById('testWifiBtn');
+    if (testWifiBtn) {
+        testWifiBtn.addEventListener('click', () => sendTest('wifi'));
+    }
+    const testTelegramBtn = document.getElementById('testTelegramBtn');
+    if (testTelegramBtn) {
+        testTelegramBtn.addEventListener('click', () => sendTest('telegram'));
+    }
+    const testWebhookBtn = document.getElementById('testWebhookBtn');
+    if (testWebhookBtn) {
+        testWebhookBtn.addEventListener('click', () => sendTest('webhook'));
+    }
+    const testMqttBtn = document.getElementById('testMqttBtn');
+    if (testMqttBtn) {
+        testMqttBtn.addEventListener('click', () => sendTest('mqtt'));
+    }
+
     // ── Enter Key Support ──────────────────────────────────────────────
     // Bind Enter key on input fields to trigger their associated save button
     initEnterKeyBindings();
@@ -463,8 +521,8 @@ function initEnterKeyBindings() {
     // Password change
     bindEnter('confirmPassword', 'changePasswordBtn');
 
-    // Export modal password
-    bindEnter('exportPasswordConfirm', 'confirmExport');
+    // Export subpage password
+    bindEnter('exportPasswordConfirm', 'startExportBtn');
 
     // Import password
     bindEnter('importPassword', 'startImportBtn');
@@ -552,7 +610,7 @@ function handleExport() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `lebensspur-backup-${new Date().toISOString().slice(0,10)}.lsb`;
+        a.download = `lebensspur-backup-${new Date().toISOString().slice(0,10)}.lsbackup`;
         a.click();
         URL.revokeObjectURL(url);
         showToast('Ayarlar dışa aktarıldı', 'success');
@@ -1325,18 +1383,20 @@ function saveRelayConfig() {
     const pulseDuration = document.getElementById('relayPulseDuration');
     const durationValue = document.getElementById('relayDurationValue');
     const durationUnit = document.getElementById('relayDurationUnit');
+    const relayDelay = document.getElementById('relayDelay');
     
     const durVal = parseInt(durationValue?.value) || 1;
     const durUnit = durationUnit?.value || 'seconds';
     const totalMs = (durUnit === 'minutes' ? durVal * 60 : durVal) * 1000;
+    const delayMs = (parseInt(relayDelay?.value) || 0) * 1000;
     
     const payload = {
         inverted: inverted ? inverted.checked : false,
         pulseMode: pulseEnabled ? pulseEnabled.checked : false,
         pulseDurationMs: parseInt(pulseDuration?.value) * 1000 || 5000,
         pulseIntervalMs: parseInt(pulseDuration?.value) * 1000 || 5000,
-        onDelayMs: totalMs,
-        offDelayMs: 0
+        onDelayMs: delayMs,
+        offDelayMs: totalMs
     };
     
     fetch('/api/config/relay', {
@@ -1375,6 +1435,26 @@ function loadRelayConfig() {
             const pulseDuration = document.getElementById('relayPulseDuration');
             if (pulseDuration && data.pulseDurationMs) {
                 pulseDuration.value = Math.round(data.pulseDurationMs / 1000);
+            }
+            
+            // Populate delay select from on_delay_ms
+            const relayDelay = document.getElementById('relayDelay');
+            if (relayDelay && data.onDelayMs !== undefined) {
+                relayDelay.value = Math.round(data.onDelayMs / 1000);
+            }
+            
+            // Populate active duration from off_delay_ms
+            const durationValue = document.getElementById('relayDurationValue');
+            const durationUnit = document.getElementById('relayDurationUnit');
+            if (durationValue && durationUnit && data.offDelayMs) {
+                const totalSec = Math.round(data.offDelayMs / 1000);
+                if (totalSec >= 60 && totalSec % 60 === 0) {
+                    durationUnit.value = 'minutes';
+                    durationValue.value = totalSec / 60;
+                } else {
+                    durationUnit.value = 'seconds';
+                    durationValue.value = totalSec || 1;
+                }
             }
             
             // Update idle/active state labels
@@ -1505,11 +1585,13 @@ function initActionCards() {
     if (apiCancelBtn) apiCancelBtn.addEventListener('click', handleModalBack);
     if (apiSaveBtn) apiSaveBtn.addEventListener('click', () => {
         const webhookUrl = document.getElementById('webhookUrl')?.value || '';
-        const webhookSecret = document.getElementById('webhookSecret')?.value || '';
+        const webhookMethod = document.getElementById('webhookMethod')?.value || 'POST';
+        const webhookHeaders = document.getElementById('webhookHeaders')?.value || '';
+        const webhookBody = document.getElementById('webhookBody')?.value || '';
         fetch('/api/config/webhook', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ webhookUrl, webhookSecret })
+            body: JSON.stringify({ webhookUrl, webhookMethod, webhookHeaders, webhookBody })
         })
         .then(res => res.json())
         .then(data => {
@@ -1623,12 +1705,13 @@ function initActionCards() {
     
     if (telegramCancelBtn) telegramCancelBtn.addEventListener('click', handleModalBack);
     if (telegramSaveBtn) telegramSaveBtn.addEventListener('click', () => {
-        const botToken = document.getElementById('telegramBotToken')?.value || '';
-        const chatId = document.getElementById('telegramChatId')?.value || '';
+        const botToken = document.getElementById('telegramToken')?.value || '';
+        const chatId = document.getElementById('telegramChat')?.value || '';
+        const message = document.getElementById('telegramMessage')?.value || '';
         fetch('/api/config/telegram', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ botToken, chatId })
+            body: JSON.stringify({ botToken, chatId, message })
         })
         .then(res => res.json())
         .then(data => {
@@ -1646,8 +1729,8 @@ function initActionCards() {
     
     if (earlyMailCancelBtn) earlyMailCancelBtn.addEventListener('click', handleModalBack);
     if (earlyMailSaveBtn) earlyMailSaveBtn.addEventListener('click', () => {
-        const earlyRecipient = document.getElementById('earlyWarningEmail')?.value || '';
-        const earlySubject = document.getElementById('earlyReminderSubject')?.value || '';
+        const earlyRecipient = document.getElementById('earlyMailRecipient')?.value || '';
+        const earlySubject = document.getElementById('earlyMailSubject')?.value || '';
         const earlyMessage = document.getElementById('earlyReminderMessage')?.value || '';
         fetch('/api/config/early-mail', {
             method: 'POST',
@@ -2698,6 +2781,13 @@ function closeAllSubViews() {
     document.querySelectorAll('#panel-system .subpage').forEach(sp => {
         sp.classList.add('hidden');
     });
+    
+    // Info panel sub views
+    const infoMainContent = document.getElementById('infoMainContent');
+    if (infoMainContent) infoMainContent.classList.remove('hidden');
+    document.querySelectorAll('#panel-info .subpage').forEach(sp => {
+        sp.classList.add('hidden');
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2901,6 +2991,11 @@ function showToast(message, type = 'success') {
     const icons = {
         success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 6L9 17l-5-5"/>
+        </svg>`,
+        info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
         </svg>`,
         warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 9v4m0 4h.01M12 2L2 20h20L12 2z"/>
@@ -3349,14 +3444,8 @@ function renderDeviceLogs(filter = 'all') {
 }
 
 function filterLogs(filter, section) {
-    // Update button states
-    section.querySelectorAll('[data-log-filter]').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    section.querySelector(`[data-log-filter="${filter}"]`)?.classList.add('active');
-    
     // Determine which log list
-    const isAudit = section.querySelector('#auditLogList');
+    const isAudit = section?.querySelector('#auditLogList');
     
     if (isAudit) {
         renderAuditLogs(filter);
@@ -3381,6 +3470,34 @@ function exportLogs(type) {
     
     URL.revokeObjectURL(url);
     showToast(`${type === 'audit' ? 'İşlem' : 'Cihaz'} logları indirildi`, 'success');
+}
+
+function clearLogs(type) {
+    if (!confirm(`${type === 'audit' ? 'İşlem' : 'Cihaz'} logları silinecek. Devam edilsin mi?`)) return;
+    fetch('/api/logs', { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // Backend clears all logs, so reset both arrays
+                state.auditLogs = [];
+                state.deviceLogs = [];
+                renderAuditLogs();
+                renderDeviceLogs();
+                showToast('Loglar temizlendi', 'success');
+            } else showToast(data.error || 'Hata', 'error');
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+function sendTest(service) {
+    showToast(`${service.toUpperCase()} test gönderiliyor...`, 'info');
+    fetch(`/api/test/${service}`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) showToast(`${service.toUpperCase()} test başarılı`, 'success');
+            else showToast(data.error || `${service.toUpperCase()} test başarısız`, 'error');
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

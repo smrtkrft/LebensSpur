@@ -903,9 +903,9 @@
                     
                     setProgress(30 + Math.floor(status.progress * 0.5), status.message || 'Downloading...');
                     
-                    if (status.state === 'complete') {
+                    if (status.status === 'done') {
                         complete = true;
-                    } else if (status.state === 'error') {
+                    } else if (status.status === 'error') {
                         throw new Error(status.error || 'Download failed');
                     }
                 }

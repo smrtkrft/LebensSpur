@@ -8,7 +8,7 @@
     
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="logo.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
@@ -160,7 +160,14 @@
                         </button>
                     </nav>
                     
-                    <div class="modal-header-right"></div>
+                    <div class="modal-header-right">
+                        <button class="btn btn-icon btn-ghost" id="closeSettings" title="Kapat">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="modal-body">
@@ -2402,38 +2409,6 @@
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
-
-    <!-- Export Password Modal -->
-    <div class="modal-overlay hidden" id="exportModal">
-        <div class="modal" style="max-width: 400px;">
-            <div class="modal-header">
-                <h2>Ayarları Dışa Aktar</h2>
-                <button class="icon-btn modal-close" id="closeExportModal">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-            <div class="modal-body">
-                <p class="setting-desc" style="margin-bottom: 16px;">
-                    Yedek dosyası şifrelenecektir. Güçlü bir şifre seçin.
-                </p>
-                <div class="input-group" style="margin-bottom: 12px;">
-                    <input type="password" id="exportPassword" required placeholder=" ">
-                    <label for="exportPassword">Şifre</label>
-                </div>
-                <div class="input-group">
-                    <input type="password" id="exportPasswordConfirm" required placeholder=" ">
-                    <label for="exportPasswordConfirm">Şifre Tekrar</label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" id="cancelExport">İptal</button>
-                <button class="btn btn-primary" id="confirmExport">Dışa Aktar</button>
-            </div>
-        </div>
-    </div>
 
     <script src="i18n.js"></script>
     <script src="app.js"></script>
