@@ -1001,6 +1001,9 @@ static esp_err_t api_get_wifi_config(httpd_req_t *req)
     cJSON_AddStringToObject(primary, "dns", primary_cfg.dns);
     cJSON_AddItemToObject(json, "primary", primary);
     
+    // mDNS hostname (device-level, stored in primary config)
+    cJSON_AddStringToObject(json, "hostname", primary_cfg.mdns_hostname);
+    
     // Backup WiFi
     cJSON *backup = cJSON_CreateObject();
     cJSON_AddStringToObject(backup, "ssid", backup_cfg.ssid);
@@ -1065,6 +1068,11 @@ static esp_err_t api_set_wifi_config(httpd_req_t *req)
     if (dns && cJSON_IsString(dns))
         strncpy(cfg.dns, dns->valuestring, sizeof(cfg.dns) - 1);
     
+    // mDNS hostname (device-level, only saved with primary config)
+    cJSON *mdns_host = cJSON_GetObjectItem(json, "mdnsHostname");
+    if (mdns_host && cJSON_IsString(mdns_host))
+        strncpy(cfg.mdns_hostname, mdns_host->valuestring, MAX_HOSTNAME_LEN);
+    
     esp_err_t err;
     if (is_backup) {
         err = config_save_wifi_backup(&cfg);
@@ -1072,6 +1080,11 @@ static esp_err_t api_set_wifi_config(httpd_req_t *req)
     } else {
         err = config_save_wifi(&cfg);
         LOG_CONFIG(LOG_LEVEL_INFO, "Primary WiFi config saved: %s", cfg.ssid);
+        // Apply mDNS hostname immediately if set
+        if (strlen(cfg.mdns_hostname) > 0) {
+            wifi_manager_set_hostname(cfg.mdns_hostname);
+            LOG_CONFIG(LOG_LEVEL_INFO, "mDNS hostname changed to: %s", cfg.mdns_hostname);
+        }
     }
     
     cJSON_Delete(json);

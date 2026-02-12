@@ -5,6 +5,27 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Authenticated Fetch Helper
+// ─────────────────────────────────────────────────────────────────────────────
+function authFetch(url, options = {}) {
+    return fetch(url, options).then(res => {
+        if (res.status === 401 && state.isAuthenticated) {
+            // Session expired on server side
+            state.isAuthenticated = false;
+            stopAutoLogoutTimer();
+            if (timerPollInterval) {
+                clearInterval(timerPollInterval);
+                timerPollInterval = null;
+            }
+            showPage('login');
+            showToast('Oturum süresi doldu, lütfen tekrar giriş yapın', 'warning');
+            throw new Error('SESSION_EXPIRED');
+        }
+        return res;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // State Management
 // ─────────────────────────────────────────────────────────────────────────────
 const state = {
@@ -938,6 +959,13 @@ function loadWifiConfig() {
                 if (dns) dns.value = p.dns || '';
             }
             
+            // mDNS hostname (device-level)
+            const mdnsHost = data.hostname || '';
+            const wifiMdns = document.getElementById('wifiMdnsHostname');
+            const wifiBackupMdns = document.getElementById('wifiBackupMdnsHostname');
+            if (wifiMdns) wifiMdns.value = mdnsHost;
+            if (wifiBackupMdns) wifiBackupMdns.value = mdnsHost;
+            
             // Backup WiFi
             if (data.backup) {
                 const b = data.backup;
@@ -990,6 +1018,12 @@ function saveWifiConfig(type) {
         subnet: subnet ? subnet.value.trim() : '',
         dns: dns ? dns.value.trim() : ''
     };
+    
+    // Include mDNS hostname (device-level, sent with primary wifi save)
+    const mdnsInput = document.getElementById(prefix + 'MdnsHostname');
+    if (mdnsInput && mdnsInput.value.trim()) {
+        payload.mdnsHostname = mdnsInput.value.trim();
+    }
     
     if (!payload.ssid) {
         showToast('SSID boş olamaz', 'error');
@@ -2094,7 +2128,7 @@ function initTimerConfig() {
 }
 
 function loadTimerConfig() {
-    fetch('/api/config/timer')
+    authFetch('/api/config/timer')
         .then(res => {
             if (!res.ok) throw new Error('Not authenticated');
             return res.json();
@@ -2485,7 +2519,7 @@ function showPage(page) {
 function handleReset() {
     if (state.timerState === 'TRIGGERED') {
         // Acknowledge triggered timer
-        fetch('/api/timer/acknowledge', { method: 'POST' })
+        authFetch('/api/timer/acknowledge', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -2498,7 +2532,7 @@ function handleReset() {
             .catch(() => showToast('Bağlantı hatası', 'error'));
     } else if (state.timerState === 'DISABLED') {
         // Enable timer
-        fetch('/api/timer/enable', { method: 'POST' })
+        authFetch('/api/timer/enable', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -2509,7 +2543,7 @@ function handleReset() {
             .catch(() => showToast('Bağlantı hatası', 'error'));
     } else {
         // Normal reset
-        fetch('/api/timer/reset', { method: 'POST' })
+        authFetch('/api/timer/reset', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -2525,7 +2559,7 @@ function handleReset() {
 
 function handlePause() {
     if (state.timerState === 'DISABLED') {
-        fetch('/api/timer/enable', { method: 'POST' })
+        authFetch('/api/timer/enable', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -2535,7 +2569,7 @@ function handlePause() {
             })
             .catch(() => showToast('Bağlantı hatası', 'error'));
     } else {
-        fetch('/api/timer/disable', { method: 'POST' })
+        authFetch('/api/timer/disable', { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -2578,7 +2612,8 @@ function startTimerUpdate() {
 }
 
 function pollTimerStatus() {
-    fetch('/api/timer/status')
+    if (!state.isAuthenticated) return;
+    authFetch('/api/timer/status')
         .then(res => {
             if (!res.ok) throw new Error('Not authenticated');
             return res.json();
@@ -2948,7 +2983,7 @@ function handleSaveSettings() {
     };
     
     // Save timer config
-    fetch('/api/config/timer', {
+    authFetch('/api/config/timer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(timerPayload)
@@ -2958,12 +2993,12 @@ function handleSaveSettings() {
         if (data.success) {
             // Handle vacation mode change
             const vacAction = state.vacationMode.enabled
-                ? fetch('/api/timer/vacation', {
+                ? authFetch('/api/timer/vacation', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled: true, days: state.vacationMode.days })
                   })
-                : fetch('/api/timer/vacation', {
+                : authFetch('/api/timer/vacation', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled: false })

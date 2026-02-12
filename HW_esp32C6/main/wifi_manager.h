@@ -169,6 +169,14 @@ const char* wifi_manager_get_ap_ip(void);
  */
 const char* wifi_manager_get_hostname(void);
 
+/**
+ * @brief Set mDNS hostname
+ * 
+ * @param hostname New hostname without .local suffix
+ * @return ESP_OK on success
+ */
+int wifi_manager_set_hostname(const char *hostname);
+
 #ifdef __cplusplus
 }
 #endif

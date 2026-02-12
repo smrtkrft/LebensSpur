@@ -5,6 +5,7 @@
 
 #include "wifi_manager.h"
 #include "device_id.h"
+#include "config_manager.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -126,11 +127,25 @@ static void on_wifi_event(void *arg, esp_event_base_t base,
 
 static void setup_mdns(void)
 {
-    strncpy(s_hostname, device_id_get(), sizeof(s_hostname) - 1);
+    // Check for custom hostname from config
+    app_wifi_config_t wifi_cfg;
+    if (config_load_wifi(&wifi_cfg) == ESP_OK && strlen(wifi_cfg.mdns_hostname) > 0) {
+        strncpy(s_hostname, wifi_cfg.mdns_hostname, sizeof(s_hostname) - 1);
+    } else {
+        strncpy(s_hostname, device_id_get(), sizeof(s_hostname) - 1);
+    }
     if (mdns_init() != ESP_OK) return;
     mdns_hostname_set(s_hostname);
     mdns_instance_name_set("LebensSpur");
     mdns_service_add("LebensSpur", "_http", "_tcp", 80, NULL, 0);
+}
+
+int wifi_manager_set_hostname(const char *hostname)
+{
+    if (!hostname) return ESP_ERR_INVALID_ARG;
+    strncpy(s_hostname, hostname, sizeof(s_hostname) - 1);
+    s_hostname[sizeof(s_hostname) - 1] = '\0';
+    return mdns_hostname_set(s_hostname);
 }
 
 /* ── Init ─────────────────────────────────────────────── */

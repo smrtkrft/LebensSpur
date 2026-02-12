@@ -9,6 +9,7 @@
 #include "time_manager.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_timer.h"
 #include "mbedtls/sha256.h"
 #include <string.h>
 #include <stdio.h>
@@ -74,7 +75,8 @@ static session_t* find_empty_slot(void)
 
 static bool is_session_expired(const session_t *session)
 {
-    int64_t now = time_manager_get_timestamp_ms();
+    // Use monotonic uptime to avoid NTP time-jump issues
+    int64_t now = esp_timer_get_time() / 1000; // microseconds -> milliseconds
     return now >= session->expires_at;
 }
 
@@ -141,8 +143,8 @@ esp_err_t session_auth_login(const char *password,
     // Generate token
     generate_token(session->token);
     
-    // Fill session data
-    int64_t now = time_manager_get_timestamp_ms();
+    // Use monotonic uptime for session timing (immune to NTP jumps)
+    int64_t now = esp_timer_get_time() / 1000;
     session->created_at = now;
     session->last_access = now;
     session->expires_at = now + ((int64_t)s_session_timeout_min * 60 * 1000);
@@ -226,7 +228,8 @@ esp_err_t session_auth_refresh(const char *token)
         return ESP_ERR_INVALID_STATE;
     }
     
-    int64_t now = time_manager_get_timestamp_ms();
+    // Use monotonic uptime
+    int64_t now = esp_timer_get_time() / 1000;
     session->last_access = now;
     session->expires_at = now + ((int64_t)s_session_timeout_min * 60 * 1000);
     

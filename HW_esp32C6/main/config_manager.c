@@ -268,6 +268,7 @@ esp_err_t config_load_wifi(app_wifi_config_t *config)
     json_get_string(json, "gateway", config->gateway, sizeof(config->gateway));
     json_get_string(json, "subnet", config->subnet, sizeof(config->subnet));
     json_get_string(json, "dns", config->dns, sizeof(config->dns));
+    json_get_string(json, "mdnsHostname", config->mdns_hostname, sizeof(config->mdns_hostname));
     
     cJSON_Delete(json);
     return ESP_OK;
@@ -288,6 +289,7 @@ esp_err_t config_save_wifi(const app_wifi_config_t *config)
     cJSON_AddStringToObject(json, "gateway", config->gateway);
     cJSON_AddStringToObject(json, "subnet", config->subnet);
     cJSON_AddStringToObject(json, "dns", config->dns);
+    cJSON_AddStringToObject(json, "mdnsHostname", config->mdns_hostname);
     
     esp_err_t ret = write_json_file(CONFIG_WIFI_FILE, json);
     cJSON_Delete(json);

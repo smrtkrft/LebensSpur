@@ -108,6 +108,9 @@ typedef struct {
     char gateway[16];
     char subnet[16];
     char dns[16];
+    
+    // mDNS hostname (device-level, stored in primary wifi config)
+    char mdns_hostname[MAX_HOSTNAME_LEN + 1];
 } app_wifi_config_t;
 
 #define WIFI_CONFIG_DEFAULT() {     \
@@ -118,7 +121,8 @@ typedef struct {
     .static_ip = "",                \
     .gateway = "",                  \
     .subnet = "",                   \
-    .dns = ""                       \
+    .dns = "",                      \
+    .mdns_hostname = ""             \
 }
 
 /* ============================================
