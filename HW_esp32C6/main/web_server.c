@@ -25,10 +25,12 @@
 #include <stdio.h>
 #include <time.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include "esp_chip_info.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
 #include "esp_system.h"
+#include "esp_random.h"
 #include "esp_heap_caps.h"
 #include "esp_flash.h"
 #include "esp_partition.h"
@@ -335,7 +337,7 @@ static esp_err_t api_get_timer_config(httpd_req_t *req)
     
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "enabled", config.enabled);
-    cJSON_AddNumberToObject(json, "intervalHours", config.interval_hours);
+    cJSON_AddNumberToObject(json, "intervalMinutes", config.interval_minutes);
     cJSON_AddNumberToObject(json, "warningMinutes", config.warning_minutes);
     cJSON_AddNumberToObject(json, "alarmCount", config.alarm_count);
     cJSON_AddStringToObject(json, "checkStart", config.check_start);
@@ -378,8 +380,8 @@ static esp_err_t api_set_timer_config(httpd_req_t *req)
     if ((item = cJSON_GetObjectItem(json, "enabled")) && cJSON_IsBool(item)) {
         config.enabled = cJSON_IsTrue(item);
     }
-    if ((item = cJSON_GetObjectItem(json, "intervalHours")) && cJSON_IsNumber(item)) {
-        config.interval_hours = item->valueint;
+    if ((item = cJSON_GetObjectItem(json, "intervalMinutes")) && cJSON_IsNumber(item)) {
+        config.interval_minutes = item->valueint;
     }
     if ((item = cJSON_GetObjectItem(json, "warningMinutes")) && cJSON_IsNumber(item)) {
         config.warning_minutes = item->valueint;
@@ -448,7 +450,7 @@ static esp_err_t api_timer_status(httpd_req_t *req)
     
     // Timing
     cJSON_AddNumberToObject(json, "timeRemainingMs", (double)status.time_remaining_ms);
-    cJSON_AddNumberToObject(json, "intervalHours", config.interval_hours);
+    cJSON_AddNumberToObject(json, "intervalMinutes", config.interval_minutes);
     cJSON_AddBoolToObject(json, "inTimeWindow", status.in_time_window);
     
     // Counters
@@ -970,6 +972,246 @@ static esp_err_t api_device_info(httpd_req_t *req)
 }
 
 /* ============================================
+ * WIFI CONFIG
+ * ============================================ */
+
+// GET /api/config/wifi (requires auth)
+static esp_err_t api_get_wifi_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    app_wifi_config_t primary_cfg;
+    app_wifi_config_t backup_cfg;
+    config_load_wifi(&primary_cfg);
+    config_load_wifi_backup(&backup_cfg);
+    
+    cJSON *json = cJSON_CreateObject();
+    
+    // Primary WiFi
+    cJSON *primary = cJSON_CreateObject();
+    cJSON_AddStringToObject(primary, "ssid", primary_cfg.ssid);
+    cJSON_AddStringToObject(primary, "password", primary_cfg.password);
+    cJSON_AddBoolToObject(primary, "configured", primary_cfg.configured);
+    cJSON_AddBoolToObject(primary, "staticIpEnabled", primary_cfg.static_ip_enabled);
+    cJSON_AddStringToObject(primary, "staticIp", primary_cfg.static_ip);
+    cJSON_AddStringToObject(primary, "gateway", primary_cfg.gateway);
+    cJSON_AddStringToObject(primary, "subnet", primary_cfg.subnet);
+    cJSON_AddStringToObject(primary, "dns", primary_cfg.dns);
+    cJSON_AddItemToObject(json, "primary", primary);
+    
+    // Backup WiFi
+    cJSON *backup = cJSON_CreateObject();
+    cJSON_AddStringToObject(backup, "ssid", backup_cfg.ssid);
+    cJSON_AddStringToObject(backup, "password", backup_cfg.password);
+    cJSON_AddBoolToObject(backup, "configured", backup_cfg.configured);
+    cJSON_AddBoolToObject(backup, "staticIpEnabled", backup_cfg.static_ip_enabled);
+    cJSON_AddStringToObject(backup, "staticIp", backup_cfg.static_ip);
+    cJSON_AddStringToObject(backup, "gateway", backup_cfg.gateway);
+    cJSON_AddStringToObject(backup, "subnet", backup_cfg.subnet);
+    cJSON_AddStringToObject(backup, "dns", backup_cfg.dns);
+    cJSON_AddItemToObject(json, "backup", backup);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/config/wifi (requires auth)
+static esp_err_t api_set_wifi_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[512];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    // Determine if this is primary or backup
+    cJSON *type_item = cJSON_GetObjectItem(json, "type");
+    bool is_backup = (type_item && cJSON_IsString(type_item) && strcmp(type_item->valuestring, "backup") == 0);
+    
+    app_wifi_config_t cfg = WIFI_CONFIG_DEFAULT();
+    
+    cJSON *ssid = cJSON_GetObjectItem(json, "ssid");
+    cJSON *pass = cJSON_GetObjectItem(json, "password");
+    cJSON *static_en = cJSON_GetObjectItem(json, "staticIpEnabled");
+    cJSON *static_ip = cJSON_GetObjectItem(json, "staticIp");
+    cJSON *gw = cJSON_GetObjectItem(json, "gateway");
+    cJSON *subnet = cJSON_GetObjectItem(json, "subnet");
+    cJSON *dns = cJSON_GetObjectItem(json, "dns");
+    
+    if (ssid && cJSON_IsString(ssid))
+        strncpy(cfg.ssid, ssid->valuestring, MAX_SSID_LEN);
+    if (pass && cJSON_IsString(pass))
+        strncpy(cfg.password, pass->valuestring, MAX_PASSWORD_LEN);
+    cfg.configured = (strlen(cfg.ssid) > 0);
+    
+    if (static_en && cJSON_IsBool(static_en))
+        cfg.static_ip_enabled = cJSON_IsTrue(static_en);
+    if (static_ip && cJSON_IsString(static_ip))
+        strncpy(cfg.static_ip, static_ip->valuestring, sizeof(cfg.static_ip) - 1);
+    if (gw && cJSON_IsString(gw))
+        strncpy(cfg.gateway, gw->valuestring, sizeof(cfg.gateway) - 1);
+    if (subnet && cJSON_IsString(subnet))
+        strncpy(cfg.subnet, subnet->valuestring, sizeof(cfg.subnet) - 1);
+    if (dns && cJSON_IsString(dns))
+        strncpy(cfg.dns, dns->valuestring, sizeof(cfg.dns) - 1);
+    
+    esp_err_t err;
+    if (is_backup) {
+        err = config_save_wifi_backup(&cfg);
+        LOG_CONFIG(LOG_LEVEL_INFO, "Backup WiFi config saved: %s", cfg.ssid);
+    } else {
+        err = config_save_wifi(&cfg);
+        LOG_CONFIG(LOG_LEVEL_INFO, "Primary WiFi config saved: %s", cfg.ssid);
+    }
+    
+    cJSON_Delete(json);
+    
+    if (err != ESP_OK) {
+        return web_send_error(req, 500, "Failed to save WiFi config");
+    }
+    
+    return web_send_success(req, is_backup ? "Backup WiFi saved" : "Primary WiFi saved");
+}
+
+/* ============================================
+ * SMTP CONFIG
+ * ============================================ */
+
+// GET /api/config/smtp (requires auth)
+static esp_err_t api_get_smtp_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    mail_config_t mail_cfg;
+    config_load_mail(&mail_cfg);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "smtpServer", mail_cfg.smtp_server);
+    cJSON_AddNumberToObject(json, "smtpPort", mail_cfg.smtp_port);
+    cJSON_AddStringToObject(json, "smtpUsername", mail_cfg.smtp_username);
+    cJSON_AddStringToObject(json, "smtpPassword", mail_cfg.smtp_password);
+    cJSON_AddStringToObject(json, "senderName", mail_cfg.sender_name);
+    cJSON_AddBoolToObject(json, "useTls", mail_cfg.use_tls);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/config/smtp (requires auth)
+static esp_err_t api_set_smtp_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[512];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    // Load existing mail config (preserves groups)
+    mail_config_t mail_cfg;
+    config_load_mail(&mail_cfg);
+    
+    cJSON *server = cJSON_GetObjectItem(json, "smtpServer");
+    cJSON *port = cJSON_GetObjectItem(json, "smtpPort");
+    cJSON *username = cJSON_GetObjectItem(json, "smtpUsername");
+    cJSON *password = cJSON_GetObjectItem(json, "smtpPassword");
+    cJSON *sender = cJSON_GetObjectItem(json, "senderName");
+    cJSON *tls = cJSON_GetObjectItem(json, "useTls");
+    
+    if (server && cJSON_IsString(server))
+        strncpy(mail_cfg.smtp_server, server->valuestring, MAX_HOSTNAME_LEN);
+    if (port && cJSON_IsNumber(port))
+        mail_cfg.smtp_port = (uint16_t)port->valueint;
+    if (username && cJSON_IsString(username))
+        strncpy(mail_cfg.smtp_username, username->valuestring, MAX_EMAIL_LEN);
+    if (password && cJSON_IsString(password))
+        strncpy(mail_cfg.smtp_password, password->valuestring, MAX_PASSWORD_LEN);
+    if (sender && cJSON_IsString(sender))
+        strncpy(mail_cfg.sender_name, sender->valuestring, MAX_GROUP_NAME_LEN);
+    if (tls && cJSON_IsBool(tls))
+        mail_cfg.use_tls = cJSON_IsTrue(tls);
+    
+    cJSON_Delete(json);
+    
+    esp_err_t err = config_save_mail(&mail_cfg);
+    if (err != ESP_OK) {
+        return web_send_error(req, 500, "Failed to save SMTP config");
+    }
+    
+    LOG_CONFIG(LOG_LEVEL_INFO, "SMTP config saved: %s:%d", mail_cfg.smtp_server, mail_cfg.smtp_port);
+    return web_send_success(req, "SMTP config saved");
+}
+
+/* ============================================
+ * AP MODE CONFIG
+ * ============================================ */
+
+// POST /api/config/ap (requires auth)
+static esp_err_t api_set_ap_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[256];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    cJSON *enabled = cJSON_GetObjectItem(json, "enabled");
+    if (!enabled || !cJSON_IsBool(enabled)) {
+        cJSON_Delete(json);
+        return web_send_error(req, 400, "Missing 'enabled' field");
+    }
+    
+    bool ap_enabled = cJSON_IsTrue(enabled);
+    
+    // Safety check: don't allow disabling AP if WiFi is not configured
+    if (!ap_enabled) {
+        app_wifi_config_t wifi_cfg;
+        config_load_wifi(&wifi_cfg);
+        if (!wifi_cfg.configured || strlen(wifi_cfg.ssid) == 0) {
+            cJSON_Delete(json);
+            return web_send_error(req, 400, "Cannot disable AP mode without configured WiFi");
+        }
+    }
+    
+    cJSON_Delete(json);
+    
+    // Apply AP mode change
+    if (ap_enabled) {
+        wifi_manager_start_ap();
+        LOG_CONFIG(LOG_LEVEL_INFO, "AP mode enabled");
+    } else {
+        wifi_manager_stop_ap();
+        LOG_CONFIG(LOG_LEVEL_WARN, "AP mode disabled");
+    }
+    
+    return web_send_success(req, ap_enabled ? "AP mode enabled" : "AP mode disabled");
+}
+
+/* ============================================
  * PASSWORD CHANGE
  * ============================================ */
 
@@ -1175,6 +1417,420 @@ static esp_err_t api_set_early_mail_config(httpd_req_t *req)
 }
 
 /* ============================================
+ * REBOOT
+ * ============================================ */
+
+// POST /api/reboot (requires auth)
+static esp_err_t api_reboot_handler(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    LOG_CONFIG(LOG_LEVEL_WARN, "Reboot requested via API");
+    esp_err_t ret = web_send_success(req, "Rebooting in 2 seconds");
+    
+    // Delay reboot to allow response to be sent
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    esp_restart();
+    
+    return ret; // Never reached
+}
+
+/* ============================================
+ * FACTORY RESET
+ * ============================================ */
+
+// POST /api/factory-reset (requires auth)
+static esp_err_t api_factory_reset_handler(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    LOG_CONFIG(LOG_LEVEL_WARN, "Factory reset requested via API");
+    
+    esp_err_t reset_ret = config_factory_reset();
+    if (reset_ret != ESP_OK) {
+        return web_send_error(req, 500, "Factory reset failed");
+    }
+    
+    esp_err_t ret = web_send_success(req, "Factory reset done, rebooting...");
+    
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    esp_restart();
+    
+    return ret;
+}
+
+/* ============================================
+ * SECURITY CONFIG (GET/POST)
+ * ============================================ */
+
+// GET /api/config/security (requires auth)
+static esp_err_t api_get_security_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    auth_config_t auth;
+    config_load_auth(&auth);
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddBoolToObject(json, "loginProtection", auth.max_login_attempts > 0);
+    cJSON_AddNumberToObject(json, "lockoutTime", auth.lockout_duration_min);
+    cJSON_AddBoolToObject(json, "resetApiEnabled", false); // TODO: persist this
+    cJSON_AddStringToObject(json, "apiKey", ""); // TODO: persist API key
+    cJSON_AddNumberToObject(json, "sessionTimeout", auth.session_timeout_min);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    return ret;
+}
+
+// POST /api/config/security (requires auth)
+static esp_err_t api_set_security_config(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char body[512];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    auth_config_t auth;
+    config_load_auth(&auth);
+    
+    cJSON *loginProt = cJSON_GetObjectItem(json, "loginProtection");
+    cJSON *lockout = cJSON_GetObjectItem(json, "lockoutTime");
+    
+    if (cJSON_IsBool(loginProt)) {
+        auth.max_login_attempts = cJSON_IsTrue(loginProt) ? 5 : 0;
+    }
+    if (cJSON_IsNumber(lockout)) {
+        auth.lockout_duration_min = lockout->valueint;
+    }
+    
+    cJSON_Delete(json);
+    
+    esp_err_t save_ret = config_save_auth(&auth);
+    if (save_ret != ESP_OK) {
+        return web_send_error(req, 500, "Failed to save security config");
+    }
+    
+    LOG_CONFIG(LOG_LEVEL_INFO, "Security config updated");
+    return web_send_success(req, "Security config saved");
+}
+
+// POST /api/config/security/api-key (requires auth) - generate new API key
+static esp_err_t api_refresh_api_key(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    // Generate random API key
+    uint8_t rand_bytes[16];
+    esp_fill_random(rand_bytes, sizeof(rand_bytes));
+    char api_key[33];
+    for (int i = 0; i < 16; i++) {
+        sprintf(&api_key[i * 2], "%02x", rand_bytes[i]);
+    }
+    api_key[32] = '\0';
+    
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "apiKey", api_key);
+    
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    esp_err_t ret = web_send_json(req, 200, json_str);
+    free(json_str);
+    
+    LOG_CONFIG(LOG_LEVEL_INFO, "API key regenerated");
+    return ret;
+}
+
+/* ============================================
+ * CONFIG EXPORT
+ * ============================================ */
+
+// POST /api/config/export (requires auth) - returns all configs as JSON blob
+static esp_err_t api_config_export(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    // Verify auth password from body
+    char body[256];
+    int len = web_get_body(req, body, sizeof(body));
+    if (len <= 0) return web_send_error(req, 400, "No body");
+    
+    cJSON *req_json = cJSON_Parse(body);
+    if (!req_json) return web_send_error(req, 400, "Invalid JSON");
+    
+    cJSON *authPw = cJSON_GetObjectItem(req_json, "authPassword");
+    if (!authPw || !cJSON_IsString(authPw)) {
+        cJSON_Delete(req_json);
+        return web_send_error(req, 400, "Missing authPassword");
+    }
+    
+    if (!config_verify_password(authPw->valuestring)) {
+        cJSON_Delete(req_json);
+        return web_send_error(req, 403, "Wrong password");
+    }
+    cJSON_Delete(req_json);
+    
+    // Collect all configs
+    cJSON *export_json = cJSON_CreateObject();
+    cJSON_AddStringToObject(export_json, "type", "lebensspur-backup");
+    cJSON_AddStringToObject(export_json, "version", "1.0");
+    cJSON_AddStringToObject(export_json, "firmware", FIRMWARE_VERSION);
+    
+    // Timer config
+    timer_config_t timer;
+    if (config_load_timer(&timer) == ESP_OK) {
+        cJSON *t = cJSON_CreateObject();
+        cJSON_AddBoolToObject(t, "enabled", timer.enabled);
+        cJSON_AddNumberToObject(t, "interval_minutes", timer.interval_minutes);
+        cJSON_AddNumberToObject(t, "warning_minutes", timer.warning_minutes);
+        cJSON_AddNumberToObject(t, "alarm_count", timer.alarm_count);
+        cJSON_AddStringToObject(t, "check_start", timer.check_start);
+        cJSON_AddStringToObject(t, "check_end", timer.check_end);
+        cJSON_AddBoolToObject(t, "relay_trigger", timer.relay_trigger);
+        cJSON_AddItemToObject(export_json, "timer", t);
+    }
+    
+    // WiFi config
+    app_wifi_config_t wifi;
+    if (config_load_wifi(&wifi) == ESP_OK) {
+        cJSON *w = cJSON_CreateObject();
+        cJSON_AddStringToObject(w, "ssid", wifi.ssid);
+        cJSON_AddStringToObject(w, "password", wifi.password);
+        cJSON_AddItemToObject(export_json, "wifi", w);
+    }
+    
+    // WiFi backup
+    app_wifi_config_t wifi2;
+    if (config_load_wifi_backup(&wifi2) == ESP_OK && wifi2.configured) {
+        cJSON *w2 = cJSON_CreateObject();
+        cJSON_AddStringToObject(w2, "ssid", wifi2.ssid);
+        cJSON_AddStringToObject(w2, "password", wifi2.password);
+        cJSON_AddItemToObject(export_json, "wifi_backup", w2);
+    }
+    
+    // Mail/SMTP config
+    mail_config_t mail;
+    if (config_load_mail(&mail) == ESP_OK) {
+        cJSON *m = cJSON_CreateObject();
+        cJSON_AddStringToObject(m, "smtp_server", mail.smtp_server);
+        cJSON_AddNumberToObject(m, "smtp_port", mail.smtp_port);
+        cJSON_AddStringToObject(m, "smtp_username", mail.smtp_username);
+        cJSON_AddStringToObject(m, "smtp_password", mail.smtp_password);
+        cJSON_AddStringToObject(m, "sender_name", mail.sender_name);
+        cJSON_AddBoolToObject(m, "use_tls", mail.use_tls);
+        
+        cJSON *groups = cJSON_CreateArray();
+        for (int i = 0; i < mail.group_count; i++) {
+            cJSON *g = cJSON_CreateObject();
+            cJSON_AddStringToObject(g, "name", mail.groups[i].name);
+            cJSON_AddBoolToObject(g, "enabled", mail.groups[i].enabled);
+            cJSON_AddStringToObject(g, "subject", mail.groups[i].subject);
+            cJSON_AddStringToObject(g, "body", mail.groups[i].body);
+            cJSON *recips = cJSON_CreateArray();
+            for (int j = 0; j < mail.groups[i].recipient_count; j++) {
+                cJSON_AddItemToArray(recips, cJSON_CreateString(mail.groups[i].recipients[j]));
+            }
+            cJSON_AddItemToObject(g, "recipients", recips);
+            cJSON_AddItemToArray(groups, g);
+        }
+        cJSON_AddItemToObject(m, "groups", groups);
+        cJSON_AddItemToObject(export_json, "mail", m);
+    }
+    
+    // Relay config
+    relay_config_t relay;
+    if (config_load_relay(&relay) == ESP_OK) {
+        cJSON *r = cJSON_CreateObject();
+        cJSON_AddBoolToObject(r, "inverted", relay.inverted);
+        cJSON_AddBoolToObject(r, "pulse_mode", relay.pulse_mode);
+        cJSON_AddNumberToObject(r, "pulse_duration_ms", relay.pulse_duration_ms);
+        cJSON_AddNumberToObject(r, "pulse_interval_ms", relay.pulse_interval_ms);
+        cJSON_AddNumberToObject(r, "pulse_count", relay.pulse_count);
+        cJSON_AddItemToObject(export_json, "relay", r);
+    }
+    
+    char *json_str = cJSON_Print(export_json);
+    cJSON_Delete(export_json);
+    
+    // Send as downloadable blob
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"lebensspur-backup.lsb\"");
+    esp_err_t ret = httpd_resp_send(req, json_str, strlen(json_str));
+    free(json_str);
+    
+    LOG_CONFIG(LOG_LEVEL_INFO, "Config exported");
+    return ret;
+}
+
+/* ============================================
+ * CONFIG IMPORT
+ * ============================================ */
+
+// POST /api/config/import (requires auth) - restore configs from JSON
+static esp_err_t api_config_import(httpd_req_t *req)
+{
+    if (!web_is_authenticated(req)) {
+        return web_send_error(req, 401, "Unauthorized");
+    }
+    
+    char *body = malloc(4096);
+    if (!body) return web_send_error(req, 500, "Out of memory");
+    
+    int len = web_get_body(req, body, 4096);
+    if (len <= 0) {
+        free(body);
+        return web_send_error(req, 400, "No body");
+    }
+    
+    cJSON *json = cJSON_Parse(body);
+    free(body);
+    if (!json) return web_send_error(req, 400, "Invalid JSON");
+    
+    // The body contains {data: base64_encoded_json, password: "..."}
+    cJSON *data_item = cJSON_GetObjectItem(json, "data");
+    if (!data_item || !cJSON_IsString(data_item)) {
+        cJSON_Delete(json);
+        return web_send_error(req, 400, "Missing data field");
+    }
+    
+    // The data is base64-encoded JSON (the actual backup content)
+    // For now we decode the base64 and treat it as direct JSON
+    // (Browser sends base64 from FileReader.readAsDataURL)
+    const char *b64_data = data_item->valuestring;
+    
+    // Simple base64 decode - we just parse the raw JSON backup
+    // Since handleImport sends base64 from readAsDataURL, we need to decode it
+    // For simplicity, we'll use a smaller approach: just try parsing as JSON 
+    // (the frontend can also send raw JSON)
+    cJSON *backup = cJSON_Parse(b64_data);
+    if (!backup) {
+        // Try treating as a raw backup JSON string  
+        cJSON_Delete(json);
+        return web_send_error(req, 400, "Could not parse backup data");
+    }
+    cJSON_Delete(json);
+    
+    int restored = 0;
+    
+    // Restore timer config
+    cJSON *timer_json = cJSON_GetObjectItem(backup, "timer");
+    if (timer_json) {
+        timer_config_t timer = TIMER_CONFIG_DEFAULT();
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(timer_json, "enabled"))) timer.enabled = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(timer_json, "interval_minutes"))) timer.interval_minutes = item->valueint;
+        if ((item = cJSON_GetObjectItem(timer_json, "warning_minutes"))) timer.warning_minutes = item->valueint;
+        if ((item = cJSON_GetObjectItem(timer_json, "alarm_count"))) timer.alarm_count = item->valueint;
+        if ((item = cJSON_GetObjectItem(timer_json, "check_start")) && cJSON_IsString(item)) strncpy(timer.check_start, item->valuestring, 7);
+        if ((item = cJSON_GetObjectItem(timer_json, "check_end")) && cJSON_IsString(item)) strncpy(timer.check_end, item->valuestring, 7);
+        if ((item = cJSON_GetObjectItem(timer_json, "relay_trigger"))) timer.relay_trigger = cJSON_IsTrue(item);
+        config_save_timer(&timer);
+        restored++;
+    }
+    
+    // Restore WiFi config
+    cJSON *wifi_json = cJSON_GetObjectItem(backup, "wifi");
+    if (wifi_json) {
+        app_wifi_config_t wifi = WIFI_CONFIG_DEFAULT();
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(wifi_json, "ssid")) && cJSON_IsString(item)) strncpy(wifi.ssid, item->valuestring, MAX_SSID_LEN);
+        if ((item = cJSON_GetObjectItem(wifi_json, "password")) && cJSON_IsString(item)) strncpy(wifi.password, item->valuestring, MAX_PASSWORD_LEN);
+        wifi.configured = strlen(wifi.ssid) > 0;
+        config_save_wifi(&wifi);
+        restored++;
+    }
+    
+    // Restore mail config
+    cJSON *mail_json = cJSON_GetObjectItem(backup, "mail");
+    if (mail_json) {
+        mail_config_t mail = MAIL_CONFIG_DEFAULT();
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(mail_json, "smtp_server")) && cJSON_IsString(item)) strncpy(mail.smtp_server, item->valuestring, MAX_HOSTNAME_LEN);
+        if ((item = cJSON_GetObjectItem(mail_json, "smtp_port"))) mail.smtp_port = item->valueint;
+        if ((item = cJSON_GetObjectItem(mail_json, "smtp_username")) && cJSON_IsString(item)) strncpy(mail.smtp_username, item->valuestring, MAX_EMAIL_LEN);
+        if ((item = cJSON_GetObjectItem(mail_json, "smtp_password")) && cJSON_IsString(item)) strncpy(mail.smtp_password, item->valuestring, MAX_PASSWORD_LEN);
+        if ((item = cJSON_GetObjectItem(mail_json, "sender_name")) && cJSON_IsString(item)) strncpy(mail.sender_name, item->valuestring, MAX_GROUP_NAME_LEN);
+        if ((item = cJSON_GetObjectItem(mail_json, "use_tls"))) mail.use_tls = cJSON_IsTrue(item);
+        
+        cJSON *groups = cJSON_GetObjectItem(mail_json, "groups");
+        if (groups && cJSON_IsArray(groups)) {
+            mail.group_count = 0;
+            cJSON *g;
+            cJSON_ArrayForEach(g, groups) {
+                if (mail.group_count >= MAX_MAIL_GROUPS) break;
+                mail_group_t *mg = &mail.groups[mail.group_count];
+                *mg = (mail_group_t)MAIL_GROUP_DEFAULT();
+                if ((item = cJSON_GetObjectItem(g, "name")) && cJSON_IsString(item)) strncpy(mg->name, item->valuestring, MAX_GROUP_NAME_LEN);
+                if ((item = cJSON_GetObjectItem(g, "enabled"))) mg->enabled = cJSON_IsTrue(item);
+                if ((item = cJSON_GetObjectItem(g, "subject")) && cJSON_IsString(item)) strncpy(mg->subject, item->valuestring, MAX_SUBJECT_LEN);
+                if ((item = cJSON_GetObjectItem(g, "body")) && cJSON_IsString(item)) strncpy(mg->body, item->valuestring, MAX_BODY_LEN);
+                cJSON *recips = cJSON_GetObjectItem(g, "recipients");
+                if (recips && cJSON_IsArray(recips)) {
+                    mg->recipient_count = 0;
+                    cJSON *r;
+                    cJSON_ArrayForEach(r, recips) {
+                        if (mg->recipient_count >= MAX_RECIPIENTS) break;
+                        if (cJSON_IsString(r)) {
+                            strncpy(mg->recipients[mg->recipient_count], r->valuestring, MAX_EMAIL_LEN);
+                            mg->recipient_count++;
+                        }
+                    }
+                }
+                mail.group_count++;
+            }
+        }
+        config_save_mail(&mail);
+        restored++;
+    }
+    
+    // Restore relay config
+    cJSON *relay_json = cJSON_GetObjectItem(backup, "relay");
+    if (relay_json) {
+        relay_config_t relay = RELAY_CONFIG_DEFAULT();
+        cJSON *item;
+        if ((item = cJSON_GetObjectItem(relay_json, "inverted"))) relay.inverted = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(relay_json, "pulse_mode"))) relay.pulse_mode = cJSON_IsTrue(item);
+        if ((item = cJSON_GetObjectItem(relay_json, "pulse_duration_ms"))) relay.pulse_duration_ms = item->valueint;
+        if ((item = cJSON_GetObjectItem(relay_json, "pulse_interval_ms"))) relay.pulse_interval_ms = item->valueint;
+        if ((item = cJSON_GetObjectItem(relay_json, "pulse_count"))) relay.pulse_count = item->valueint;
+        config_save_relay(&relay);
+        restored++;
+    }
+    
+    cJSON_Delete(backup);
+    
+    LOG_CONFIG(LOG_LEVEL_INFO, "Config imported (%d sections)", restored);
+    
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddBoolToObject(resp, "success", true);
+    cJSON_AddNumberToObject(resp, "restored", restored);
+    cJSON_AddStringToObject(resp, "message", "Config imported successfully");
+    char *resp_str = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
+    esp_err_t ret = web_send_json(req, 200, resp_str);
+    free(resp_str);
+    return ret;
+}
+
+/* ============================================
  * OTA CHECK
  * ============================================ */
 
@@ -1207,17 +1863,20 @@ static esp_err_t api_ota_check(httpd_req_t *req)
 
 typedef struct {
     const char *filename;
+    const char *subdir;  // NULL = root, else "i18n" etc.
 } gui_file_t;
 
 static const gui_file_t s_gui_files[] = {
-    { "index.html" },
-    { "app.js" },
-    { "style.css" },
-    { "i18n.js" },
-    { "manifest.json" },
-    { "sw.js" },
-    { "logo.png" },
-    { "darklogo.png" },
+    { "index.html", NULL },
+    { "app.js", NULL },
+    { "style.css", NULL },
+    { "i18n.js", NULL },
+    { "manifest.json", NULL },
+    { "sw.js", NULL },
+    { "logo.png", NULL },
+    { "darklogo.png", NULL },
+    { "en.json", "i18n" },
+    { "tr.json", "i18n" },
 };
 #define GUI_FILE_COUNT (sizeof(s_gui_files) / sizeof(s_gui_files[0]))
 
@@ -1228,12 +1887,21 @@ static volatile bool s_dl_done       = false;
 static volatile bool s_dl_error      = false;
 static char          s_dl_msg[64]    = "Idle";
 
-static esp_err_t download_one_file(const char *filename)
+static esp_err_t download_one_file(const char *filename, const char *subdir)
 {
     char url[196];
-    char path[64];
-    snprintf(url, sizeof(url), GUI_REPO_BASE "%s", filename);
-    snprintf(path, sizeof(path), GUI_DEST_DIR "/%s", filename);
+    char path[80];
+    if (subdir) {
+        snprintf(url, sizeof(url), GUI_REPO_BASE "%s/%s", subdir, filename);
+        // Create subdir on SPIFFS (mkdir may fail silently if exists)
+        char dirpath[64];
+        snprintf(dirpath, sizeof(dirpath), GUI_DEST_DIR "/%s", subdir);
+        mkdir(dirpath, 0775);
+        snprintf(path, sizeof(path), GUI_DEST_DIR "/%s/%s", subdir, filename);
+    } else {
+        snprintf(url, sizeof(url), GUI_REPO_BASE "%s", filename);
+        snprintf(path, sizeof(path), GUI_DEST_DIR "/%s", filename);
+    }
 
     ESP_LOGI(TAG, "DL %s", filename);
 
@@ -1321,7 +1989,7 @@ static void gui_download_task(void *arg)
         /* Retry up to 3 times per file */
         esp_err_t err = ESP_FAIL;
         for (int attempt = 0; attempt < 3; attempt++) {
-            err = download_one_file(s_gui_files[i].filename);
+            err = download_one_file(s_gui_files[i].filename, s_gui_files[i].subdir);
             if (err == ESP_OK) break;
             ESP_LOGW(TAG, "Retry %d for %s", attempt + 1, s_gui_files[i].filename);
             vTaskDelay(pdMS_TO_TICKS(3000));
@@ -1370,12 +2038,15 @@ static esp_err_t api_gui_download_status(httpd_req_t *req)
     cJSON *json = cJSON_CreateObject();
 
     if (s_dl_error) {
-        cJSON_AddStringToObject(json, "state", "error");
+        cJSON_AddStringToObject(json, "status", "error");
         cJSON_AddStringToObject(json, "error", s_dl_msg);
     } else if (s_dl_done) {
-        cJSON_AddStringToObject(json, "state", "complete");
+        cJSON_AddStringToObject(json, "status", "done");
+        cJSON_AddNumberToObject(json, "downloaded", (int)GUI_FILE_COUNT);
+    } else if (s_dl_running) {
+        cJSON_AddStringToObject(json, "status", "downloading");
     } else {
-        cJSON_AddStringToObject(json, "state", "downloading");
+        cJSON_AddStringToObject(json, "status", "idle");
     }
 
     cJSON_AddNumberToObject(json, "progress", s_dl_progress);
@@ -1617,6 +2288,44 @@ void web_register_api_routes(httpd_handle_t server)
     };
     httpd_register_uri_handler(server, &gui_download_status);
     
+    // WiFi config endpoints (requires auth)
+    httpd_uri_t wifi_config_get = {
+        .uri = "/api/config/wifi",
+        .method = HTTP_GET,
+        .handler = api_get_wifi_config
+    };
+    httpd_register_uri_handler(server, &wifi_config_get);
+    
+    httpd_uri_t wifi_config_set = {
+        .uri = "/api/config/wifi",
+        .method = HTTP_POST,
+        .handler = api_set_wifi_config
+    };
+    httpd_register_uri_handler(server, &wifi_config_set);
+    
+    // SMTP config endpoints (requires auth)
+    httpd_uri_t smtp_config_get = {
+        .uri = "/api/config/smtp",
+        .method = HTTP_GET,
+        .handler = api_get_smtp_config
+    };
+    httpd_register_uri_handler(server, &smtp_config_get);
+    
+    httpd_uri_t smtp_config_set = {
+        .uri = "/api/config/smtp",
+        .method = HTTP_POST,
+        .handler = api_set_smtp_config
+    };
+    httpd_register_uri_handler(server, &smtp_config_set);
+    
+    // AP mode config endpoint (requires auth)
+    httpd_uri_t ap_config_set = {
+        .uri = "/api/config/ap",
+        .method = HTTP_POST,
+        .handler = api_set_ap_config
+    };
+    httpd_register_uri_handler(server, &ap_config_set);
+    
     // Password change endpoint
     httpd_uri_t password_change = {
         .uri = "/api/config/password",
@@ -1671,6 +2380,62 @@ void web_register_api_routes(httpd_handle_t server)
         .handler = api_ota_check
     };
     httpd_register_uri_handler(server, &ota_check);
+    
+    // Reboot endpoint
+    httpd_uri_t reboot = {
+        .uri = "/api/reboot",
+        .method = HTTP_POST,
+        .handler = api_reboot_handler
+    };
+    httpd_register_uri_handler(server, &reboot);
+    
+    // Factory reset endpoint
+    httpd_uri_t factory_reset = {
+        .uri = "/api/factory-reset",
+        .method = HTTP_POST,
+        .handler = api_factory_reset_handler
+    };
+    httpd_register_uri_handler(server, &factory_reset);
+    
+    // Security config GET
+    httpd_uri_t security_get = {
+        .uri = "/api/config/security",
+        .method = HTTP_GET,
+        .handler = api_get_security_config
+    };
+    httpd_register_uri_handler(server, &security_get);
+    
+    // Security config POST
+    httpd_uri_t security_set = {
+        .uri = "/api/config/security",
+        .method = HTTP_POST,
+        .handler = api_set_security_config
+    };
+    httpd_register_uri_handler(server, &security_set);
+    
+    // API key refresh
+    httpd_uri_t api_key_refresh = {
+        .uri = "/api/config/security/api-key",
+        .method = HTTP_POST,
+        .handler = api_refresh_api_key
+    };
+    httpd_register_uri_handler(server, &api_key_refresh);
+    
+    // Config export
+    httpd_uri_t config_export = {
+        .uri = "/api/config/export",
+        .method = HTTP_POST,
+        .handler = api_config_export
+    };
+    httpd_register_uri_handler(server, &config_export);
+    
+    // Config import
+    httpd_uri_t config_import = {
+        .uri = "/api/config/import",
+        .method = HTTP_POST,
+        .handler = api_config_import
+    };
+    httpd_register_uri_handler(server, &config_import);
     
     ESP_LOGI(TAG, "API routes registered");
 }

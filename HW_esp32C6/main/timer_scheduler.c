@@ -51,11 +51,11 @@ static void calculate_next_deadline(void)
 {
     int64_t now = get_now_ms();
     s_runtime.last_reset = now;
-    s_runtime.next_deadline = now + ((int64_t)s_config.interval_hours * 60 * 60 * 1000);
+    s_runtime.next_deadline = now + ((int64_t)s_config.interval_minutes * 60 * 1000);
     s_runtime.warnings_sent = 0;
     config_save_runtime(&s_runtime);
     
-    ESP_LOGI(TAG, "Next deadline in %d hours", s_config.interval_hours);
+    ESP_LOGI(TAG, "Next deadline in %lu minutes", (unsigned long)s_config.interval_minutes);
 }
 
 static void check_vacation_mode(void)

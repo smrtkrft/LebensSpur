@@ -26,6 +26,7 @@ extern "C" {
 #define CONFIG_BASE_PATH        "/ext/config"
 #define CONFIG_TIMER_FILE       CONFIG_BASE_PATH "/timer.json"
 #define CONFIG_WIFI_FILE        CONFIG_BASE_PATH "/wifi.json"
+#define CONFIG_WIFI_BACKUP_FILE CONFIG_BASE_PATH "/wifi_backup.json"
 #define CONFIG_MAIL_FILE        CONFIG_BASE_PATH "/mail.json"
 #define CONFIG_AUTH_FILE        CONFIG_BASE_PATH "/auth.json"
 #define CONFIG_RUNTIME_FILE     CONFIG_BASE_PATH "/runtime.json"
@@ -48,7 +49,7 @@ extern "C" {
  * ============================================ */
 typedef struct {
     bool enabled;                   // Timer active
-    uint32_t interval_hours;        // Reset interval (hours, 1-720)
+    uint32_t interval_minutes;      // Reset interval (minutes, 1-43200)
     uint32_t warning_minutes;       // Warning time before trigger (minutes)
     uint32_t alarm_count;           // Number of alarms before trigger (0-10)
     char check_start[8];            // Active hours start (HH:MM)
@@ -61,7 +62,7 @@ typedef struct {
 
 #define TIMER_CONFIG_DEFAULT() {    \
     .enabled = false,               \
-    .interval_hours = 24,           \
+    .interval_minutes = 1440,       \
     .warning_minutes = 30,          \
     .alarm_count = 3,               \
     .check_start = "08:00",         \
@@ -247,6 +248,10 @@ esp_err_t config_save_runtime(const timer_runtime_t *runtime);
 /** WiFi config */
 esp_err_t config_load_wifi(app_wifi_config_t *config);
 esp_err_t config_save_wifi(const app_wifi_config_t *config);
+
+/** WiFi backup config */
+esp_err_t config_load_wifi_backup(app_wifi_config_t *config);
+esp_err_t config_save_wifi_backup(const app_wifi_config_t *config);
 
 /** Mail config */
 esp_err_t config_load_mail(mail_config_t *config);

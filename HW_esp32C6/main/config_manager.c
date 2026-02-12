@@ -165,7 +165,7 @@ esp_err_t config_load_timer(timer_config_t *config)
     if (!json) return ESP_OK;  // Use defaults
     
     config->enabled = json_get_bool(json, "enabled", defaults.enabled);
-    config->interval_hours = json_get_int(json, "intervalHours", defaults.interval_hours);
+    config->interval_minutes = json_get_int(json, "intervalMinutes", defaults.interval_minutes);
     config->warning_minutes = json_get_int(json, "warningMinutes", defaults.warning_minutes);
     config->alarm_count = json_get_int(json, "alarmCount", defaults.alarm_count);
     json_get_string(json, "checkStart", config->check_start, sizeof(config->check_start));
@@ -187,7 +187,7 @@ esp_err_t config_save_timer(const timer_config_t *config)
     if (!json) return ESP_ERR_NO_MEM;
     
     cJSON_AddBoolToObject(json, "enabled", config->enabled);
-    cJSON_AddNumberToObject(json, "intervalHours", config->interval_hours);
+    cJSON_AddNumberToObject(json, "intervalMinutes", config->interval_minutes);
     cJSON_AddNumberToObject(json, "warningMinutes", config->warning_minutes);
     cJSON_AddNumberToObject(json, "alarmCount", config->alarm_count);
     cJSON_AddStringToObject(json, "checkStart", config->check_start);
@@ -290,6 +290,54 @@ esp_err_t config_save_wifi(const app_wifi_config_t *config)
     cJSON_AddStringToObject(json, "dns", config->dns);
     
     esp_err_t ret = write_json_file(CONFIG_WIFI_FILE, json);
+    cJSON_Delete(json);
+    return ret;
+}
+
+/* ============================================
+ * WIFI BACKUP CONFIG
+ * ============================================ */
+
+esp_err_t config_load_wifi_backup(app_wifi_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+    
+    app_wifi_config_t defaults = WIFI_CONFIG_DEFAULT();
+    *config = defaults;
+    
+    cJSON *json = read_json_file(CONFIG_WIFI_BACKUP_FILE);
+    if (!json) return ESP_OK;
+    
+    json_get_string(json, "ssid", config->ssid, sizeof(config->ssid));
+    json_get_string(json, "password", config->password, sizeof(config->password));
+    config->configured = json_get_bool(json, "configured", defaults.configured);
+    config->static_ip_enabled = json_get_bool(json, "staticIpEnabled", defaults.static_ip_enabled);
+    json_get_string(json, "staticIp", config->static_ip, sizeof(config->static_ip));
+    json_get_string(json, "gateway", config->gateway, sizeof(config->gateway));
+    json_get_string(json, "subnet", config->subnet, sizeof(config->subnet));
+    json_get_string(json, "dns", config->dns, sizeof(config->dns));
+    
+    cJSON_Delete(json);
+    return ESP_OK;
+}
+
+esp_err_t config_save_wifi_backup(const app_wifi_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+    
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return ESP_ERR_NO_MEM;
+    
+    cJSON_AddStringToObject(json, "ssid", config->ssid);
+    cJSON_AddStringToObject(json, "password", config->password);
+    cJSON_AddBoolToObject(json, "configured", config->configured);
+    cJSON_AddBoolToObject(json, "staticIpEnabled", config->static_ip_enabled);
+    cJSON_AddStringToObject(json, "staticIp", config->static_ip);
+    cJSON_AddStringToObject(json, "gateway", config->gateway);
+    cJSON_AddStringToObject(json, "subnet", config->subnet);
+    cJSON_AddStringToObject(json, "dns", config->dns);
+    
+    esp_err_t ret = write_json_file(CONFIG_WIFI_BACKUP_FILE, json);
     cJSON_Delete(json);
     return ret;
 }

@@ -16,11 +16,10 @@ const I18n = (function() {
     let fallbackLang = 'en';
     let loadedLanguages = new Set();
     
-    // Desteklenen diller
+    // Desteklenen diller (sadece en ve tr)
     const availableLanguages = [
         { code: 'en', name: 'English', native: 'English' },
-        { code: 'tr', name: 'Turkish', native: 'Türkçe' },
-        { code: 'de', name: 'German', native: 'Deutsch' }
+        { code: 'tr', name: 'Turkish', native: 'Türkçe' }
     ];
 
     // ─────────────────────────────────────────────────────────────────────────

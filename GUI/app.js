@@ -12,7 +12,7 @@ const state = {
     // Timer status (from ESP32 polling)
     timerState: 'DISABLED',  // DISABLED, RUNNING, WARNING, TRIGGERED, PAUSED, VACATION
     timeRemainingMs: 0,
-    intervalHours: 24,
+    intervalMinutes: 1440,
     warningsSent: 0,
     resetCount: 0,
     triggerCount: 0,
@@ -129,6 +129,14 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUI();
     startTimerUpdate();
     fetchDeviceInfo();
+    loadSecuritySettings();
+    // Initialize i18n language system
+    if (window.I18n) {
+        I18n.init().then(() => {
+            const sel = document.getElementById('languageSelect');
+            if (sel) sel.value = I18n.getLanguage();
+        });
+    }
 });
 
 function cacheElements() {
@@ -195,10 +203,26 @@ function initEventListeners() {
         cancelSettingsBtn.addEventListener('click', closeSettings);
     }
 
-    // Save Settings
+    // Save Settings (timer only)
     const saveSettingsBtn = document.getElementById('saveSettings');
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', handleSaveSettings);
+    }
+
+    // WiFi Save Buttons
+    const saveWifiBtn = document.getElementById('saveWifiBtn');
+    if (saveWifiBtn) {
+        saveWifiBtn.addEventListener('click', () => saveWifiConfig('primary'));
+    }
+    const saveWifiBackupBtn = document.getElementById('saveWifiBackupBtn');
+    if (saveWifiBackupBtn) {
+        saveWifiBackupBtn.addEventListener('click', () => saveWifiConfig('backup'));
+    }
+
+    // SMTP Save Button
+    const saveSmtpBtn = document.getElementById('saveSmtpBtn');
+    if (saveSmtpBtn) {
+        saveSmtpBtn.addEventListener('click', saveSmtpConfig);
     }
 
     // Settings Navigation - Carousel
@@ -245,34 +269,17 @@ function initEventListeners() {
 
     // Export Settings Button - Artık subpage açılıyor, eski modal kaldırıldı
     // const exportBtn = document.getElementById('exportSettingsBtn');
-    // if (exportBtn) {
-    //     exportBtn.addEventListener('click', openExportModal);
-    // }
 
-    // Import Settings Button - Artık subpage açılıyor, eski dosya seçici kaldırıldı
-    // const importBtn = document.getElementById('importSettingsBtn');
-    // if (importBtn) {
-    //     importBtn.addEventListener('click', importSettings);
-    // }
-
-    // Export Confirm Button
-    const exportConfirmBtn = document.getElementById('exportConfirmBtn');
-    if (exportConfirmBtn) {
-        exportConfirmBtn.addEventListener('click', exportSettings);
+    // OTA Check Button (Firmware)
+    const checkFirmwareUpdateBtn = document.getElementById('checkFirmwareUpdateBtn');
+    if (checkFirmwareUpdateBtn) {
+        checkFirmwareUpdateBtn.addEventListener('click', checkForUpdates);
     }
 
-    // Close Export Modal
-    const closeExportModal = document.getElementById('closeExportModal');
-    if (closeExportModal) {
-        closeExportModal.addEventListener('click', () => {
-            document.getElementById('exportModal')?.classList.add('hidden');
-        });
-    }
-
-    // OTA Check Button
-    const otaCheckBtn = document.getElementById('otaCheckBtn');
-    if (otaCheckBtn) {
-        otaCheckBtn.addEventListener('click', checkForUpdates);
+    // GUI Update Button
+    const updateGuiBtn = document.getElementById('updateGuiBtn');
+    if (updateGuiBtn) {
+        updateGuiBtn.addEventListener('click', handleGuiUpdate);
     }
 
     // Log Filter Buttons
@@ -317,10 +324,109 @@ function initEventListeners() {
         changePasswordBtn.addEventListener('click', handlePasswordChange);
     }
     
-    // Export Button
+    // Export Button (subpage)
     const startExportBtn = document.getElementById('startExportBtn');
     if (startExportBtn) {
         startExportBtn.addEventListener('click', handleExport);
+    }
+    
+    // Import Button (subpage)
+    const startImportBtn = document.getElementById('startImportBtn');
+    if (startImportBtn) {
+        startImportBtn.addEventListener('click', handleImport);
+    }
+    
+    // Import file area click → trigger file input
+    const importFileArea = document.getElementById('importFileArea');
+    const importFileInput = document.getElementById('importFileInput');
+    if (importFileArea && importFileInput) {
+        importFileArea.addEventListener('click', () => importFileInput.click());
+        importFileArea.addEventListener('dragover', (e) => { e.preventDefault(); importFileArea.classList.add('dragover'); });
+        importFileArea.addEventListener('dragleave', () => importFileArea.classList.remove('dragover'));
+        importFileArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            importFileArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                importFileInput.files = e.dataTransfer.files;
+                importFileInput.dispatchEvent(new Event('change'));
+            }
+        });
+        importFileInput.addEventListener('change', () => {
+            const file = importFileInput.files[0];
+            if (file) {
+                importFileArea.querySelector('p').textContent = file.name;
+                document.getElementById('startImportBtn').disabled = false;
+            }
+        });
+    }
+    
+    // Language Select
+    const languageSelect = document.getElementById('languageSelect');
+    if (languageSelect) {
+        languageSelect.addEventListener('change', () => {
+            if (window.I18n) {
+                I18n.setLanguage(languageSelect.value);
+            }
+        });
+    }
+    
+    // Reboot Button
+    const rebootBtn = document.getElementById('rebootBtn');
+    if (rebootBtn) {
+        rebootBtn.addEventListener('click', handleReboot);
+    }
+    
+    // Factory Reset Button
+    const factoryResetBtn = document.getElementById('factoryResetBtn');
+    if (factoryResetBtn) {
+        factoryResetBtn.addEventListener('click', handleFactoryReset);
+    }
+    
+    // Security: Auto Logout Time
+    const autoLogoutInput = document.getElementById('autoLogoutTime');
+    if (autoLogoutInput) {
+        autoLogoutInput.addEventListener('change', () => {
+            const val = parseInt(autoLogoutInput.value) || 10;
+            state.autoLogoutTime = Math.max(1, Math.min(60, val));
+            localStorage.setItem('autoLogoutTime', state.autoLogoutTime);
+            autoLogoutInput.value = state.autoLogoutTime;
+            showToast('Otomatik çıkış süresi kaydedildi', 'success');
+        });
+    }
+    
+    // Security: Login Protection Toggle
+    const loginProtection = document.getElementById('loginProtection');
+    if (loginProtection) {
+        loginProtection.addEventListener('change', () => saveSecuritySettings());
+    }
+    
+    // Security: Lockout Time
+    const lockoutInput = document.getElementById('lockoutTime');
+    if (lockoutInput) {
+        lockoutInput.addEventListener('change', () => saveSecuritySettings());
+    }
+    
+    // Security: Remote API Toggle
+    const resetApiEnabled = document.getElementById('resetApiEnabled');
+    if (resetApiEnabled) {
+        resetApiEnabled.addEventListener('change', () => saveSecuritySettings());
+    }
+    
+    // Copy API Key
+    const copyApiKeyBtn = document.getElementById('copyApiKeyBtn');
+    if (copyApiKeyBtn) {
+        copyApiKeyBtn.addEventListener('click', () => {
+            const key = document.getElementById('resetApiKey')?.value;
+            if (key && key !== '-') {
+                navigator.clipboard.writeText(key).then(() => showToast('API anahtarı kopyalandı', 'success'));
+            }
+        });
+    }
+    
+    // Refresh API Key
+    const refreshApiKeyBtn = document.getElementById('refreshApiKeyBtn');
+    if (refreshApiKeyBtn) {
+        refreshApiKeyBtn.addEventListener('click', handleRefreshApiKey);
     }
 }
 
@@ -420,6 +526,186 @@ function handleExport() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Import Settings (from .lsbackup file via backend)
+// ─────────────────────────────────────────────────────────────────────────────
+function handleImport() {
+    const fileInput = document.getElementById('importFileInput');
+    const password = document.getElementById('importPassword')?.value;
+    
+    if (!fileInput?.files?.length) {
+        showToast('Lütfen bir dosya seçin', 'error');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        const base64 = e.target.result.split(',')[1] || btoa(e.target.result);
+        
+        fetch('/api/config/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: base64, password: password || '' })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Ayarlar başarıyla içe aktarıldı. Cihaz yeniden başlatılacak.', 'success');
+                setTimeout(() => location.reload(), 3000);
+            } else {
+                showToast(data.error || 'İçe aktarma başarısız', 'error');
+            }
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reboot & Factory Reset
+// ─────────────────────────────────────────────────────────────────────────────
+function handleReboot() {
+    if (!confirm('Cihaz yeniden başlatılacak. Devam edilsin mi?')) return;
+    
+    fetch('/api/reboot', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Cihaz yeniden başlatılıyor...', 'success');
+                setTimeout(() => location.reload(), 5000);
+            } else {
+                showToast(data.error || 'Yeniden başlatma başarısız', 'error');
+            }
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+function handleFactoryReset() {
+    if (!confirm('TÜM ayarlar silinecek! Bu işlem geri alınamaz. Devam edilsin mi?')) return;
+    if (!confirm('Bu işlem geri alınamaz! Emin misiniz?')) return;
+    
+    fetch('/api/factory-reset', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Fabrika ayarlarına sıfırlama yapılıyor...', 'success');
+                localStorage.clear();
+                setTimeout(() => location.reload(), 5000);
+            } else {
+                showToast(data.error || 'Fabrika sıfırlama başarısız', 'error');
+            }
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Security Settings (save/load via backend)
+// ─────────────────────────────────────────────────────────────────────────────
+function loadSecuritySettings() {
+    // Load auto-logout from localStorage
+    const autoLogout = parseInt(localStorage.getItem('autoLogoutTime')) || 10;
+    state.autoLogoutTime = autoLogout;
+    const autoLogoutInput = document.getElementById('autoLogoutTime');
+    if (autoLogoutInput) autoLogoutInput.value = autoLogout;
+    
+    // Load security settings from backend
+    fetch('/api/config/security')
+        .then(res => res.json())
+        .then(data => {
+            const loginProt = document.getElementById('loginProtection');
+            const lockoutInput = document.getElementById('lockoutTime');
+            const apiEnabled = document.getElementById('resetApiEnabled');
+            const apiKeyInput = document.getElementById('resetApiKey');
+            
+            if (loginProt && data.loginProtection !== undefined) loginProt.checked = data.loginProtection;
+            if (lockoutInput && data.lockoutTime) lockoutInput.value = data.lockoutTime;
+            if (apiEnabled && data.resetApiEnabled !== undefined) apiEnabled.checked = data.resetApiEnabled;
+            if (apiKeyInput && data.apiKey) apiKeyInput.value = data.apiKey;
+        })
+        .catch(() => {}); // Silently fail on load
+}
+
+function saveSecuritySettings() {
+    const loginProtection = document.getElementById('loginProtection')?.checked ?? true;
+    const lockoutTime = parseInt(document.getElementById('lockoutTime')?.value) || 15;
+    const resetApiEnabled = document.getElementById('resetApiEnabled')?.checked ?? false;
+    
+    fetch('/api/config/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginProtection, lockoutTime, resetApiEnabled })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Güvenlik ayarları kaydedildi', 'success');
+        } else {
+            showToast(data.error || 'Güvenlik ayarları kaydedilemedi', 'error');
+        }
+    })
+    .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+function handleRefreshApiKey() {
+    fetch('/api/config/security/api-key', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.apiKey) {
+                document.getElementById('resetApiKey').value = data.apiKey;
+                showToast('API anahtarı yenilendi', 'success');
+            }
+        })
+        .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUI OTA Update
+// ─────────────────────────────────────────────────────────────────────────────
+function handleGuiUpdate() {
+    const btn = document.getElementById('updateGuiBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Güncelleniyor...'; }
+    
+    showToast('Web arayüzü güncelleniyor...', 'success');
+    
+    fetch('/api/gui/download', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.started || data.success) {
+                // Poll status
+                const pollInterval = setInterval(() => {
+                    fetch('/api/gui/download/status')
+                        .then(r => r.json())
+                        .then(st => {
+                            if (st.status === 'done' || st.status === 'idle') {
+                                clearInterval(pollInterval);
+                                if (btn) { btn.disabled = false; btn.textContent = 'Web Arayüzünü Güncelle'; }
+                                if (st.downloaded > 0) {
+                                    showToast(`GUI güncellendi! ${st.downloaded} dosya indirildi.`, 'success');
+                                } else {
+                                    showToast('GUI güncelleme tamamlandı', 'success');
+                                }
+                            } else if (st.status === 'error') {
+                                clearInterval(pollInterval);
+                                if (btn) { btn.disabled = false; btn.textContent = 'Web Arayüzünü Güncelle'; }
+                                showToast('GUI güncelleme hatası: ' + (st.error || 'Bilinmeyen hata'), 'error');
+                            }
+                        })
+                        .catch(() => {});
+                }, 2000);
+            } else {
+                if (btn) { btn.disabled = false; btn.textContent = 'Web Arayüzünü Güncelle'; }
+                showToast(data.error || 'GUI güncelleme başlatılamadı', 'error');
+            }
+        })
+        .catch(() => {
+            if (btn) { btn.disabled = false; btn.textContent = 'Web Arayüzünü Güncelle'; }
+            showToast('Bağlantı hatası', 'error');
+        });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Mail Group Helper Functions
 // ─────────────────────────────────────────────────────────────────────────────
 function saveMailGroup() {
@@ -516,6 +802,196 @@ function loadMailGroups() {
         })
         .catch(err => console.error('Mail groups load failed:', err));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WiFi Config Load/Save
+// ─────────────────────────────────────────────────────────────────────────────
+function loadWifiConfig() {
+    fetch('/api/config/wifi')
+        .then(res => res.json())
+        .then(data => {
+            // Primary WiFi
+            if (data.primary) {
+                const p = data.primary;
+                const ssid = document.getElementById('wifiSsid');
+                const pass = document.getElementById('wifiPass');
+                const staticEn = document.getElementById('wifiStaticIpEnabled');
+                const staticIp = document.getElementById('wifiStaticIp');
+                const gw = document.getElementById('wifiGateway');
+                const subnet = document.getElementById('wifiSubnet');
+                const dns = document.getElementById('wifiDns');
+                
+                if (ssid) ssid.value = p.ssid || '';
+                if (pass) pass.value = p.password || '';
+                if (staticEn) {
+                    staticEn.checked = p.staticIpEnabled || false;
+                    const fields = document.getElementById('wifiStaticIpFields');
+                    if (fields) fields.classList.toggle('hidden', !staticEn.checked);
+                }
+                if (staticIp) staticIp.value = p.staticIp || '';
+                if (gw) gw.value = p.gateway || '';
+                if (subnet) subnet.value = p.subnet || '';
+                if (dns) dns.value = p.dns || '';
+            }
+            
+            // Backup WiFi
+            if (data.backup) {
+                const b = data.backup;
+                const ssid = document.getElementById('wifiBackupSsid');
+                const pass = document.getElementById('wifiBackupPass');
+                const staticEn = document.getElementById('wifiBackupStaticIpEnabled');
+                const staticIp = document.getElementById('wifiBackupStaticIp');
+                const gw = document.getElementById('wifiBackupGateway');
+                const subnet = document.getElementById('wifiBackupSubnet');
+                const dns = document.getElementById('wifiBackupDns');
+                
+                if (ssid) ssid.value = b.ssid || '';
+                if (pass) pass.value = b.password || '';
+                if (staticEn) {
+                    staticEn.checked = b.staticIpEnabled || false;
+                    const fields = document.getElementById('wifiBackupStaticIpFields');
+                    if (fields) fields.classList.toggle('hidden', !staticEn.checked);
+                }
+                if (staticIp) staticIp.value = b.staticIp || '';
+                if (gw) gw.value = b.gateway || '';
+                if (subnet) subnet.value = b.subnet || '';
+                if (dns) dns.value = b.dns || '';
+            }
+            
+            // Update accordion configured status
+            initConnectionConfigCheck();
+        })
+        .catch(err => console.error('WiFi config load failed:', err));
+}
+
+function saveWifiConfig(type) {
+    const isBackup = (type === 'backup');
+    const prefix = isBackup ? 'wifiBackup' : 'wifi';
+    
+    const ssid = document.getElementById(prefix + 'Ssid');
+    const pass = document.getElementById(prefix + 'Pass');
+    const staticEn = document.getElementById(prefix + 'StaticIpEnabled');
+    const staticIp = document.getElementById(prefix + 'StaticIp');
+    const gw = document.getElementById(prefix + 'Gateway');
+    const subnet = document.getElementById(prefix + 'Subnet');
+    const dns = document.getElementById(prefix + 'Dns');
+    
+    const payload = {
+        type: isBackup ? 'backup' : 'primary',
+        ssid: ssid ? ssid.value.trim() : '',
+        password: pass ? pass.value : '',
+        staticIpEnabled: staticEn ? staticEn.checked : false,
+        staticIp: staticIp ? staticIp.value.trim() : '',
+        gateway: gw ? gw.value.trim() : '',
+        subnet: subnet ? subnet.value.trim() : '',
+        dns: dns ? dns.value.trim() : ''
+    };
+    
+    if (!payload.ssid) {
+        showToast('SSID boş olamaz', 'error');
+        return;
+    }
+    
+    fetch('/api/config/wifi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast(isBackup ? 'Yedek WiFi kaydedildi' : 'WiFi kaydedildi', 'success');
+            initConnectionConfigCheck();
+        } else {
+            showToast(data.error || 'Kaydetme hatası', 'error');
+        }
+    })
+    .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMTP Config Load/Save
+// ─────────────────────────────────────────────────────────────────────────────
+function loadSmtpConfig() {
+    fetch('/api/config/smtp')
+        .then(res => res.json())
+        .then(data => {
+            const server = document.getElementById('smtpServer');
+            const port = document.getElementById('smtpPort');
+            const user = document.getElementById('smtpUser');
+            const apiKey = document.getElementById('smtpApiKey');
+            
+            if (server) server.value = data.smtpServer || '';
+            if (port) port.value = data.smtpPort || 465;
+            if (user) user.value = data.smtpUsername || '';
+            if (apiKey) apiKey.value = data.smtpPassword || '';
+            
+            // Update accordion configured status
+            initConnectionConfigCheck();
+        })
+        .catch(err => console.error('SMTP config load failed:', err));
+}
+
+function saveSmtpConfig() {
+    const server = document.getElementById('smtpServer');
+    const port = document.getElementById('smtpPort');
+    const user = document.getElementById('smtpUser');
+    const apiKey = document.getElementById('smtpApiKey');
+    
+    const payload = {
+        smtpServer: server ? server.value.trim() : '',
+        smtpPort: port ? parseInt(port.value) || 465 : 465,
+        smtpUsername: user ? user.value.trim() : '',
+        smtpPassword: apiKey ? apiKey.value.trim() : ''
+    };
+    
+    if (!payload.smtpServer) {
+        showToast('SMTP sunucu boş olamaz', 'error');
+        return;
+    }
+    
+    fetch('/api/config/smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('SMTP ayarları kaydedildi', 'success');
+            initConnectionConfigCheck();
+        } else {
+            showToast(data.error || 'Kaydetme hatası', 'error');
+        }
+    })
+    .catch(() => showToast('Bağlantı hatası', 'error'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AP Mode Toggle
+// ─────────────────────────────────────────────────────────────────────────────
+function saveApModeConfig(enabled) {
+    fetch('/api/config/ap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast(enabled ? 'AP Mod açıldı' : 'AP Mod kapatıldı', 'success');
+        } else {
+            showToast(data.error || 'AP Mod hatası', 'error');
+            // Revert toggle on failure
+            const toggle = document.getElementById('apModeEnabled');
+            if (toggle) toggle.checked = !enabled;
+        }
+    })
+    .catch(() => {
+        showToast('Bağlantı hatası', 'error');
+        const toggle = document.getElementById('apModeEnabled');
+        if (toggle) toggle.checked = !enabled;
+    });
 }
 
 function renderMailGroupList() {
@@ -775,6 +1251,8 @@ function initApModeValues() {
         apModeToggle.addEventListener('change', () => {
             // Toggle kapalıysa uyarıyı göster
             apModeWarning.classList.toggle('hidden', apModeToggle.checked);
+            // Save AP mode state to backend
+            saveApModeConfig(apModeToggle.checked);
         });
     }
 }
@@ -1485,17 +1963,20 @@ function loadTimerConfig() {
             return res.json();
         })
         .then(data => {
-            // Map intervalHours to unit + value
-            const hours = data.intervalHours || 24;
+            // Map intervalMinutes to unit + value
+            const minutes = data.intervalMinutes || 1440;
             let unit = 'hours';
-            let value = hours;
+            let value = Math.round(minutes / 60);
             
-            if (hours >= 24 && hours % 24 === 0) {
+            if (minutes >= 1440 && minutes % 1440 === 0) {
                 unit = 'days';
-                value = hours / 24;
-            } else if (hours < 1) {
+                value = minutes / 1440;
+            } else if (minutes < 60 || minutes % 60 !== 0) {
                 unit = 'minutes';
-                value = Math.round(hours * 60);
+                value = minutes;
+            } else {
+                unit = 'hours';
+                value = minutes / 60;
             }
             
             state.timerConfig.unit = unit;
@@ -1651,6 +2132,8 @@ function handleLogin(e) {
             pollTimerStatus();
             loadTimerConfig();
             loadMailGroups();
+            loadWifiConfig();
+            loadSmtpConfig();
             fetchLogs();
             fetchDeviceInfo();
         } else if (data.lockoutSeconds) {
@@ -1707,6 +2190,19 @@ function fetchDeviceInfo() {
                 setTxt('loginVersion', fw);
                 setTxt('sysFirmware', fw);
                 setTxt('currentFirmwareVersion', fw);
+            }
+
+            // GUI version for OTA subpage
+            setTxt('currentGuiVersion', fw || '-');
+
+            // External flash status for GUI OTA subpage  
+            if (data.ext_flash_total) {
+                const spiffsTotal = data.ext_spiffs_total || 0;
+                const spiffsUsed = data.ext_spiffs_used || 0;
+                const spiffsFree = spiffsTotal > spiffsUsed ? spiffsTotal - spiffsUsed : 0;
+                setTxt('extFlashStatus', fmtBytes(spiffsFree) + ' boş / ' + fmtBytes(spiffsTotal));
+            } else {
+                setTxt('extFlashStatus', 'Algılanmadı');
             }
 
             // Device identity
@@ -1952,7 +2448,7 @@ function pollTimerStatus() {
         .then(data => {
             state.timerState = data.state || 'DISABLED';
             state.timeRemainingMs = data.timeRemainingMs || 0;
-            state.intervalHours = data.intervalHours || 24;
+            state.intervalMinutes = data.intervalMinutes || 1440;
             state.warningsSent = data.warningsSent || 0;
             state.resetCount = data.resetCount || 0;
             state.triggerCount = data.triggerCount || 0;
@@ -2020,7 +2516,7 @@ function updateTimerDisplay() {
     }
     
     // Ring progress
-    const intervalMs = state.intervalHours * 3600 * 1000;
+    const intervalMs = state.intervalMinutes * 60 * 1000;
     const percentage = intervalMs > 0 ? Math.min(1, totalMs / intervalMs) : 0;
     const circumference = 2 * Math.PI * 90;
     const offset = circumference * (1 - percentage);
@@ -2284,11 +2780,12 @@ function updateCarouselPosition(instant = false) {
 }
 
 function handleSaveSettings() {
-    // Convert unit+value to intervalHours
+    // Convert unit+value to intervalMinutes
     const { unit, value, alarmCount } = state.timerConfig;
-    let intervalHours = value;
-    if (unit === 'days') intervalHours = value * 24;
-    else if (unit === 'minutes') intervalHours = value / 60;
+    let intervalMinutes = value;
+    if (unit === 'days') intervalMinutes = value * 24 * 60;
+    else if (unit === 'hours') intervalMinutes = value * 60;
+    // minutes stays as-is
     
     // Calculate warningMinutes: spread alarms evenly over the interval
     let warningMinutes = 60; // default 60 min before deadline
@@ -2300,7 +2797,7 @@ function handleSaveSettings() {
     
     const timerPayload = {
         enabled: state.timerEnabled || state.timerState !== 'DISABLED',
-        intervalHours: intervalHours,
+        intervalMinutes: intervalMinutes,
         warningMinutes: warningMinutes,
         alarmCount: alarmCount
     };
@@ -2592,85 +3089,8 @@ async function installPWA() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Export / Import Settings
-// ─────────────────────────────────────────────────────────────────────────────
-function openExportModal() {
-    const modal = document.getElementById('exportModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-    }
-}
-
-async function exportSettings() {
-    const passwordInput = document.getElementById('exportPassword');
-    const password = passwordInput?.value;
-    
-    if (!password || password.length < 4) {
-        showToast('En az 4 karakterlik şifre girin', 'error');
-        return;
-    }
-    
-    try {
-        const data = {
-            settings: state.settings,
-            exportDate: new Date().toISOString(),
-            version: '1.0'
-        };
-        
-        // Simple encryption (demo - gerçek uygulamada AES kullanılmalı)
-        const encrypted = await encryptData(JSON.stringify(data), password);
-        
-        const blob = new Blob([encrypted], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `lebensspur-backup-${formatDateForFile(new Date())}.lsb`;
-        a.click();
-        
-        URL.revokeObjectURL(url);
-        
-        document.getElementById('exportModal')?.classList.add('hidden');
-        passwordInput.value = '';
-        
-        showToast('Yedekleme dosyası indirildi', 'success');
-        addAuditLog('backup', 'Ayarlar dışa aktarıldı');
-    } catch (error) {
-        showToast('Dışa aktarma başarısız', 'error');
-    }
-}
-
-async function importSettings() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.lsb,.json';
-    
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const password = prompt('Yedekleme şifresini girin:');
-        if (!password) return;
-        
-        try {
-            const content = await file.text();
-            const decrypted = await decryptData(content, password);
-            const data = JSON.parse(decrypted);
-            
-            if (data.settings) {
-                Object.assign(state.settings, data.settings);
-                showToast('Ayarlar geri yüklendi', 'success');
-                addAuditLog('restore', 'Ayarlar içe aktarıldı');
-            }
-        } catch (error) {
-            showToast('İçe aktarma başarısız. Şifre yanlış olabilir.', 'error');
-        }
-    };
-    
-    input.click();
-}
-
 // Encryption helpers using Web Crypto API (AES-GCM)
+// ─────────────────────────────────────────────────────────────────────────────
 async function encryptData(data, password) {
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
@@ -2714,6 +3134,11 @@ async function decryptData(data, password) {
 async function checkForUpdates() {
     showToast('Güncelleme kontrol ediliyor...', 'success');
     
+    // Update last check time
+    const now = new Date();
+    const lastCheckEl = document.getElementById('lastOtaCheck');
+    if (lastCheckEl) lastCheckEl.textContent = now.toLocaleString();
+    
     const progressDiv = document.querySelector('.ota-progress');
     if (progressDiv) {
         progressDiv.classList.add('active');
@@ -2737,6 +3162,12 @@ async function checkForUpdates() {
                 if (fill) fill.style.background = 'var(--accent-success)';
             }
             
+            // Show firmware version from response
+            if (data.currentVersion) {
+                const fwEl = document.getElementById('currentFirmwareVersion');
+                if (fwEl && fwEl.textContent === '-') fwEl.textContent = 'v' + data.currentVersion;
+            }
+            
             addAuditLog('ota', 'Güncelleme kontrolü yapıldı');
         } catch (err) {
             if (fill) fill.style.width = '100%';
@@ -2748,6 +3179,19 @@ async function checkForUpdates() {
             progressDiv.classList.remove('active');
             if (fill) { fill.style.width = '0%'; fill.style.background = ''; }
         }, 3000);
+    } else {
+        // No progress div, just make the API call
+        try {
+            const res = await fetch('/api/ota/check');
+            const data = await res.json();
+            if (data.updateAvailable) {
+                showToast(`Yeni sürüm mevcut: ${data.version}`, 'warning');
+            } else {
+                showToast('Sistem güncel', 'success');
+            }
+        } catch (err) {
+            showToast('Güncelleme kontrolü başarısız', 'error');
+        }
     }
 }
 
