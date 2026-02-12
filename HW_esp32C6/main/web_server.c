@@ -1893,12 +1893,11 @@ static esp_err_t download_one_file(const char *filename, const char *subdir)
     char path[80];
     if (subdir) {
         snprintf(url, sizeof(url), GUI_REPO_BASE "%s/%s", subdir, filename);
-        // SPIFFS is flat - no mkdir needed, '/' is part of filename
-        snprintf(path, sizeof(path), GUI_DEST_DIR "/%s/%s", subdir, filename);
     } else {
         snprintf(url, sizeof(url), GUI_REPO_BASE "%s", filename);
-        snprintf(path, sizeof(path), GUI_DEST_DIR "/%s", filename);
     }
+    // Always store flat on SPIFFS (no subdirectories)
+    snprintf(path, sizeof(path), GUI_DEST_DIR "/%s", filename);
 
     ESP_LOGI(TAG, "DL %s", filename);
 

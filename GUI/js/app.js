@@ -3005,7 +3005,7 @@ function applyTheme(actualTheme) {
     // Logo: koyu temada beyaz logo, açık temada siyah logo
     const brandLogo = document.getElementById('brandLogo');
     if (brandLogo) {
-        brandLogo.src = actualTheme === 'dark' ? 'pic/logo.png' : 'pic/darklogo.png';
+        brandLogo.src = actualTheme === 'dark' ? 'logo.png' : 'darklogo.png';
     }
     
     // Meta theme-color güncelle

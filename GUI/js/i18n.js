@@ -35,7 +35,7 @@ const I18n = (function() {
         }
         
         try {
-            const response = await fetch(`i18n/${lang}.json`);
+            const response = await fetch(`${lang}.json`);
             if (!response.ok) {
                 throw new Error(`Language file not found: ${lang}`);
             }
