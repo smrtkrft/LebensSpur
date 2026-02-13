@@ -598,7 +598,7 @@ esp_err_t mail_test_connection(mail_result_t *result)
     smtp_read(tls, resp, sizeof(resp));
 
     // EHLO
-    char cmd[128];
+    char cmd[256];
     snprintf(cmd, sizeof(cmd), "EHLO lebensspur\r\n");
     smtp_cmd(tls, cmd, resp, sizeof(resp), '2');
 

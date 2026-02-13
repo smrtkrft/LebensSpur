@@ -2072,8 +2072,8 @@ static esp_err_t h_404(httpd_req_t *req, httpd_err_code_t err)
 // URI kayit makrosu
 // ============================================================================
 
-#define REG(path, method, handler) do { \
-    httpd_uri_t u = {.uri = path, .method = method, .handler = handler}; \
+#define REG(path, meth, hdlr) do { \
+    httpd_uri_t u = {.uri = path, .method = meth, .handler = hdlr}; \
     httpd_register_uri_handler(s_server, &u); \
 } while(0)
 
