@@ -37,6 +37,10 @@ function authFetch(url, options = {}) {
                 clearInterval(timerPollInterval);
                 timerPollInterval = null;
             }
+            if (timerCountdownInterval) {
+                clearInterval(timerCountdownInterval);
+                timerCountdownInterval = null;
+            }
             showPage('login');
             showToast(t('toast.sessionExpired'), 'warning');
             throw new Error('SESSION_EXPIRED');
@@ -2368,6 +2372,8 @@ function handleLogout() {
     state.isAuthenticated = false;
     state.authToken = null;
     stopAutoLogoutTimer();
+    if (timerPollInterval) { clearInterval(timerPollInterval); timerPollInterval = null; }
+    if (timerCountdownInterval) { clearInterval(timerCountdownInterval); timerCountdownInterval = null; }
     showPage('login');
     showToast(t('toast.loggedOut'), 'info');
 }
@@ -2660,11 +2666,25 @@ function updatePauseButton() {
 }
 
 let timerPollInterval = null;
+let timerCountdownInterval = null;
 
 function startTimerUpdate() {
     // Poll timer status from ESP32 every 5 seconds
     pollTimerStatus();
+    if (timerPollInterval) clearInterval(timerPollInterval);
     timerPollInterval = setInterval(pollTimerStatus, 5000);
+    
+    // Local 1-second countdown for smooth display updates between polls
+    if (timerCountdownInterval) clearInterval(timerCountdownInterval);
+    timerCountdownInterval = setInterval(() => {
+        if (!state.isAuthenticated) return;
+        if (state.timerState === 'RUNNING' || state.timerState === 'WARNING') {
+            if (state.timeRemainingMs > 0) {
+                state.timeRemainingMs = Math.max(0, state.timeRemainingMs - 1000);
+                updateTimerDisplay();
+            }
+        }
+    }, 1000);
 }
 
 function pollTimerStatus() {
@@ -2798,6 +2818,10 @@ function openSettings() {
     initCarousel();
     // Tüm alt görünümleri kapat
     closeAllSubViews();
+    // Reload timer config from ESP32 to show current values
+    if (state.isAuthenticated) {
+        loadTimerConfig();
+    }
 }
 
 function closeSettings() {
@@ -3015,7 +3039,7 @@ function updateCarouselPosition(instant = false) {
     }
 }
 
-function handleSaveSettings() {
+async function handleSaveSettings() {
     console.log('[LebensSpur] handleSaveSettings called', JSON.stringify(state.timerConfig));
     
     try {
@@ -3035,6 +3059,7 @@ function handleSaveSettings() {
         }
         
         const timerPayload = {
+            enabled: true,
             intervalMinutes: intervalMinutes,
             warningMinutes: warningMinutes,
             alarmCount: alarmCount
@@ -3043,43 +3068,49 @@ function handleSaveSettings() {
         console.log('[LebensSpur] Saving timer:', JSON.stringify(timerPayload));
         
         // Save timer config
-        authFetch('/api/config/timer', {
+        const res = await authFetch('/api/config/timer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(timerPayload)
-        })
-        .then(res => {
-            console.log('[LebensSpur] Timer save response:', res.status);
-            return res.json();
-        })
-        .then(data => {
-            console.log('[LebensSpur] Timer save result:', JSON.stringify(data));
-            if (data.success) {
-                // Handle vacation mode change
-                const vacPayload = state.vacationMode.enabled
-                    ? { enabled: true, days: state.vacationMode.days }
-                    : { enabled: false };
-                
-                return authFetch('/api/timer/vacation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(vacPayload)
-                }).then(() => {
-                    showToast(t('toast.settingsSaved'), 'success');
-                    pollTimerStatus();
-                    closeSettings();
-                });
-            } else {
-                showToast(data.error || t('toast.saveError'), 'error');
-            }
-        })
-        .catch(err => {
-            console.error('[LebensSpur] Save error:', err);
-            showToast(t('toast.connectionError'), 'error');
         });
+        
+        console.log('[LebensSpur] Timer save response:', res.status);
+        const data = await res.json();
+        console.log('[LebensSpur] Timer save result:', JSON.stringify(data));
+        
+        if (!data.success) {
+            showToast(data.error || t('toast.saveError'), 'error');
+            return;
+        }
+        
+        // Handle vacation mode change
+        const vacPayload = state.vacationMode.enabled
+            ? { enabled: true, days: state.vacationMode.days }
+            : { enabled: false };
+        
+        await authFetch('/api/timer/vacation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(vacPayload)
+        });
+        
+        // Update local state immediately
+        state.intervalMinutes = intervalMinutes;
+        state.timerEnabled = true;
+        
+        // Close settings and show success
+        closeSettings();
+        showToast(t('toast.settingsSaved'), 'success');
+        
+        // Poll timer status immediately + delayed to catch backend processing
+        pollTimerStatus();
+        setTimeout(() => pollTimerStatus(), 1000);
+        
     } catch (e) {
-        console.error('[LebensSpur] handleSaveSettings exception:', e);
-        showToast('Save failed: ' + e.message, 'error');
+        console.error('[LebensSpur] handleSaveSettings error:', e);
+        if (e.message !== 'SESSION_EXPIRED') {
+            showToast(t('toast.connectionError'), 'error');
+        }
     }
 }
 
@@ -3608,13 +3639,17 @@ function clearLogs(type) {
 
 function sendTest(service) {
     showToast(`${service.toUpperCase()} test gönderiliyor...`, 'info');
-    fetch(`/api/test/${service}`, { method: 'POST' })
+    authFetch(`/api/test/${service}`, { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) showToast(`${service.toUpperCase()} test başarılı`, 'success');
             else showToast(data.error || `${service.toUpperCase()} test başarısız`, 'error');
         })
-        .catch(() => showToast('Bağlantı hatası', 'error'));
+        .catch(err => {
+            if (err.message !== 'SESSION_EXPIRED') {
+                showToast('Bağlantı hatası', 'error');
+            }
+        });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

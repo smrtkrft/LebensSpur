@@ -364,6 +364,8 @@ esp_err_t config_load_auth(auth_config_t *config)
     config->lockout_duration_min = json_get_int(json, "lockoutDurationMin", defaults.lockout_duration_min);
     config->lockout_until = json_get_int64(json, "lockoutUntil", defaults.lockout_until);
     config->failed_attempts = json_get_int(json, "failedAttempts", defaults.failed_attempts);
+    json_get_string(json, "apiKey", config->api_key, sizeof(config->api_key));
+    config->reset_api_enabled = json_get_bool(json, "resetApiEnabled", defaults.reset_api_enabled);
     
     cJSON_Delete(json);
     return ESP_OK;
@@ -382,6 +384,8 @@ esp_err_t config_save_auth(const auth_config_t *config)
     cJSON_AddNumberToObject(json, "lockoutDurationMin", config->lockout_duration_min);
     cJSON_AddNumberToObject(json, "lockoutUntil", (double)config->lockout_until);
     cJSON_AddNumberToObject(json, "failedAttempts", config->failed_attempts);
+    cJSON_AddStringToObject(json, "apiKey", config->api_key);
+    cJSON_AddBoolToObject(json, "resetApiEnabled", config->reset_api_enabled);
     
     esp_err_t ret = write_json_file(CONFIG_AUTH_FILE, json);
     cJSON_Delete(json);
