@@ -1494,6 +1494,90 @@ static esp_err_t h_api_config_ap(httpd_req_t *req)
 }
 
 // ============================================================================
+// Webhook Config API (stub - persists to LittleFS)
+// ============================================================================
+
+static esp_err_t h_api_config_webhook(httpd_req_t *req)
+{
+    if (!check_auth(req)) return send_unauthorized(req);
+    s_request_count++;
+
+    char body[1024] = {0};
+    if (read_body(req, body, sizeof(body)) < 0) {
+        return web_server_send_error(req, 400, "Bad request");
+    }
+
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_server_send_error(req, 400, "Invalid JSON");
+
+    char *str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (str) {
+        file_manager_write("/ext/config/webhook.json", str, strlen(str));
+        free(str);
+    }
+
+    return web_server_send_json(req, "{\"success\":true}");
+}
+
+// ============================================================================
+// Telegram Config API (stub - persists to LittleFS)
+// ============================================================================
+
+static esp_err_t h_api_config_telegram(httpd_req_t *req)
+{
+    if (!check_auth(req)) return send_unauthorized(req);
+    s_request_count++;
+
+    char body[1024] = {0};
+    if (read_body(req, body, sizeof(body)) < 0) {
+        return web_server_send_error(req, 400, "Bad request");
+    }
+
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_server_send_error(req, 400, "Invalid JSON");
+
+    char *str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (str) {
+        file_manager_write("/ext/config/telegram.json", str, strlen(str));
+        free(str);
+    }
+
+    return web_server_send_json(req, "{\"success\":true}");
+}
+
+// ============================================================================
+// Early Mail Config API (stub - persists to LittleFS)
+// ============================================================================
+
+static esp_err_t h_api_config_early_mail(httpd_req_t *req)
+{
+    if (!check_auth(req)) return send_unauthorized(req);
+    s_request_count++;
+
+    char body[1024] = {0};
+    if (read_body(req, body, sizeof(body)) < 0) {
+        return web_server_send_error(req, 400, "Bad request");
+    }
+
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_server_send_error(req, 400, "Invalid JSON");
+
+    char *str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (str) {
+        file_manager_write("/ext/config/early_mail.json", str, strlen(str));
+        free(str);
+    }
+
+    return web_server_send_json(req, "{\"success\":true}");
+}
+
+// ============================================================================
 // Config Export/Import API
 // ============================================================================
 
@@ -2115,6 +2199,11 @@ esp_err_t web_server_start(void)
 
     // SMTP Test API
     REG("/api/test/smtp", HTTP_POST, h_api_test_smtp);
+
+    // Action Config API (webhook, telegram, early-mail)
+    REG("/api/config/webhook", HTTP_POST, h_api_config_webhook);
+    REG("/api/config/telegram", HTTP_POST, h_api_config_telegram);
+    REG("/api/config/early-mail", HTTP_POST, h_api_config_early_mail);
 
     // 404 handler (statik dosya fallback)
     httpd_register_err_handler(s_server, HTTPD_404_NOT_FOUND, h_404);
