@@ -1,0 +1,20 @@
+# Build ciktilari
+HW_esp32C6/build/
+
+# ESP-IDF managed components (otomatik indirilir)
+HW_esp32C6/managed_components/
+
+# Uretilen config (sdkconfig.defaults'tan olusur)
+HW_esp32C6/sdkconfig
+HW_esp32C6/dependencies.lock
+
+# IDE / Editor
+.claude/
+.vscode/
+
+# Python analiz scriptleri
+HW_esp32C6/main/*.py
+
+# OS dosyalari
+.DS_Store
+Thumbs.db

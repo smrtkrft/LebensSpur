@@ -27,10 +27,12 @@ esp_err_t h_api_login(httpd_req_t *req)
     const char *password = cJSON_IsString(pw) ? pw->valuestring : "";
 
     bool ok = session_check_password(password);
+    int pw_len = (int)strlen(password);   // cJSON_Delete'den ONCE kaydet
     cJSON_Delete(json);
+    // NOT: password pointer'i artik gecersiz (freed memory)
 
     if (!ok) {
-        ESP_LOGW(TAG, "Login: Sifre yanlis (len=%d)", (int)strlen(password));
+        ESP_LOGW(TAG, "Login: Sifre yanlis (len=%d)", pw_len);
         httpd_resp_set_status(req, "401 Unauthorized");
         return web_server_send_json(req, "{\"success\":false,\"error\":\"Wrong password\"}");
     }

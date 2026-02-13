@@ -246,21 +246,37 @@ static esp_err_t download_file(const char *github_name, const char *local_name,
         if (err == ESP_OK) {
             int status = esp_http_client_get_status_code(client);
             int content_len = esp_http_client_get_content_length(client);
+            int received = ctx.offset;  // Gercek alinan byte
 
-            if (status == 200 && content_len > 0) {
-                err = file_manager_write(local_path, buffer, content_len);
+            if (status == 200 && received > 0) {
+                // Content-Length varsa tutarlilik kontrolu
+                if (content_len > 0 && received != content_len) {
+                    ESP_LOGW(TAG, "Boyut uyumsuzlugu: beklenen=%d, alinan=%d (%s)",
+                             content_len, received, github_name);
+                }
+
+                err = file_manager_write(local_path, buffer, received);
                 if (err == ESP_OK) {
-                    ESP_LOGI(TAG, "Kaydedildi: %s (%d byte)", local_path, content_len);
-                    status_update_bytes(content_len, file_idx);
+                    // Yazma sonrasi dogrulama
+                    int32_t on_disk = file_manager_get_size(local_path);
+                    if (on_disk != received) {
+                        ESP_LOGE(TAG, "Dogrulama hatasi: yazilan=%d, diskte=%ld (%s)",
+                                 received, (long)on_disk, local_name);
+                        err = ESP_FAIL;
+                    } else {
+                        ESP_LOGI(TAG, "OK: %s (%d byte)", local_name, received);
+                        status_update_bytes(received, file_idx);
+                    }
                 } else {
                     ESP_LOGE(TAG, "Dosya yazma hatasi: %s", local_path);
                 }
             } else {
-                ESP_LOGE(TAG, "HTTP hata: status=%d, len=%d", status, content_len);
+                ESP_LOGE(TAG, "HTTP hata: status=%d, alinan=%d (%s)",
+                         status, received, github_name);
                 err = ESP_FAIL;
             }
         } else {
-            ESP_LOGE(TAG, "HTTP istek hatasi: %s", esp_err_to_name(err));
+            ESP_LOGE(TAG, "HTTP istek hatasi: %s (%s)", esp_err_to_name(err), github_name);
         }
 
         esp_http_client_cleanup(client);
