@@ -1631,8 +1631,8 @@ static esp_err_t api_get_security_config(httpd_req_t *req)
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "loginProtection", auth.max_login_attempts > 0);
     cJSON_AddNumberToObject(json, "lockoutTime", auth.lockout_duration_min);
-    cJSON_AddBoolToObject(json, "resetApiEnabled", false); // TODO: persist this
-    cJSON_AddStringToObject(json, "apiKey", ""); // TODO: persist API key
+    cJSON_AddBoolToObject(json, "resetApiEnabled", auth.reset_api_enabled);
+    cJSON_AddStringToObject(json, "apiKey", auth.api_key);
     cJSON_AddNumberToObject(json, "sessionTimeout", auth.session_timeout_min);
     
     char *json_str = cJSON_PrintUnformatted(json);
@@ -1661,12 +1661,20 @@ static esp_err_t api_set_security_config(httpd_req_t *req)
     
     cJSON *loginProt = cJSON_GetObjectItem(json, "loginProtection");
     cJSON *lockout = cJSON_GetObjectItem(json, "lockoutTime");
+    cJSON *sessTimeout = cJSON_GetObjectItem(json, "sessionTimeout");
+    cJSON *resetApi = cJSON_GetObjectItem(json, "resetApiEnabled");
     
     if (cJSON_IsBool(loginProt)) {
         auth.max_login_attempts = cJSON_IsTrue(loginProt) ? 5 : 0;
     }
     if (cJSON_IsNumber(lockout)) {
         auth.lockout_duration_min = lockout->valueint;
+    }
+    if (cJSON_IsNumber(sessTimeout) && sessTimeout->valueint > 0) {
+        auth.session_timeout_min = sessTimeout->valueint;
+    }
+    if (cJSON_IsBool(resetApi)) {
+        auth.reset_api_enabled = cJSON_IsTrue(resetApi);
     }
     
     cJSON_Delete(json);
@@ -1696,6 +1704,12 @@ static esp_err_t api_refresh_api_key(httpd_req_t *req)
     }
     api_key[32] = '\0';
     
+    // Persist the new key
+    auth_config_t auth;
+    config_load_auth(&auth);
+    memcpy(auth.api_key, api_key, sizeof(auth.api_key));
+    config_save_auth(&auth);
+    
     cJSON *json = cJSON_CreateObject();
     cJSON_AddStringToObject(json, "apiKey", api_key);
     
@@ -1704,7 +1718,7 @@ static esp_err_t api_refresh_api_key(httpd_req_t *req)
     esp_err_t ret = web_send_json(req, 200, json_str);
     free(json_str);
     
-    LOG_CONFIG(LOG_LEVEL_INFO, "API key regenerated");
+    LOG_CONFIG(LOG_LEVEL_INFO, "API key regenerated and saved");
     return ret;
 }
 

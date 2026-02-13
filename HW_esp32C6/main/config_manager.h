@@ -206,6 +206,8 @@ typedef struct {
     uint32_t lockout_duration_min;      // Lockout duration
     int64_t lockout_until;              // Lockout end timestamp
     uint32_t failed_attempts;           // Current failed count
+    char api_key[33];                   // 32-char hex API key + null
+    bool reset_api_enabled;             // Allow reset via API key
 } auth_config_t;
 
 #define AUTH_CONFIG_DEFAULT() {     \
@@ -213,6 +215,8 @@ typedef struct {
     .session_timeout_min = 60,      \
     .max_login_attempts = 5,        \
     .lockout_duration_min = 15,     \
+    .api_key = "",                  \
+    .reset_api_enabled = false,     \
     .lockout_until = 0,             \
     .failed_attempts = 0            \
 }
