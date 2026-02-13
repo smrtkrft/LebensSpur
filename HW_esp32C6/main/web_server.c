@@ -76,11 +76,26 @@ static const char* get_mime_type(const char *filepath)
 
 esp_err_t web_send_json(httpd_req_t *req, int status_code, const char *json)
 {
-    char status[32];
-    snprintf(status, sizeof(status), "%d", status_code);
-    httpd_resp_set_status(req, status);
+    /* ESP-IDF httpd expects status as "CODE REASON" string */
+    const char *status_str = HTTPD_200;
+    switch (status_code) {
+        case 200: status_str = HTTPD_200; break;
+        case 400: status_str = HTTPD_400; break;
+        case 401: status_str = "401 Unauthorized"; break;
+        case 403: status_str = "403 Forbidden"; break;
+        case 404: status_str = HTTPD_404; break;
+        case 429: status_str = "429 Too Many Requests"; break;
+        case 500: status_str = HTTPD_500; break;
+        default: {
+            static char buf[32];
+            snprintf(buf, sizeof(buf), "%d", status_code);
+            status_str = buf;
+            break;
+        }
+    }
+    httpd_resp_set_status(req, status_str);
     httpd_resp_set_type(req, MIME_JSON);
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache");
     return httpd_resp_send(req, json, strlen(json));
 }
 
@@ -128,37 +143,43 @@ esp_err_t web_send_file(httpd_req_t *req, const char *filepath)
     // Set content type
     httpd_resp_set_type(req, get_mime_type(filepath));
     
-    // Set cache for static files
-    if (strstr(filepath, ".html") == NULL) {
-        httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
+    // Cache: images long-cache, everything else no-cache
+    if (strstr(filepath, ".png") || strstr(filepath, ".ico") || strstr(filepath, ".svg")) {
+        httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
+    } else {
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     }
-    
+
     // Read and send in chunks
     char *buffer = malloc(4096);
     if (!buffer) {
         return web_send_error(req, 500, "Memory error");
     }
-    
-    FILE *f = fopen(filepath, "r");
+
+    FILE *f = fopen(filepath, "rb");
     if (!f) {
         free(buffer);
         return web_send_error(req, 500, "Cannot open file");
     }
-    
+
     size_t read_bytes;
-    do {
-        read_bytes = fread(buffer, 1, 4096, f);
-        if (read_bytes > 0) {
-            httpd_resp_send_chunk(req, buffer, read_bytes);
+    esp_err_t chunk_err = ESP_OK;
+    while ((read_bytes = fread(buffer, 1, 4096, f)) > 0) {
+        chunk_err = httpd_resp_send_chunk(req, buffer, read_bytes);
+        if (chunk_err != ESP_OK) {
+            ESP_LOGE(TAG, "Chunk send failed for %s: %s", filepath, esp_err_to_name(chunk_err));
+            break;
         }
-    } while (read_bytes == 4096);
-    
+    }
+
     fclose(f);
     free(buffer);
-    
+
     // End chunked response
-    httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
+    if (chunk_err == ESP_OK) {
+        httpd_resp_send_chunk(req, NULL, 0);
+    }
+    return chunk_err;
 }
 
 void web_get_client_ip(httpd_req_t *req, char *ip_buffer)
@@ -189,21 +210,42 @@ int web_get_body(httpd_req_t *req, char *buffer, size_t max_len)
 
 bool web_is_authenticated(httpd_req_t *req)
 {
+    char token[SESSION_TOKEN_LEN + 1] = "";
+    bool found = false;
+
+    // Method 1: Cookie header (browser-native)
     char cookie[256] = "";
-    if (httpd_req_get_hdr_value_str(req, "Cookie", cookie, sizeof(cookie)) != ESP_OK) {
+    if (httpd_req_get_hdr_value_str(req, "Cookie", cookie, sizeof(cookie)) == ESP_OK) {
+        if (session_auth_extract_token(cookie, token) == ESP_OK) {
+            found = true;
+        }
+    }
+
+    // Method 2: Authorization: Bearer <token> header (JS-managed fallback)
+    if (!found) {
+        char auth_hdr[128] = "";
+        if (httpd_req_get_hdr_value_str(req, "Authorization", auth_hdr, sizeof(auth_hdr)) == ESP_OK) {
+            if (strncmp(auth_hdr, "Bearer ", 7) == 0) {
+                const char *bearer = auth_hdr + 7;
+                size_t blen = strlen(bearer);
+                if (blen == SESSION_TOKEN_LEN) {
+                    memcpy(token, bearer, SESSION_TOKEN_LEN);
+                    token[SESSION_TOKEN_LEN] = '\0';
+                    found = true;
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        ESP_LOGD(TAG, "Auth: no token in Cookie or Authorization header");
         return false;
     }
-    
-    char token[SESSION_TOKEN_LEN + 1];
-    if (session_auth_extract_token(cookie, token) != ESP_OK) {
-        return false;
-    }
-    
+
     if (!session_auth_validate(token)) {
         return false;
     }
-    
-    // Refresh session
+
     session_auth_refresh(token);
     return true;
 }
@@ -268,12 +310,21 @@ static esp_err_t api_login_handler(httpd_req_t *req)
         return r;
     }
     
-    // Set cookie
+    // Set cookie (browser-native method)
     char cookie[128];
     session_auth_cookie_header(token, cookie, sizeof(cookie));
     httpd_resp_set_hdr(req, "Set-Cookie", cookie);
-    
-    return web_send_success(req, "Login successful");
+
+    // Return token in body too (JS-managed fallback for SW issues)
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddBoolToObject(resp, "success", true);
+    cJSON_AddStringToObject(resp, "message", "Login successful");
+    cJSON_AddStringToObject(resp, "token", token);
+    char *resp_str = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
+    esp_err_t r = web_send_json(req, 200, resp_str);
+    free(resp_str);
+    return r;
 }
 
 // POST /api/logout
@@ -2024,8 +2075,14 @@ static esp_err_t download_one_file(const char *filename, const char *subdir)
 
     int total = 0;
     int rd;
+    esp_err_t write_err = ESP_OK;
     while ((rd = esp_http_client_read(client, buf, 4096)) > 0) {
-        fwrite(buf, 1, rd, f);
+        size_t written = fwrite(buf, 1, rd, f);
+        if (written != (size_t)rd) {
+            ESP_LOGE(TAG, "Write failed for %s (wrote %u/%d)", filename, written, rd);
+            write_err = ESP_FAIL;
+            break;
+        }
         total += rd;
     }
 
@@ -2033,6 +2090,11 @@ static esp_err_t download_one_file(const char *filename, const char *subdir)
     fclose(f);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+
+    if (write_err != ESP_OK) {
+        remove(path);
+        return write_err;
+    }
 
     ESP_LOGI(TAG, "Saved %s (%d bytes)", filename, total);
     return ESP_OK;
@@ -2599,7 +2661,7 @@ esp_err_t web_server_init(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = WEB_SERVER_PORT;
     config.max_uri_handlers = WEB_MAX_HANDLERS;
-    config.max_open_sockets = 7;
+    config.max_open_sockets = 13;
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
     

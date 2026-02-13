@@ -15,10 +15,23 @@ if (typeof window.t !== 'function') {
 // Authenticated Fetch Helper
 // ─────────────────────────────────────────────────────────────────────────────
 function authFetch(url, options = {}) {
+    // Always include cookies explicitly
+    options.credentials = 'include';
+    // Send token via Authorization header (bypasses SW cookie issues)
+    if (state.authToken) {
+        if (!options.headers || options.headers instanceof Headers) {
+            const h = new Headers(options.headers || {});
+            h.set('Authorization', 'Bearer ' + state.authToken);
+            options.headers = h;
+        } else {
+            options.headers = { ...options.headers, 'Authorization': 'Bearer ' + state.authToken };
+        }
+    }
     return fetch(url, options).then(res => {
         if (res.status === 401 && state.isAuthenticated) {
             // Session expired on server side
             state.isAuthenticated = false;
+            state.authToken = null;
             stopAutoLogoutTimer();
             if (timerPollInterval) {
                 clearInterval(timerPollInterval);
@@ -37,6 +50,7 @@ function authFetch(url, options = {}) {
 // ─────────────────────────────────────────────────────────────────────────────
 const state = {
     isAuthenticated: false,
+    authToken: null,  // Session token (sent via Authorization header)
     // Timer status (from ESP32 polling)
     timerState: 'DISABLED',  // DISABLED, RUNNING, WARNING, TRIGGERED, PAUSED, VACATION
     timeRemainingMs: 0,
@@ -595,7 +609,7 @@ function handlePasswordChange() {
     }
     
     // Send to backend
-    fetch('/api/config/password', {
+    authFetch('/api/config/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword })
@@ -635,7 +649,7 @@ function handleExport() {
     }
     
     // Send export request to backend
-    fetch('/api/config/export', {
+    authFetch('/api/config/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ authPassword, exportPassword })
@@ -679,7 +693,7 @@ function handleImport() {
     reader.onload = function(e) {
         const text = e.target.result;
         
-        fetch('/api/config/import', {
+        authFetch('/api/config/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ data: text, password: password || '' })
@@ -705,7 +719,7 @@ function handleImport() {
 function handleReboot() {
     if (!confirm(t('settingsSys.confirmReboot'))) return;
     
-    fetch('/api/reboot', { method: 'POST' })
+    authFetch('/api/reboot', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -722,7 +736,7 @@ function handleFactoryReset() {
     if (!confirm(t('settingsSys.confirmFactoryReset'))) return;
     if (!confirm('Bu işlem geri alınamaz! Emin misiniz?')) return;
     
-    fetch('/api/factory-reset', { method: 'POST' })
+    authFetch('/api/factory-reset', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -747,7 +761,7 @@ function loadSecuritySettings() {
     if (autoLogoutInput) autoLogoutInput.value = autoLogout;
     
     // Load security settings from backend
-    fetch('/api/config/security')
+    authFetch('/api/config/security')
         .then(res => res.json())
         .then(data => {
             const loginProt = document.getElementById('loginProtection');
@@ -768,7 +782,7 @@ function saveSecuritySettings() {
     const lockoutTime = parseInt(document.getElementById('lockoutTime')?.value) || 15;
     const resetApiEnabled = document.getElementById('resetApiEnabled')?.checked ?? false;
     
-    fetch('/api/config/security', {
+    authFetch('/api/config/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ loginProtection, lockoutTime, resetApiEnabled })
@@ -785,7 +799,7 @@ function saveSecuritySettings() {
 }
 
 function handleRefreshApiKey() {
-    fetch('/api/config/security/api-key', { method: 'POST' })
+    authFetch('/api/config/security/api-key', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.apiKey) {
@@ -805,13 +819,13 @@ function handleGuiUpdate() {
     
     showToast('Web arayüzü güncelleniyor...', 'success');
     
-    fetch('/api/gui/download', { method: 'POST' })
+    authFetch('/api/gui/download', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.started || data.success) {
                 // Poll status
                 const pollInterval = setInterval(() => {
-                    fetch('/api/gui/download/status')
+                    authFetch('/api/gui/download/status')
                         .then(r => r.json())
                         .then(st => {
                             if (st.status === 'done' || st.status === 'idle') {
@@ -913,7 +927,7 @@ function persistMailGroups() {
         content: g.content,
         recipients: g.recipients
     }));
-    fetch('/api/config/mail-groups', {
+    authFetch('/api/config/mail-groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groups })
@@ -921,7 +935,7 @@ function persistMailGroups() {
 }
 
 function loadMailGroups() {
-    fetch('/api/config/mail-groups')
+    authFetch('/api/config/mail-groups')
         .then(res => res.json())
         .then(data => {
             if (data.groups && Array.isArray(data.groups)) {
@@ -943,7 +957,7 @@ function loadMailGroups() {
 // WiFi Config Load/Save
 // ─────────────────────────────────────────────────────────────────────────────
 function loadWifiConfig() {
-    fetch('/api/config/wifi')
+    authFetch('/api/config/wifi')
         .then(res => res.json())
         .then(data => {
             // Primary WiFi
@@ -1041,7 +1055,7 @@ function saveWifiConfig(type) {
         return;
     }
     
-    fetch('/api/config/wifi', {
+    authFetch('/api/config/wifi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1062,7 +1076,7 @@ function saveWifiConfig(type) {
 // SMTP Config Load/Save
 // ─────────────────────────────────────────────────────────────────────────────
 function loadSmtpConfig() {
-    fetch('/api/config/smtp')
+    authFetch('/api/config/smtp')
         .then(res => res.json())
         .then(data => {
             const server = document.getElementById('smtpServer');
@@ -1099,7 +1113,7 @@ function saveSmtpConfig() {
         return;
     }
     
-    fetch('/api/config/smtp', {
+    authFetch('/api/config/smtp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1120,7 +1134,7 @@ function saveSmtpConfig() {
 // AP Mode Toggle
 // ─────────────────────────────────────────────────────────────────────────────
 function saveApModeConfig(enabled) {
-    fetch('/api/config/ap', {
+    authFetch('/api/config/ap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled })
@@ -1372,7 +1386,7 @@ function initConnectionConfigCheck() {
 // AP Mode değerlerini Device ID'den ayarla
 function initApModeValues() {
     // Fetch real device ID from ESP32 and use for AP mode fields
-    fetch('/api/device/info')
+    authFetch('/api/device/info')
         .then(res => res.json())
         .then(data => {
             const deviceId = data.device_id || 'LS-UNKNOWN';
@@ -1458,7 +1472,7 @@ function saveRelayConfig() {
         offDelayMs: totalMs
     };
     
-    fetch('/api/config/relay', {
+    authFetch('/api/config/relay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1476,7 +1490,7 @@ function saveRelayConfig() {
 }
 
 function loadRelayConfig() {
-    fetch('/api/config/relay')
+    authFetch('/api/config/relay')
         .then(res => {
             if (!res.ok) throw new Error('err');
             return res.json();
@@ -1647,7 +1661,7 @@ function initActionCards() {
         const webhookMethod = document.getElementById('webhookMethod')?.value || 'POST';
         const webhookHeaders = document.getElementById('webhookHeaders')?.value || '';
         const webhookBody = document.getElementById('webhookBody')?.value || '';
-        fetch('/api/config/webhook', {
+        authFetch('/api/config/webhook', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ webhookUrl, webhookMethod, webhookHeaders, webhookBody })
@@ -1677,7 +1691,7 @@ function initActionCards() {
         testRelayBtn.addEventListener('click', () => {
             testRelayBtn.disabled = true;
             testRelayBtn.textContent = 'Test ediliyor...';
-            fetch('/api/relay/test', { method: 'POST' })
+            authFetch('/api/relay/test', { method: 'POST' })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
@@ -1767,7 +1781,7 @@ function initActionCards() {
         const botToken = document.getElementById('telegramToken')?.value || '';
         const chatId = document.getElementById('telegramChat')?.value || '';
         const message = document.getElementById('telegramMessage')?.value || '';
-        fetch('/api/config/telegram', {
+        authFetch('/api/config/telegram', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ botToken, chatId, message })
@@ -1791,7 +1805,7 @@ function initActionCards() {
         const earlyRecipient = document.getElementById('earlyMailRecipient')?.value || '';
         const earlySubject = document.getElementById('earlyMailSubject')?.value || '';
         const earlyMessage = document.getElementById('earlyReminderMessage')?.value || '';
-        fetch('/api/config/early-mail', {
+        authFetch('/api/config/early-mail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipient: earlyRecipient, subject: earlySubject, message: earlyMessage })
@@ -2297,7 +2311,7 @@ function handleLogin(e) {
     loginBtn.disabled = true;
     loginBtn.textContent = '...';
     
-    fetch('/api/login', {
+    authFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -2306,19 +2320,27 @@ function handleLogin(e) {
     .then(data => {
         if (data.success) {
             state.isAuthenticated = true;
+            state.authToken = data.token || null;  // Store token for Authorization header
             state.loginAttempts = 0;
             state.lockoutUntil = null;
             showPage('app');
             showToast(t('toast.loginSuccess'), 'success');
             startAutoLogoutTimer();
+            // Stagger post-login requests to avoid overwhelming ESP32
             pollTimerStatus();
             loadTimerConfig();
-            loadMailGroups();
-            loadWifiConfig();
-            loadSmtpConfig();
-            loadSecuritySettings();
-            fetchLogs();
-            fetchDeviceInfo();
+            setTimeout(() => {
+                loadMailGroups();
+                loadWifiConfig();
+            }, 300);
+            setTimeout(() => {
+                loadSmtpConfig();
+                loadSecuritySettings();
+            }, 600);
+            setTimeout(() => {
+                fetchLogs();
+                fetchDeviceInfo();
+            }, 900);
         } else if (data.lockoutSeconds) {
             const mins = Math.ceil(data.lockoutSeconds / 60);
             state.lockoutUntil = Date.now() + (data.lockoutSeconds * 1000);
@@ -2342,15 +2364,16 @@ function handleLogin(e) {
 }
 
 function handleLogout() {
-    fetch('/api/logout', { method: 'POST' }).catch(() => {});
+    authFetch('/api/logout', { method: 'POST' }).catch(() => {});
     state.isAuthenticated = false;
+    state.authToken = null;
     stopAutoLogoutTimer();
     showPage('login');
     showToast(t('toast.loggedOut'), 'info');
 }
 
 function fetchDeviceInfo() {
-    fetch('/api/device/info')
+    authFetch('/api/device/info')
         .then(res => res.json())
         .then(data => {
             const setTxt = (id, val) => {
@@ -3012,7 +3035,6 @@ function handleSaveSettings() {
         }
         
         const timerPayload = {
-            enabled: state.timerEnabled || state.timerState !== 'DISABLED',
             intervalMinutes: intervalMinutes,
             warningMinutes: warningMinutes,
             alarmCount: alarmCount
@@ -3379,7 +3401,7 @@ async function checkForUpdates() {
         if (text) text.textContent = 'Sunucu kontrol ediliyor...';
         
         try {
-            const res = await fetch('/api/ota/check');
+            const res = await authFetch('/api/ota/check');
             const data = await res.json();
             
             if (fill) fill.style.width = '100%';
@@ -3412,7 +3434,7 @@ async function checkForUpdates() {
     } else {
         // No progress div, just make the API call
         try {
-            const res = await fetch('/api/ota/check');
+            const res = await authFetch('/api/ota/check');
             const data = await res.json();
             if (data.updateAvailable) {
                 showToast(`Yeni sürüm mevcut: ${data.version}`, 'warning');
@@ -3436,7 +3458,7 @@ function initLogs() {
 }
 
 function fetchLogs() {
-    fetch('/api/logs')
+    authFetch('/api/logs')
         .then(res => res.json())
         .then(data => {
             if (data.entries && Array.isArray(data.entries)) {
@@ -3569,7 +3591,7 @@ function exportLogs(type) {
 
 function clearLogs(type) {
     if (!confirm(`${type === 'audit' ? 'İşlem' : 'Cihaz'} logları silinecek. Devam edilsin mi?`)) return;
-    fetch('/api/logs', { method: 'DELETE' })
+    authFetch('/api/logs', { method: 'DELETE' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
