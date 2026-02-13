@@ -12,7 +12,6 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
-#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -294,9 +293,6 @@ static void download_task(void *arg)
     int total = count_files();
     int success = 0;
 
-    // ONEMLI: original_mode goto'dan ONCE tanimlanmali (scope hatasi fix)
-    wifi_mode_t original_mode = WIFI_MODE_NULL;
-
     ESP_LOGI(TAG, "GUI indirme basliyor: %s/%s/%s", s_repo, s_branch, s_path);
 
     // WiFi STA baglantisinini bekle (max 30 saniye)
@@ -316,17 +312,9 @@ static void download_task(void *arg)
 
     ESP_LOGI(TAG, "WiFi bagli, IP: %s", wifi_manager_get_ip());
 
-    // APSTA modunda AP gecici olarak kapatilir (DNS routing sorunu)
-    esp_wifi_get_mode(&original_mode);
-    if (original_mode == WIFI_MODE_APSTA) {
-        ESP_LOGI(TAG, "AP gecici olarak kapatiliyor...");
-        esp_wifi_set_mode(WIFI_MODE_STA);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-
-    // DNS propagasyonu icin bekle
-    status_set(GUI_DL_STATE_CONNECTING, 5, "DNS ayarlaniyor...");
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    // NOT: AP kapatilmiyor — dogrudan IP adresleri kullanildigi icin DNS'e gerek yok
+    // Kullanici AP uzerinden bagli kalabilir ve indirme durumunu takip edebilir
+    status_set(GUI_DL_STATE_CONNECTING, 5, "Baglanti hazirlaniyor...");
 
     // HTTP buffer ayir
     char *buffer = malloc(HTTP_BUFFER_SIZE);
@@ -389,13 +377,6 @@ static void download_task(void *arg)
     status_set(GUI_DL_STATE_COMPLETE, 100, "Tamamlandi");
 
 cleanup:
-    // AP'yi geri ac (eger kapatildiysa)
-    if (original_mode == WIFI_MODE_APSTA) {
-        ESP_LOGI(TAG, "AP tekrar aciliyor...");
-        esp_wifi_set_mode(WIFI_MODE_APSTA);
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-
     s_task = NULL;
     vTaskDelete(NULL);
 }
