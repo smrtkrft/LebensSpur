@@ -1,412 +1,369 @@
 /**
- * @file session_auth.c
- * @brief Session Authentication Implementation
+ * Session Auth - Token Bazlı Oturum Yönetimi
+ *
+ * Bearer token birincil kimlik doğrulama yöntemi.
+ * Login -> token al -> her istekte "Authorization: Bearer <token>" gönder.
+ * Cookie fallback olarak desteklenir.
+ *
+ * Bağımlılık: config_manager (Katman 2)
+ * Katman: 2 (Yapılandırma)
  */
 
 #include "session_auth.h"
 #include "config_manager.h"
-#include "log_manager.h"
-#include "time_manager.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
-#include "mbedtls/sha256.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include <string.h>
 #include <stdio.h>
 
-static const char *TAG = "session";
+static const char *TAG = "SESSION";
 
-/* ============================================
- * SESSION STORAGE
- * ============================================ */
-static session_t s_sessions[SESSION_MAX_ACTIVE];
-static int s_session_timeout_min = 30;  // Default
-static SemaphoreHandle_t s_mutex = NULL;
+static session_t s_sessions[SESSION_MAX_COUNT];
+static bool s_initialized = false;
+static auth_config_t s_auth;
+static uint32_t s_timeout_sec = 60 * 60;   // Varsayılan 60 dk
 
-#define SESSION_LOCK()   do { if (s_mutex) xSemaphoreTake(s_mutex, portMAX_DELAY); } while(0)
-#define SESSION_UNLOCK() do { if (s_mutex) xSemaphoreGive(s_mutex); } while(0)
+// ============================================================================
+// Yardımcı
+// ============================================================================
 
-/* ============================================
- * PRIVATE FUNCTIONS
- * ============================================ */
-
-static void generate_token(char *token)
+static uint32_t uptime_sec(void)
 {
-    uint8_t random_bytes[SESSION_TOKEN_LEN / 2];
-    esp_fill_random(random_bytes, sizeof(random_bytes));
-    
-    for (int i = 0; i < sizeof(random_bytes); i++) {
-        sprintf(&token[i * 2], "%02x", random_bytes[i]);
-    }
-    token[SESSION_TOKEN_LEN] = '\0';
+    return (uint32_t)(esp_timer_get_time() / 1000000ULL);
 }
 
-static session_t* find_session(const char *token)
+static void generate_token(char *out)
 {
-    if (!token || strlen(token) != SESSION_TOKEN_LEN) {
-        return NULL;
+    uint8_t bytes[SESSION_TOKEN_LEN / 2];   // 16 byte
+    esp_fill_random(bytes, sizeof(bytes));
+
+    for (int i = 0; i < (int)sizeof(bytes); i++) {
+        sprintf(&out[i * 2], "%02x", bytes[i]);
     }
-    
-    for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
-        if (s_sessions[i].valid && 
-            strcmp(s_sessions[i].token, token) == 0) {
+    out[SESSION_TOKEN_LEN] = '\0';
+}
+
+static session_t *find_by_token(const char *token)
+{
+    if (!token || token[0] == '\0') return NULL;
+
+    for (int i = 0; i < SESSION_MAX_COUNT; i++) {
+        if (s_sessions[i].valid && strcmp(s_sessions[i].token, token) == 0) {
             return &s_sessions[i];
         }
     }
     return NULL;
 }
 
-static session_t* find_empty_slot(void)
+static void cleanup_expired(void)
 {
-    // First, look for invalid sessions
-    for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
-        if (!s_sessions[i].valid) {
-            return &s_sessions[i];
+    uint32_t now = uptime_sec();
+
+    for (int i = 0; i < SESSION_MAX_COUNT; i++) {
+        if (s_sessions[i].valid && (now - s_sessions[i].last_access) > s_timeout_sec) {
+            ESP_LOGD(TAG, "Timeout: slot %d", i);
+            memset(&s_sessions[i], 0, sizeof(session_t));
         }
     }
-    
-    // If all slots used, find oldest session
-    session_t *oldest = &s_sessions[0];
-    for (int i = 1; i < SESSION_MAX_ACTIVE; i++) {
-        if (s_sessions[i].last_access < oldest->last_access) {
-            oldest = &s_sessions[i];
+}
+
+static int find_free_slot(void)
+{
+    cleanup_expired();
+
+    // Boş slot ara
+    for (int i = 0; i < SESSION_MAX_COUNT; i++) {
+        if (!s_sessions[i].valid) return i;
+    }
+
+    // Yer yok - en eski oturumu sil
+    int oldest = 0;
+    uint32_t oldest_time = s_sessions[0].last_access;
+
+    for (int i = 1; i < SESSION_MAX_COUNT; i++) {
+        if (s_sessions[i].last_access < oldest_time) {
+            oldest_time = s_sessions[i].last_access;
+            oldest = i;
         }
     }
-    
-    ESP_LOGW(TAG, "Evicting old session from %s", oldest->ip_address);
+
+    ESP_LOGW(TAG, "Oturum limiti, en eski siliniyor: slot %d", oldest);
+    memset(&s_sessions[oldest], 0, sizeof(session_t));
     return oldest;
 }
 
-static bool is_session_expired(const session_t *session)
-{
-    // Use monotonic uptime to avoid NTP time-jump issues
-    int64_t now = esp_timer_get_time() / 1000; // microseconds -> milliseconds
-    return now >= session->expires_at;
-}
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
+// ============================================================================
+// Public API
+// ============================================================================
 
 esp_err_t session_auth_init(void)
 {
-    ESP_LOGI(TAG, "Initializing session auth...");
+    if (s_initialized) return ESP_OK;
 
-    // Create mutex for thread safety
-    if (!s_mutex) {
-        s_mutex = xSemaphoreCreateMutex();
-    }
-
-    // Clear all sessions
     memset(s_sessions, 0, sizeof(s_sessions));
 
-    // Load auth config
-    auth_config_t auth;
-    config_load_auth(&auth);
-    s_session_timeout_min = auth.session_timeout_min;
-
-    // Minimum timeout safeguard
-    if (s_session_timeout_min < 5) {
-        ESP_LOGW(TAG, "Session timeout too low (%d min), forcing 5 min", s_session_timeout_min);
-        s_session_timeout_min = 5;
+    // Auth config yükle
+    esp_err_t ret = config_load_auth(&s_auth);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Auth config yuklenemedi, varsayilan");
     }
 
-    ESP_LOGI(TAG, "Session timeout: %d min, max sessions: %d",
-             s_session_timeout_min, SESSION_MAX_ACTIVE);
+    // Timeout hesapla (config'de dakika, biz saniye tutuyoruz)
+    s_timeout_sec = s_auth.session_timeout_min * 60;
+    if (s_timeout_sec == 0) {
+        s_timeout_sec = 3600;   // Minimum 1 saat
+    }
 
+    s_initialized = true;
+    ESP_LOGI(TAG, "OK - timeout=%lu dk, sifre=%s",
+             s_auth.session_timeout_min,
+             s_auth.password[0] ? "ayarli" : "YOK");
     return ESP_OK;
 }
 
-void session_auth_deinit(void)
+bool session_check_password(const char *password)
 {
-    session_auth_logout_all();
-}
+    if (!s_initialized || !password) return false;
 
-/* ============================================
- * AUTHENTICATION
- * ============================================ */
-
-esp_err_t session_auth_login(const char *password, 
-                              const char *ip_address,
-                              const char *user_agent,
-                              char *out_token)
-{
-    if (!password || !out_token) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    const char *ip = ip_address ? ip_address : "unknown";
-    
-    // Check lockout
-    if (session_auth_lockout_remaining() > 0) {
-        LOG_SECURITY(LOG_LEVEL_WARN, ip, "Login blocked - account locked");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    // Verify password
-    if (!config_verify_password(password)) {
-        LOG_SECURITY(LOG_LEVEL_WARN, ip, "Login failed - wrong password");
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    SESSION_LOCK();
-
-    // Find slot and create session
-    session_t *session = find_empty_slot();
-    if (!session) {
-        SESSION_UNLOCK();
-        return ESP_ERR_NO_MEM;
-    }
-
-    // Generate token
-    generate_token(session->token);
-
-    // Use monotonic uptime for session timing (immune to NTP jumps)
-    int64_t now = esp_timer_get_time() / 1000;
-    session->created_at = now;
-    session->last_access = now;
-    session->expires_at = now + ((int64_t)s_session_timeout_min * 60 * 1000);
-    session->valid = true;
-
-    // Store client info
-    strncpy(session->ip_address, ip, sizeof(session->ip_address) - 1);
-    session->ip_address[sizeof(session->ip_address) - 1] = '\0';
-
-    if (user_agent) {
-        strncpy(session->user_agent, user_agent, sizeof(session->user_agent) - 1);
-        session->user_agent[sizeof(session->user_agent) - 1] = '\0';
-    } else {
-        session->user_agent[0] = '\0';
-    }
-
-    // Copy token to output
-    strcpy(out_token, session->token);
-
-    SESSION_UNLOCK();
-
-    LOG_SECURITY(LOG_LEVEL_INFO, ip, "Login successful");
-    ESP_LOGI(TAG, "Session created: ip=%s timeout=%dmin now=%lld expires=%lld",
-             ip, s_session_timeout_min, (long long)now, (long long)session->expires_at);
-
-    return ESP_OK;
-}
-
-esp_err_t session_auth_logout(const char *token)
-{
-    SESSION_LOCK();
-    session_t *session = find_session(token);
-    if (!session) {
-        SESSION_UNLOCK();
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    char ip[16];
-    strncpy(ip, session->ip_address, sizeof(ip));
-    memset(session, 0, sizeof(session_t));
-    SESSION_UNLOCK();
-
-    LOG_SECURITY(LOG_LEVEL_INFO, ip, "Logout");
-    return ESP_OK;
-}
-
-esp_err_t session_auth_logout_all(void)
-{
-    ESP_LOGI(TAG, "Logging out all sessions");
-
-    SESSION_LOCK();
-    for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
-        if (s_sessions[i].valid) {
-            memset(&s_sessions[i], 0, sizeof(session_t));
-        }
-    }
-    SESSION_UNLOCK();
-
-    return ESP_OK;
-}
-
-/* ============================================
- * SESSION VALIDATION
- * ============================================ */
-
-bool session_auth_validate(const char *token)
-{
-    SESSION_LOCK();
-    session_t *session = find_session(token);
-    if (!session) {
-        SESSION_UNLOCK();
-        ESP_LOGW(TAG, "Validate: token not found (%.8s...)", token ? token : "null");
+    if (s_auth.password[0] == '\0') {
+        ESP_LOGW(TAG, "Sifre henuz ayarlanmamis");
         return false;
     }
 
-    if (is_session_expired(session)) {
-        int64_t now = esp_timer_get_time() / 1000;
-        ESP_LOGW(TAG, "Session EXPIRED: ip=%s now=%lld expires=%lld diff=%lldms timeout=%dmin",
-                 session->ip_address, (long long)now, (long long)session->expires_at,
-                 (long long)(now - session->expires_at), s_session_timeout_min);
-        session->valid = false;
-        SESSION_UNLOCK();
+    if (strcmp(password, s_auth.password) == 0) {
+        ESP_LOGI(TAG, "Giris basarili");
+        return true;
+    }
+
+    ESP_LOGW(TAG, "Giris basarisiz");
+    return false;
+}
+
+bool session_has_password(void)
+{
+    return s_initialized && s_auth.password[0] != '\0';
+}
+
+esp_err_t session_create(char *token_out)
+{
+    if (!token_out) return ESP_ERR_INVALID_ARG;
+
+    int slot = find_free_slot();
+    session_t *s = &s_sessions[slot];
+    uint32_t now = uptime_sec();
+
+    generate_token(s->token);
+    s->created_at = now;
+    s->last_access = now;
+    s->valid = true;
+
+    strcpy(token_out, s->token);
+
+    ESP_LOGI(TAG, "Oturum olusturuldu: slot %d", slot);
+    return ESP_OK;
+}
+
+bool session_validate(const char *token)
+{
+    if (!token || token[0] == '\0') return false;
+
+    session_t *s = find_by_token(token);
+    if (!s) return false;
+
+    uint32_t now = uptime_sec();
+    if ((now - s->last_access) > s_timeout_sec) {
+        ESP_LOGD(TAG, "Oturum timeout");
+        s->valid = false;
         return false;
     }
 
-    SESSION_UNLOCK();
+    // Erişim zamanını güncelle (sliding window)
+    s->last_access = now;
     return true;
 }
 
-esp_err_t session_auth_refresh(const char *token)
+void session_destroy(const char *token)
 {
-    SESSION_LOCK();
-    session_t *session = find_session(token);
-    if (!session) {
-        SESSION_UNLOCK();
-        return ESP_ERR_NOT_FOUND;
+    session_t *s = find_by_token(token);
+    if (s) {
+        memset(s, 0, sizeof(session_t));
+        ESP_LOGI(TAG, "Oturum sonlandirildi");
     }
-
-    if (is_session_expired(session)) {
-        session->valid = false;
-        SESSION_UNLOCK();
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    // Use monotonic uptime
-    int64_t now = esp_timer_get_time() / 1000;
-    session->last_access = now;
-    session->expires_at = now + ((int64_t)s_session_timeout_min * 60 * 1000);
-
-    SESSION_UNLOCK();
-    return ESP_OK;
 }
 
-esp_err_t session_auth_get_session(const char *token, session_t *session)
+void session_destroy_all(void)
 {
-    if (!session) return ESP_ERR_INVALID_ARG;
-
-    SESSION_LOCK();
-    session_t *found = find_session(token);
-    if (!found) {
-        SESSION_UNLOCK();
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    *session = *found;
-    SESSION_UNLOCK();
-    return ESP_OK;
+    memset(s_sessions, 0, sizeof(s_sessions));
+    ESP_LOGW(TAG, "Tum oturumlar temizlendi");
 }
 
-/* ============================================
- * SESSION MANAGEMENT
- * ============================================ */
-
-int session_auth_count(void)
+int session_get_active_count(void)
 {
-    SESSION_LOCK();
+    cleanup_expired();
     int count = 0;
-    for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
-        if (s_sessions[i].valid && !is_session_expired(&s_sessions[i])) {
-            count++;
-        }
+    for (int i = 0; i < SESSION_MAX_COUNT; i++) {
+        if (s_sessions[i].valid) count++;
     }
-    SESSION_UNLOCK();
     return count;
 }
 
-void session_auth_cleanup(void)
+// ============================================================================
+// Token Çıkarma (HTTP Header Parsing)
+// ============================================================================
+
+bool session_extract_bearer_token(const char *auth_header, char *token_out)
 {
-    SESSION_LOCK();
-    for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
-        if (s_sessions[i].valid && is_session_expired(&s_sessions[i])) {
-            ESP_LOGI(TAG, "Cleanup: expired session from %s",
-                     s_sessions[i].ip_address);
-            memset(&s_sessions[i], 0, sizeof(session_t));
+    if (!auth_header || !token_out) return false;
+    token_out[0] = '\0';
+
+    // "Bearer " prefix kontrolü (7 karakter)
+    if (strncmp(auth_header, "Bearer ", 7) != 0) return false;
+
+    const char *tok = auth_header + 7;
+
+    // Boşlukları atla
+    while (*tok == ' ') tok++;
+
+    // Token uzunluğu kontrolü
+    size_t len = strlen(tok);
+    if (len != SESSION_TOKEN_LEN) return false;
+
+    // Hex karakter kontrolü
+    for (size_t i = 0; i < len; i++) {
+        char c = tok[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+            return false;
         }
     }
-    SESSION_UNLOCK();
+
+    memcpy(token_out, tok, SESSION_TOKEN_LEN);
+    token_out[SESSION_TOKEN_LEN] = '\0';
+    return true;
 }
 
-int session_auth_remaining_attempts(void)
+bool session_extract_cookie_token(const char *cookie_header, char *token_out)
 {
-    auth_config_t auth;
-    config_load_auth(&auth);
-    
-    if (config_is_locked_out()) {
-        return 0;
+    if (!cookie_header || !token_out) return false;
+    token_out[0] = '\0';
+
+    // "ls_token=" ara
+    const char *search = SESSION_COOKIE_NAME "=";
+    const char *pos = strstr(cookie_header, search);
+    if (!pos) return false;
+
+    pos += strlen(search);
+
+    // Token'ı kopyala (';' veya string sonuna kadar)
+    int i = 0;
+    while (*pos && *pos != ';' && *pos != ' ' && i < SESSION_TOKEN_LEN) {
+        token_out[i++] = *pos++;
     }
-    
-    int remaining = auth.max_login_attempts - auth.failed_attempts;
-    return (remaining > 0) ? remaining : 0;
-}
+    token_out[i] = '\0';
 
-int session_auth_lockout_remaining(void)
-{
-    auth_config_t auth;
-    config_load_auth(&auth);
-    
-    if (auth.lockout_until == 0) {
-        return 0;
+    if (i != SESSION_TOKEN_LEN) {
+        token_out[0] = '\0';
+        return false;
     }
-    
-    int64_t now = time_manager_get_timestamp_ms();
-    if (now >= auth.lockout_until) {
-        return 0;
+    return true;
+}
+
+bool session_extract_token(const char *auth_header, const char *cookie_header, char *token_out)
+{
+    if (!token_out) return false;
+
+    // Öncelik 1: Bearer token
+    if (auth_header && session_extract_bearer_token(auth_header, token_out)) {
+        return true;
     }
-    
-    return (int)((auth.lockout_until - now) / 1000);
+
+    // Öncelik 2: Cookie fallback
+    if (cookie_header && session_extract_cookie_token(cookie_header, token_out)) {
+        return true;
+    }
+
+    token_out[0] = '\0';
+    return false;
 }
 
-/* ============================================
- * COOKIE HELPERS
- * ============================================ */
+// ============================================================================
+// Cookie Formatları (Login/Logout Response)
+// ============================================================================
 
-void session_auth_cookie_header(const char *token, char *buffer, size_t buffer_size)
+int session_format_cookie(const char *token, char *buffer, size_t size)
 {
-    if (!token || !buffer || buffer_size == 0) return;
-    
-    // Set cookie with HttpOnly, SameSite=Lax, Path=/
-    snprintf(buffer, buffer_size,
-             "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d",
-             SESSION_COOKIE_NAME,
-             token,
-             s_session_timeout_min * 60);
+    if (!token || !buffer || size < 80) return 0;
+
+    return snprintf(buffer, size,
+        "%s=%s; Path=/; Max-Age=%lu; HttpOnly; SameSite=Strict",
+        SESSION_COOKIE_NAME, token, s_timeout_sec);
 }
 
-esp_err_t session_auth_extract_token(const char *cookie_header, char *out_token)
+int session_format_logout_cookie(char *buffer, size_t size)
 {
-    if (!cookie_header || !out_token) {
+    if (!buffer || size < 60) return 0;
+
+    return snprintf(buffer, size,
+        "%s=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict",
+        SESSION_COOKIE_NAME);
+}
+
+// ============================================================================
+// Şifre Yönetimi
+// ============================================================================
+
+esp_err_t session_change_password(const char *current, const char *new_pass)
+{
+    if (!s_initialized) return ESP_ERR_INVALID_STATE;
+    if (!current || !new_pass) return ESP_ERR_INVALID_ARG;
+
+    // Mevcut şifreyi doğrula
+    if (!session_check_password(current)) {
+        ESP_LOGW(TAG, "Sifre degistirme: mevcut sifre yanlis");
         return ESP_ERR_INVALID_ARG;
     }
-    
-    // Look for "LS_SID="
-    char search[32];
-    snprintf(search, sizeof(search), "%s=", SESSION_COOKIE_NAME);
-    
-    const char *start = strstr(cookie_header, search);
-    if (!start) {
-        return ESP_ERR_NOT_FOUND;
-    }
-    
-    start += strlen(search);
-    
-    // Copy token until ; or end of string
-    int i = 0;
-    while (*start && *start != ';' && *start != ' ' && i < SESSION_TOKEN_LEN) {
-        out_token[i++] = *start++;
-    }
-    out_token[i] = '\0';
-    
-    if (i != SESSION_TOKEN_LEN) {
+
+    if (strlen(new_pass) < SESSION_MIN_PASSWORD) {
+        ESP_LOGW(TAG, "Sifre degistirme: yeni sifre cok kisa (min %d)", SESSION_MIN_PASSWORD);
         return ESP_ERR_INVALID_SIZE;
     }
-    
-    return ESP_OK;
+
+    strncpy(s_auth.password, new_pass, sizeof(s_auth.password) - 1);
+    s_auth.password[sizeof(s_auth.password) - 1] = '\0';
+
+    esp_err_t ret = config_save_auth(&s_auth);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Sifre degistirildi");
+    }
+    return ret;
 }
 
-void session_auth_logout_cookie(char *buffer, size_t buffer_size)
+esp_err_t session_set_initial_password(const char *password)
 {
-    if (!buffer || buffer_size == 0) return;
-    
-    // Expired cookie to clear
-    snprintf(buffer, buffer_size,
-             "%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
-             SESSION_COOKIE_NAME);
+    if (!s_initialized) return ESP_ERR_INVALID_STATE;
+    if (!password) return ESP_ERR_INVALID_ARG;
+
+    // Şifre zaten varsa reddet
+    if (s_auth.password[0] != '\0') {
+        ESP_LOGW(TAG, "Sifre zaten ayarli, set_initial reddedildi");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (strlen(password) < SESSION_MIN_PASSWORD) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    strncpy(s_auth.password, password, sizeof(s_auth.password) - 1);
+    s_auth.password[sizeof(s_auth.password) - 1] = '\0';
+
+    esp_err_t ret = config_save_auth(&s_auth);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Ilk sifre ayarlandi");
+    }
+    return ret;
+}
+
+uint32_t session_get_timeout_sec(void)
+{
+    return s_timeout_sec;
 }

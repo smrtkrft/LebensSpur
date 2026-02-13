@@ -1,142 +1,66 @@
 /**
- * @file web_server.h
- * @brief HTTP Web Server
- * 
- * Provides:
- * - Static file serving from LittleFS
- * - REST API endpoints
- * - Session authentication middleware
+ * Web Server - HTTP Yonetimi (Token Auth ile)
+ *
+ * ESP-IDF httpd uzerinde calisan HTTP sunucu.
+ * Bearer token + Cookie fallback ile kimlik dogrulama.
+ * LittleFS'ten statik dosya servisi.
+ * REST API: timer, mail, wifi, relay, ota, device.
+ *
+ * Bagimlilik: session_auth (Katman 2), tum manager'lar
+ * Katman: 4 (Uygulama)
  */
 
 #ifndef WEB_SERVER_H
 #define WEB_SERVER_H
 
-#include <stdbool.h>
-#include <stdint.h>
 #include "esp_err.h"
 #include "esp_http_server.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================
- * CONFIGURATION
- * ============================================ */
+// Sunucu ayarlari
 #define WEB_SERVER_PORT         80
-#define WEB_MAX_URI_LEN         128
-#define WEB_MAX_HANDLERS        56
-#define WEB_STATIC_DIR          "/gui/web"
-
-// MIME types
-#define MIME_HTML       "text/html"
-#define MIME_CSS        "text/css"
-#define MIME_JS         "application/javascript"
-#define MIME_JSON       "application/json"
-#define MIME_PNG        "image/png"
-#define MIME_ICO        "image/x-icon"
-#define MIME_SVG        "image/svg+xml"
-#define MIME_OCTET      "application/octet-stream"
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
+#define WEB_SERVER_MAX_URI      40
+#define WEB_SERVER_STACK_SIZE   8192
 
 /**
- * @brief Initialize and start web server
+ * Web sunucuyu baslat
  */
-esp_err_t web_server_init(void);
+esp_err_t web_server_start(void);
 
 /**
- * @brief Stop web server
+ * Web sunucuyu durdur
  */
-void web_server_stop(void);
+esp_err_t web_server_stop(void);
 
 /**
- * @brief Check if server is running
+ * Sunucu calisiyor mu
  */
 bool web_server_is_running(void);
 
 /**
- * @brief Get server handle
+ * JSON yanit gonder
  */
-httpd_handle_t web_server_get_handle(void);
-
-/* ============================================
- * API HELPERS
- * ============================================ */
+esp_err_t web_server_send_json(httpd_req_t *req, const char *json);
 
 /**
- * @brief Send JSON response
- * @param req HTTP request
- * @param status_code HTTP status
- * @param json JSON string
+ * Hata yaniti gonder
  */
-esp_err_t web_send_json(httpd_req_t *req, int status_code, const char *json);
+esp_err_t web_server_send_error(httpd_req_t *req, int status_code, const char *message);
 
 /**
- * @brief Send JSON error response
- * @param req HTTP request
- * @param status_code HTTP status
- * @param error Error message
+ * LittleFS'ten dosya gonder (chunked)
  */
-esp_err_t web_send_error(httpd_req_t *req, int status_code, const char *error);
+esp_err_t web_server_send_file(httpd_req_t *req, const char *filepath);
 
 /**
- * @brief Send JSON success response
- * @param req HTTP request
- * @param message Optional message (can be NULL)
+ * Debug bilgileri
  */
-esp_err_t web_send_success(httpd_req_t *req, const char *message);
-
-/**
- * @brief Send file from LittleFS
- * @param req HTTP request
- * @param filepath Path on LittleFS
- */
-esp_err_t web_send_file(httpd_req_t *req, const char *filepath);
-
-/* ============================================
- * AUTH MIDDLEWARE
- * ============================================ */
-
-/**
- * @brief Check if request is authenticated
- * @param req HTTP request
- * @return true if valid session
- */
-bool web_is_authenticated(httpd_req_t *req);
-
-/**
- * @brief Get client IP from request
- * @param req HTTP request
- * @param ip_buffer Output buffer (min 16 chars)
- */
-void web_get_client_ip(httpd_req_t *req, char *ip_buffer);
-
-/**
- * @brief Get request body as string
- * @param req HTTP request
- * @param buffer Output buffer
- * @param max_len Maximum length
- * @return Number of bytes read
- */
-int web_get_body(httpd_req_t *req, char *buffer, size_t max_len);
-
-/* ============================================
- * ROUTE REGISTRATION
- * ============================================ */
-
-/**
- * @brief Register API routes
- * Called internally by web_server_init
- */
-void web_register_api_routes(httpd_handle_t server);
-
-/**
- * @brief Register static file handler
- */
-void web_register_static_routes(httpd_handle_t server);
+void web_server_print_stats(void);
 
 #ifdef __cplusplus
 }

@@ -1,180 +1,114 @@
 /**
- * @file timer_scheduler.h
- * @brief Dead Man's Switch Timer Scheduler
- * 
- * Core logic for the dead man's switch:
- * - Countdown timer with configurable interval
- * - Warning notifications before trigger
- * - Time window checks (quiet hours)
- * - Vacation mode
- * - Reset mechanism
+ * Timer Scheduler - LebensSpur Dead Man's Switch
+ *
+ * Ana timer mantigi:
+ * - Kullanici belirli araliklarda (orn: 24 saat) "hayattayim" sinyali gonderir
+ * - Gondermezse uyari maili gonderilir
+ * - Hala gondermezse alarm tetiklenir (mail + role)
+ *
+ * Relay kontrolu relay_manager uzerinden yapilir (Katman 0).
+ * Config timer_config_t ve timer_runtime_t (Katman 2).
+ * FreeRTOS software timer ile 1 saniyelik tick.
+ *
+ * Bagimlilik: config_manager (Katman 2), relay_manager (Katman 0),
+ *             mail_sender (Katman 3), time_manager (Katman 1)
+ * Katman: 4 (Uygulama)
  */
 
 #ifndef TIMER_SCHEDULER_H
 #define TIMER_SCHEDULER_H
 
+#include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================
- * TIMER STATES
- * ============================================ */
+// Timer durumlari
 typedef enum {
-    TIMER_STATE_DISABLED,       // Timer not active
-    TIMER_STATE_RUNNING,        // Normal countdown
-    TIMER_STATE_WARNING,        // Warning period (before trigger)
-    TIMER_STATE_TRIGGERED,      // Timer has triggered
-    TIMER_STATE_PAUSED,         // Paused (outside time window)
-    TIMER_STATE_VACATION        // Vacation mode
+    TIMER_STATE_DISABLED = 0,   // Timer devre disi
+    TIMER_STATE_ACTIVE,         // Normal calisiyor
+    TIMER_STATE_WARNING,        // Uyari suresi basladi
+    TIMER_STATE_TRIGGERED,      // Alarm tetiklendi
+    TIMER_STATE_PAUSED          // Gecici duraklatildi
 } timer_state_t;
 
-/* ============================================
- * TIMER STATUS
- * ============================================ */
+// Timer durum bilgisi
 typedef struct {
     timer_state_t state;
-    int64_t next_deadline;      // Unix timestamp (ms)
-    int64_t time_remaining_ms;  // Milliseconds until deadline
-    int warnings_sent;          // Number of warnings sent
-    int reset_count;            // Total resets
-    int trigger_count;          // Total triggers
-    bool in_time_window;        // Currently in active window
+    uint32_t remaining_seconds;     // Kalan sure (saniye)
+    uint32_t warning_seconds;       // Uyariya kalan sure
+    int64_t last_reset_time;        // Son sifirlama (epoch ms)
+    int64_t next_deadline;          // Sonraki deadline (epoch ms)
+    uint32_t reset_count;           // Toplam sifirlama sayisi
+    uint32_t warning_count;         // Uyari gonderme sayisi
+    uint32_t trigger_count;         // Tetiklenme sayisi
+    bool in_active_hours;           // Aktif saatler icinde mi
 } timer_status_t;
 
-/* ============================================
- * CALLBACKS
- * ============================================ */
-
-/**
- * @brief Callback when timer triggers (deadline reached)
- */
+// Callback fonksiyonlari
+typedef void (*timer_warning_cb_t)(uint32_t remaining_minutes);
 typedef void (*timer_trigger_cb_t)(void);
+typedef void (*timer_reset_cb_t)(void);
 
 /**
- * @brief Callback when warning should be sent
- * @param warning_number Which warning (1, 2, 3...)
- * @param minutes_remaining Minutes until trigger
- */
-typedef void (*timer_warning_cb_t)(int warning_number, int minutes_remaining);
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
-
-/**
- * @brief Initialize timer scheduler
+ * Timer scheduler'i baslat (config'den ayarlari yukler)
  */
 esp_err_t timer_scheduler_init(void);
 
 /**
- * @brief Deinitialize timer scheduler
+ * Timer scheduler'i durdur
  */
-void timer_scheduler_deinit(void);
+esp_err_t timer_scheduler_deinit(void);
 
 /**
- * @brief Set trigger callback
+ * Timer'i sifirla (kullanici "hayattayim" sinyali)
  */
-void timer_scheduler_set_trigger_cb(timer_trigger_cb_t cb);
+esp_err_t timer_reset(void);
 
 /**
- * @brief Set warning callback
+ * Timer'i etkinlestir/devre disi birak
  */
-void timer_scheduler_set_warning_cb(timer_warning_cb_t cb);
-
-/* ============================================
- * CONTROL
- * ============================================ */
+esp_err_t timer_set_enabled(bool enabled);
 
 /**
- * @brief Enable/Start the timer
+ * Timer'i gecici olarak duraklat
  */
-esp_err_t timer_scheduler_enable(void);
+esp_err_t timer_pause(void);
 
 /**
- * @brief Disable/Stop the timer
+ * Duraklatilmis timer'i devam ettir
  */
-esp_err_t timer_scheduler_disable(void);
+esp_err_t timer_resume(void);
 
 /**
- * @brief Reset the timer ("I'm alive" signal)
- * @return ESP_OK on success
+ * Guncel timer durumunu al
  */
-esp_err_t timer_scheduler_reset(void);
+esp_err_t timer_get_status(timer_status_t *status);
 
 /**
- * @brief Acknowledge trigger (stop alarm)
+ * 1 saniyelik tick (FreeRTOS timer callback)
  */
-esp_err_t timer_scheduler_acknowledge(void);
-
-/* ============================================
- * VACATION MODE
- * ============================================ */
+void timer_tick(void);
 
 /**
- * @brief Enable vacation mode
- * @param days Number of vacation days
+ * Aktif saatler icinde mi
  */
-esp_err_t timer_scheduler_vacation_start(int days);
+bool timer_is_in_active_hours(void);
 
 /**
- * @brief Disable vacation mode
+ * Callback'leri ayarla
  */
-esp_err_t timer_scheduler_vacation_end(void);
+void timer_set_warning_callback(timer_warning_cb_t cb);
+void timer_set_trigger_callback(timer_trigger_cb_t cb);
+void timer_set_reset_callback(timer_reset_cb_t cb);
 
 /**
- * @brief Check if in vacation mode
+ * Debug bilgileri
  */
-bool timer_scheduler_is_vacation(void);
-
-/* ============================================
- * STATUS
- * ============================================ */
-
-/**
- * @brief Get current timer status
- * @param status Output status structure
- */
-void timer_scheduler_get_status(timer_status_t *status);
-
-/**
- * @brief Get timer state
- */
-timer_state_t timer_scheduler_get_state(void);
-
-/**
- * @brief Check if timer has triggered
- */
-bool timer_scheduler_is_triggered(void);
-
-/**
- * @brief Get time remaining in milliseconds
- */
-int64_t timer_scheduler_time_remaining_ms(void);
-
-/**
- * @brief Get time remaining as string (e.g., "2h 30m")
- */
-void timer_scheduler_time_remaining_str(char *buffer, size_t size);
-
-/* ============================================
- * STATE NAME
- * ============================================ */
-
-/**
- * @brief Reload config from NVS and recalculate deadline
- * Call after saving timer config via web API
- */
-void timer_scheduler_reload_config(void);
-
-/**
- * @brief Get state name string
- */
-const char* timer_scheduler_state_name(timer_state_t state);
+void timer_print_stats(void);
 
 #ifdef __cplusplus
 }

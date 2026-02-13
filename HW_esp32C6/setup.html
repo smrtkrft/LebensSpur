@@ -130,9 +130,7 @@
             border-radius: var(--radius-sm);
             color: var(--text-primary);
             font-family: var(--font-mono);
-            font-size: 16px; /* Prevent iOS zoom on focus */
-            -webkit-appearance: none;
-            touch-action: manipulation;
+            font-size: 0.875rem;
         }
         .form-input:focus { outline: none; border-color: var(--accent-primary); }
         .form-input::placeholder { color: var(--text-tertiary); }
@@ -381,7 +379,33 @@
                 </button>
                 
                 <div class="wifi-list" id="wifiList">
-                    <!-- Networks will be populated by WiFi scan -->
+                    <div class="wifi-item" data-ssid="MyNetwork">
+                        <span class="wifi-name">MyNetwork</span>
+                        <div class="wifi-signal">
+                            <div class="wifi-bar active" style="height: 6px;"></div>
+                            <div class="wifi-bar active" style="height: 10px;"></div>
+                            <div class="wifi-bar active" style="height: 14px;"></div>
+                            <div class="wifi-bar active" style="height: 18px;"></div>
+                        </div>
+                    </div>
+                    <div class="wifi-item" data-ssid="HomeWiFi">
+                        <span class="wifi-name">HomeWiFi</span>
+                        <div class="wifi-signal">
+                            <div class="wifi-bar active" style="height: 6px;"></div>
+                            <div class="wifi-bar active" style="height: 10px;"></div>
+                            <div class="wifi-bar active" style="height: 14px;"></div>
+                            <div class="wifi-bar" style="height: 18px;"></div>
+                        </div>
+                    </div>
+                    <div class="wifi-item" data-ssid="Office_5G">
+                        <span class="wifi-name">Office_5G</span>
+                        <div class="wifi-signal">
+                            <div class="wifi-bar active" style="height: 6px;"></div>
+                            <div class="wifi-bar active" style="height: 10px;"></div>
+                            <div class="wifi-bar" style="height: 14px;"></div>
+                            <div class="wifi-bar" style="height: 18px;"></div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -533,14 +557,6 @@
             prevBtn.addEventListener('click', prevStep);
             nextBtn.addEventListener('click', nextStep);
             
-            // Enter key: WiFi password → Continue, Device password confirm → Continue
-            document.getElementById('wifiPassword').addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); nextBtn.click(); }
-            });
-            document.getElementById('devicePasswordConfirm').addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); nextBtn.click(); }
-            });
-            
             // İlk WiFi taramasını yap
             await scanWifi();
             
@@ -622,7 +638,7 @@
                     state.wifiSsid = ssid;
                     state.wifiPassword = pass;
                     
-                    // WiFi bağlantısını başlat (async)
+                    // WiFi bağlantısı kur
                     try {
                         nextBtn.textContent = 'Connecting...';
                         const r = await fetch('/api/setup/wifi/connect', {
@@ -632,46 +648,18 @@
                         });
                         const d = await r.json();
                         if (!d.success) {
-                            alert('Failed to start WiFi connection: ' + (d.error || 'Unknown error'));
+                            alert('WiFi connection failed: ' + (d.error || 'Unknown error'));
                             nextBtn.textContent = 'Continue';
                             return false;
                         }
-                        
-                        // Bağlantı başlatıldı, şimdi durumu kontrol et (polling)
-                        let connected = false;
-                        for (let i = 0; i < 25; i++) { // 25 saniye bekle
-                            await new Promise(resolve => setTimeout(resolve, 1500));
-                            nextBtn.textContent = `Connecting... ${i+1}s`;
-                            try {
-                                const controller = new AbortController();
-                                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                                const statusR = await fetch('/api/wifi/status', { signal: controller.signal });
-                                clearTimeout(timeoutId);
-                                const statusD = await statusR.json();
-                                if (statusD.connected) {
-                                    connected = true;
-                                    break;
-                                }
-                            } catch(e) {
-                                // AP kanal değiştirmiş olabilir, devam et
-                                console.log('Status check failed, retrying...', e.message);
-                            }
-                        }
-                        
-                        if (connected) {
-                            state.wifiConnected = true;
-                            nextBtn.textContent = 'Continue';
-                            return true;
-                        } else {
-                            alert('WiFi connection timeout. Please check password and try again.');
-                            nextBtn.textContent = 'Continue';
-                            return false;
-                        }
+                        state.wifiConnected = true;
+                        nextBtn.textContent = 'Continue';
                     } catch(e) {
                         alert('WiFi connection error: ' + e.message);
                         nextBtn.textContent = 'Continue';
                         return false;
                     }
+                    return true;
                     
                 case 2: // Password - kaydet
                     const pwd = document.getElementById('devicePassword').value;
@@ -903,9 +891,9 @@
                     
                     setProgress(30 + Math.floor(status.progress * 0.5), status.message || 'Downloading...');
                     
-                    if (status.status === 'done') {
+                    if (status.state === 'complete') {
                         complete = true;
-                    } else if (status.status === 'error') {
+                    } else if (status.state === 'error') {
                         throw new Error(status.error || 'Download failed');
                     }
                 }
