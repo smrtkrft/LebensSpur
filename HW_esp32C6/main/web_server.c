@@ -46,18 +46,28 @@ bool check_auth(httpd_req_t *req)
     char auth_hdr[128] = {0};
     if (httpd_req_get_hdr_value_str(req, "Authorization", auth_hdr, sizeof(auth_hdr)) == ESP_OK) {
         if (session_extract_bearer_token(auth_hdr, token)) {
-            return session_validate(token);
+            bool valid = session_validate(token);
+            if (!valid) {
+                ESP_LOGW(TAG, "Auth: Bearer token gecersiz (uri=%s)", req->uri);
+            }
+            return valid;
         }
+        ESP_LOGW(TAG, "Auth: Bearer parse hatasi (uri=%s)", req->uri);
     }
 
     // 2. Cookie fallback
     char cookie_hdr[512] = {0};
     if (httpd_req_get_hdr_value_str(req, "Cookie", cookie_hdr, sizeof(cookie_hdr)) == ESP_OK) {
         if (session_extract_cookie_token(cookie_hdr, token)) {
-            return session_validate(token);
+            bool valid = session_validate(token);
+            if (!valid) {
+                ESP_LOGW(TAG, "Auth: Cookie token gecersiz (uri=%s)", req->uri);
+            }
+            return valid;
         }
     }
 
+    ESP_LOGW(TAG, "Auth: Token bulunamadi (uri=%s)", req->uri);
     return false;
 }
 

@@ -2,19 +2,26 @@
 #include "web_server.h"
 #include "web_server_internal.h"
 #include "session_auth.h"
+#include "esp_log.h"
 #include <cJSON.h>
 #include <string.h>
+
+static const char *TAG = "AUTH_API";
 
 esp_err_t h_api_login(httpd_req_t *req)
 {
     ws_request_count++;
     char body[256] = {0};
     if (read_body(req, body, sizeof(body)) < 0) {
+        ESP_LOGW(TAG, "Login: body okunamadi");
         return web_server_send_error(req, 400, "Bad request");
     }
 
     cJSON *json = cJSON_Parse(body);
-    if (!json) return web_server_send_error(req, 400, "Invalid JSON");
+    if (!json) {
+        ESP_LOGW(TAG, "Login: JSON parse hatasi");
+        return web_server_send_error(req, 400, "Invalid JSON");
+    }
 
     cJSON *pw = cJSON_GetObjectItem(json, "password");
     const char *password = cJSON_IsString(pw) ? pw->valuestring : "";
@@ -23,12 +30,14 @@ esp_err_t h_api_login(httpd_req_t *req)
     cJSON_Delete(json);
 
     if (!ok) {
+        ESP_LOGW(TAG, "Login: Sifre yanlis (len=%d)", (int)strlen(password));
         httpd_resp_set_status(req, "401 Unauthorized");
         return web_server_send_json(req, "{\"success\":false,\"error\":\"Wrong password\"}");
     }
 
     char token[SESSION_TOKEN_LEN + 1];
     if (session_create(token) != ESP_OK) {
+        ESP_LOGE(TAG, "Login: Session olusturulamadi");
         return web_server_send_error(req, 500, "Session error");
     }
 
@@ -38,6 +47,7 @@ esp_err_t h_api_login(httpd_req_t *req)
 
     char resp[128];
     snprintf(resp, sizeof(resp), "{\"success\":true,\"token\":\"%s\"}", token);
+    ESP_LOGI(TAG, "Login: Basarili, token=%.8s..., aktif=%d", token, session_get_active_count());
     return web_server_send_json(req, resp);
 }
 
