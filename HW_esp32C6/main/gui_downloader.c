@@ -196,7 +196,7 @@ static esp_err_t download_file(const char *github_name, const char *local_name,
         if (s_cancel) return ESP_ERR_INVALID_STATE;
 
         if (retry > 0) {
-            ESP_LOGI(TAG, "Tekrar %d: %s", retry, filename);
+            ESP_LOGI(TAG, "Tekrar %d: %s", retry, github_name);
             vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
         }
 
