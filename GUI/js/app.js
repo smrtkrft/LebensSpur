@@ -32,6 +32,7 @@ function authFetch(url, options = {}) {
             // Session expired on server side
             state.isAuthenticated = false;
             state.authToken = null;
+            localStorage.removeItem('ls_token');
             stopAutoLogoutTimer();
             if (timerPollInterval) {
                 clearInterval(timerPollInterval);
@@ -54,7 +55,7 @@ function authFetch(url, options = {}) {
 // ─────────────────────────────────────────────────────────────────────────────
 const state = {
     isAuthenticated: false,
-    authToken: null,  // Session token (sent via Authorization header)
+    authToken: localStorage.getItem('ls_token') || null,  // Session token (localStorage'dan oku)
     // Timer status (from ESP32 polling)
     timerState: 'DISABLED',  // DISABLED, RUNNING, WARNING, TRIGGERED, PAUSED, VACATION
     timeRemainingMs: 0,
@@ -172,10 +173,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initAutoLogout();
     initPWA();
     initLogs();
-    updateUI();
-    startTimerUpdate();
-    fetchDeviceInfo();
-    loadSecuritySettings();
+    
+    // Sayfa yuklendiginde auth kontrol et
+    checkAuthOnLoad();
+    
+    // Initialize i18n before other UI updates
     // Initialize i18n language system
     if (window.I18n) {
         I18n.init().then(() => {
@@ -2299,6 +2301,52 @@ function initToggles() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Authentication
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Sayfa yuklendiginde token varsa validate et
+function checkAuthOnLoad() {
+    // Token yoksa login sayfasi goster
+    if (!state.authToken) {
+        showPage('login');
+        return;
+    }
+    
+    // Token var, sunucudan dogrula
+    fetch('/api/timer/status', {
+        headers: { 'Authorization': 'Bearer ' + state.authToken }
+    })
+    .then(res => {
+        if (res.status === 401) {
+            // Token gecersiz, login sayfasi goster
+            state.isAuthenticated = false;
+            state.authToken = null;
+            localStorage.removeItem('ls_token');
+            showPage('login');
+        } else {
+            // Token gecerli, app sayfasini goster
+            state.isAuthenticated = true;
+            showPage('app');
+            startAutoLogoutTimer();
+            updateUI();
+            startTimerUpdate();
+            fetchDeviceInfo();
+            loadSecuritySettings();
+            // Stagger post-login requests
+            setTimeout(() => {
+                loadTimerConfig();
+                loadMailGroups();
+            }, 200);
+            setTimeout(() => {
+                loadWifiConfig();
+                loadSmtpConfig();
+            }, 400);
+        }
+    })
+    .catch(() => {
+        // Baglanti hatasi, login goster
+        showPage('login');
+    });
+}
+
 function handleLogin(e) {
     e.preventDefault();
     
@@ -2324,7 +2372,11 @@ function handleLogin(e) {
     .then(data => {
         if (data.success) {
             state.isAuthenticated = true;
-            state.authToken = data.token || null;  // Store token for Authorization header
+            state.authToken = data.token || null;
+            // Token'i localStorage'a kaydet
+            if (data.token) {
+                localStorage.setItem('ls_token', data.token);
+            }
             state.loginAttempts = 0;
             state.lockoutUntil = null;
             showPage('app');
@@ -2371,6 +2423,7 @@ function handleLogout() {
     authFetch('/api/logout', { method: 'POST' }).catch(() => {});
     state.isAuthenticated = false;
     state.authToken = null;
+    localStorage.removeItem('ls_token');
     stopAutoLogoutTimer();
     if (timerPollInterval) { clearInterval(timerPollInterval); timerPollInterval = null; }
     if (timerCountdownInterval) { clearInterval(timerCountdownInterval); timerCountdownInterval = null; }
