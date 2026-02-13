@@ -48,6 +48,10 @@ static httpd_handle_t s_server = NULL;
 extern const uint8_t setup_html_start[] asm("_binary_setup_html_start");
 extern const uint8_t setup_html_end[] asm("_binary_setup_html_end");
 
+/* Embedded clear.html - SW/cache cleanup page */
+extern const uint8_t clear_html_start[] asm("_binary_clear_html_start");
+extern const uint8_t clear_html_end[] asm("_binary_clear_html_end");
+
 /* ============================================
  * MIME TYPE LOOKUP
  * ============================================ */
@@ -740,6 +744,18 @@ static esp_err_t setup_html_handler(httpd_req_t *req)
     httpd_resp_set_type(req, MIME_HTML);
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     return httpd_resp_send(req, (const char *)setup_html_start, setup_html_len);
+}
+
+/* ============================================
+ * CLEAR PAGE HANDLER (SW/cache cleanup)
+ * ============================================ */
+
+static esp_err_t clear_html_handler(httpd_req_t *req)
+{
+    size_t clear_html_len = clear_html_end - clear_html_start;
+    httpd_resp_set_type(req, MIME_HTML);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, (const char *)clear_html_start, clear_html_len);
 }
 
 /* ============================================
@@ -2633,7 +2649,15 @@ void web_register_static_routes(httpd_handle_t server)
         .handler = setup_html_handler
     };
     httpd_register_uri_handler(server, &setup_root);
-    
+
+    // Clear page - embedded in firmware (SW/cache cleanup)
+    httpd_uri_t clear_uri = {
+        .uri = "/clear",
+        .method = HTTP_GET,
+        .handler = clear_html_handler
+    };
+    httpd_register_uri_handler(server, &clear_uri);
+
     // Catch-all for static files
     httpd_uri_t static_uri = {
         .uri = "/*",

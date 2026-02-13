@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>LebensSpur - Clear Cache</title>
+<style>body{background:#111;color:#eee;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+.box{text-align:center;padding:2em}h2{margin-bottom:1em}#status{font-size:1.2em;color:#4caf50}</style>
+</head><body><div class="box"><h2>LebensSpur</h2><div id="status">Cleaning...</div></div>
+<script>
+(async function(){
+    const s = document.getElementById('status');
+    try {
+        // 1. Unregister all Service Workers
+        if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const r of regs) { await r.unregister(); }
+            s.textContent = 'Service Worker removed (' + regs.length + ')';
+        }
+        // 2. Clear all caches
+        if ('caches' in window) {
+            const names = await caches.keys();
+            for (const n of names) { await caches.delete(n); }
+        }
+        // 3. Clear localStorage
+        try { localStorage.clear(); } catch(e) {}
+        s.textContent = 'Done! Redirecting...';
+        s.style.color = '#4caf50';
+        setTimeout(function(){ window.location.href = '/'; }, 1500);
+    } catch(e) {
+        s.textContent = 'Error: ' + e.message;
+        s.style.color = '#f44336';
+    }
+})();
+</script></body></html>

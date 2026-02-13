@@ -22,6 +22,7 @@ idf_component_register(
         "."
     EMBED_TXTFILES
         "../setup.html"
+        "../clear.html"
     REQUIRES
         nvs_flash
         esp_event
