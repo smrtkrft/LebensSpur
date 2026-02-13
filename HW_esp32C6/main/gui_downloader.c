@@ -94,6 +94,12 @@ static bool is_critical(const char *local_name)
 #define RETRY_DELAY_MS      2000
 #define WIFI_WAIT_TICKS     60      // 30 saniye (500ms araliklarda)
 
+// HTTP indirme context'i (binary-safe offset takibi)
+typedef struct {
+    char *buffer;
+    int offset;
+} http_dl_ctx_t;
+
 // Durum degiskenleri
 static gui_dl_status_t s_status;
 static SemaphoreHandle_t s_mutex = NULL;
@@ -150,24 +156,18 @@ static int count_files(void)
     return n;
 }
 
-// HTTP event handler - buffer'a veri yazar
-// user_data = char* buffer, output offset int* olarak client config'de tutulur
+// HTTP event handler - buffer'a veri yazar (binary-safe)
+// user_data = http_dl_ctx_t* (buffer + offset)
 static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
-    // user_data'yi output offset olarak kullaniriz
-    // Ama esp_http_client user_data'yi dogrudan veriyor
-    // Biz buffer pointer'i statik degil, task-local kullanacagiz
-    // Bu handler sadece chunked olmayan response icin calisir
-
     switch (evt->event_id) {
         case HTTP_EVENT_ON_DATA:
             if (!esp_http_client_is_chunked_response(evt->client)) {
-                char *buf = (char *)evt->user_data;
-                if (buf) {
-                    int cur_len = strlen(buf);  // Basit ama kucuk dosyalar icin yeterli
-                    if (cur_len + evt->data_len < HTTP_BUFFER_SIZE) {
-                        memcpy(buf + cur_len, evt->data, evt->data_len);
-                        buf[cur_len + evt->data_len] = '\0';
+                http_dl_ctx_t *ctx = (http_dl_ctx_t *)evt->user_data;
+                if (ctx && ctx->buffer) {
+                    if (ctx->offset + evt->data_len < HTTP_BUFFER_SIZE) {
+                        memcpy(ctx->buffer + ctx->offset, evt->data, evt->data_len);
+                        ctx->offset += evt->data_len;
                     }
                 }
             }
@@ -216,8 +216,9 @@ static esp_err_t download_file(const char *github_name, const char *local_name,
 
         const char *ip = GITHUB_IPS[retry % GITHUB_IP_COUNT];
 
-        // Buffer'i temizle
+        // Buffer ve context'i temizle
         memset(buffer, 0, HTTP_BUFFER_SIZE);
+        http_dl_ctx_t ctx = { .buffer = buffer, .offset = 0 };
 
         esp_http_client_config_t cfg = {
             .host = ip,
@@ -225,7 +226,7 @@ static esp_err_t download_file(const char *github_name, const char *local_name,
             .path = url_path,
             .transport_type = HTTP_TRANSPORT_OVER_SSL,
             .event_handler = http_event_handler,
-            .user_data = buffer,
+            .user_data = &ctx,
             .timeout_ms = 30000,
             .crt_bundle_attach = esp_crt_bundle_attach,
             .skip_cert_common_name_check = true,    // IP kullandigimiz icin
