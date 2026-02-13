@@ -71,14 +71,10 @@ static bool check_auth(httpd_req_t *req)
 
 static esp_err_t send_unauthorized(httpd_req_t *req)
 {
-    if (strncmp(req->uri, "/api/", 5) == 0) {
-        httpd_resp_set_status(req, "401 Unauthorized");
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"error\":\"unauthorized\"}", HTTPD_RESP_USE_STRLEN);
-    }
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "/login.html");
-    return httpd_resp_send(req, NULL, 0);
+    // Tum istekler icin 401 dondur - GUI kendi login'ini handle edecek
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, "{\"error\":\"unauthorized\"}", HTTPD_RESP_USE_STRLEN);
 }
 
 // POST body oku (max_len'e kadar)
@@ -113,7 +109,7 @@ static const char *get_mime(const char *path)
 // Sayfa handler'lari
 // ============================================================================
 
-// Ana sayfa
+// Ana sayfa - GUI kendi login'ini handle eder, auth kontrolu yok
 static esp_err_t h_index(httpd_req_t *req)
 {
     s_request_count++;
@@ -125,11 +121,7 @@ static esp_err_t h_index(httpd_req_t *req)
         return httpd_resp_send(req, NULL, 0);
     }
 
-    // Auth kontrolu
-    if (!check_auth(req)) {
-        return send_unauthorized(req);
-    }
-
+    // GUI'yi auth olmadan servis et - GUI kendi login sayfasini gosterecek
     // Harici flash'ta GUI varsa oradan servis et
     if (gui_downloader_files_exist()) {
         char fp[64];
@@ -2028,7 +2020,7 @@ static esp_err_t h_404(httpd_req_t *req, httpd_err_code_t err)
     (void)err;
     s_request_count++;
 
-    // Statik dosya olabilir mi? (auth + dosya kontrol)
+    // Statik dosya olabilir mi?
     const char *uri = req->uri;
 
     // Setup kontrolu
@@ -2041,12 +2033,8 @@ static esp_err_t h_404(httpd_req_t *req, httpd_err_code_t err)
         }
     }
 
-    // login.html auth gerektirmez, diger sayfalar gerektirir
-    if (strcmp(uri, "/login.html") != 0 && strncmp(uri, "/api/", 5) != 0) {
-        if (!check_auth(req)) {
-            return send_unauthorized(req);
-        }
-    }
+    // GUI dosyalari (js, css, resim) auth olmadan servis edilir
+    // GUI kendi login sayfasini handle eder
 
     // Dosya yolu olustur
     char filepath[576];
