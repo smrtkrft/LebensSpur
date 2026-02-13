@@ -11,6 +11,8 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "mbedtls/sha256.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -21,6 +23,10 @@ static const char *TAG = "session";
  * ============================================ */
 static session_t s_sessions[SESSION_MAX_ACTIVE];
 static int s_session_timeout_min = 30;  // Default
+static SemaphoreHandle_t s_mutex = NULL;
+
+#define SESSION_LOCK()   do { if (s_mutex) xSemaphoreTake(s_mutex, portMAX_DELAY); } while(0)
+#define SESSION_UNLOCK() do { if (s_mutex) xSemaphoreGive(s_mutex); } while(0)
 
 /* ============================================
  * PRIVATE FUNCTIONS
@@ -87,18 +93,29 @@ static bool is_session_expired(const session_t *session)
 esp_err_t session_auth_init(void)
 {
     ESP_LOGI(TAG, "Initializing session auth...");
-    
+
+    // Create mutex for thread safety
+    if (!s_mutex) {
+        s_mutex = xSemaphoreCreateMutex();
+    }
+
     // Clear all sessions
     memset(s_sessions, 0, sizeof(s_sessions));
-    
+
     // Load auth config
     auth_config_t auth;
     config_load_auth(&auth);
     s_session_timeout_min = auth.session_timeout_min;
-    
-    ESP_LOGI(TAG, "Session timeout: %d min, max sessions: %d", 
+
+    // Minimum timeout safeguard
+    if (s_session_timeout_min < 5) {
+        ESP_LOGW(TAG, "Session timeout too low (%d min), forcing 5 min", s_session_timeout_min);
+        s_session_timeout_min = 5;
+    }
+
+    ESP_LOGI(TAG, "Session timeout: %d min, max sessions: %d",
              s_session_timeout_min, SESSION_MAX_ACTIVE);
-    
+
     return ESP_OK;
 }
 
@@ -134,65 +151,78 @@ esp_err_t session_auth_login(const char *password,
         return ESP_ERR_INVALID_ARG;
     }
     
+    SESSION_LOCK();
+
     // Find slot and create session
     session_t *session = find_empty_slot();
     if (!session) {
+        SESSION_UNLOCK();
         return ESP_ERR_NO_MEM;
     }
-    
+
     // Generate token
     generate_token(session->token);
-    
+
     // Use monotonic uptime for session timing (immune to NTP jumps)
     int64_t now = esp_timer_get_time() / 1000;
     session->created_at = now;
     session->last_access = now;
     session->expires_at = now + ((int64_t)s_session_timeout_min * 60 * 1000);
     session->valid = true;
-    
+
     // Store client info
     strncpy(session->ip_address, ip, sizeof(session->ip_address) - 1);
     session->ip_address[sizeof(session->ip_address) - 1] = '\0';
-    
+
     if (user_agent) {
         strncpy(session->user_agent, user_agent, sizeof(session->user_agent) - 1);
         session->user_agent[sizeof(session->user_agent) - 1] = '\0';
     } else {
         session->user_agent[0] = '\0';
     }
-    
+
     // Copy token to output
     strcpy(out_token, session->token);
-    
+
+    SESSION_UNLOCK();
+
     LOG_SECURITY(LOG_LEVEL_INFO, ip, "Login successful");
-    ESP_LOGI(TAG, "New session created for %s", ip);
-    
+    ESP_LOGI(TAG, "Session created: ip=%s timeout=%dmin now=%lld expires=%lld",
+             ip, s_session_timeout_min, (long long)now, (long long)session->expires_at);
+
     return ESP_OK;
 }
 
 esp_err_t session_auth_logout(const char *token)
 {
+    SESSION_LOCK();
     session_t *session = find_session(token);
     if (!session) {
+        SESSION_UNLOCK();
         return ESP_ERR_NOT_FOUND;
     }
-    
-    LOG_SECURITY(LOG_LEVEL_INFO, session->ip_address, "Logout");
-    
+
+    char ip[16];
+    strncpy(ip, session->ip_address, sizeof(ip));
     memset(session, 0, sizeof(session_t));
+    SESSION_UNLOCK();
+
+    LOG_SECURITY(LOG_LEVEL_INFO, ip, "Logout");
     return ESP_OK;
 }
 
 esp_err_t session_auth_logout_all(void)
 {
     ESP_LOGI(TAG, "Logging out all sessions");
-    
+
+    SESSION_LOCK();
     for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
         if (s_sessions[i].valid) {
             memset(&s_sessions[i], 0, sizeof(session_t));
         }
     }
-    
+    SESSION_UNLOCK();
+
     return ESP_OK;
 }
 
@@ -202,50 +232,65 @@ esp_err_t session_auth_logout_all(void)
 
 bool session_auth_validate(const char *token)
 {
+    SESSION_LOCK();
     session_t *session = find_session(token);
     if (!session) {
+        SESSION_UNLOCK();
+        ESP_LOGW(TAG, "Validate: token not found (%.8s...)", token ? token : "null");
         return false;
     }
-    
+
     if (is_session_expired(session)) {
-        ESP_LOGD(TAG, "Session expired for %s", session->ip_address);
+        int64_t now = esp_timer_get_time() / 1000;
+        ESP_LOGW(TAG, "Session EXPIRED: ip=%s now=%lld expires=%lld diff=%lldms timeout=%dmin",
+                 session->ip_address, (long long)now, (long long)session->expires_at,
+                 (long long)(now - session->expires_at), s_session_timeout_min);
         session->valid = false;
+        SESSION_UNLOCK();
         return false;
     }
-    
+
+    SESSION_UNLOCK();
     return true;
 }
 
 esp_err_t session_auth_refresh(const char *token)
 {
+    SESSION_LOCK();
     session_t *session = find_session(token);
     if (!session) {
+        SESSION_UNLOCK();
         return ESP_ERR_NOT_FOUND;
     }
-    
+
     if (is_session_expired(session)) {
         session->valid = false;
+        SESSION_UNLOCK();
         return ESP_ERR_INVALID_STATE;
     }
-    
+
     // Use monotonic uptime
     int64_t now = esp_timer_get_time() / 1000;
     session->last_access = now;
     session->expires_at = now + ((int64_t)s_session_timeout_min * 60 * 1000);
-    
+
+    SESSION_UNLOCK();
     return ESP_OK;
 }
 
 esp_err_t session_auth_get_session(const char *token, session_t *session)
 {
     if (!session) return ESP_ERR_INVALID_ARG;
-    
+
+    SESSION_LOCK();
     session_t *found = find_session(token);
     if (!found) {
+        SESSION_UNLOCK();
         return ESP_ERR_NOT_FOUND;
     }
-    
+
     *session = *found;
+    SESSION_UNLOCK();
     return ESP_OK;
 }
 
@@ -255,24 +300,28 @@ esp_err_t session_auth_get_session(const char *token, session_t *session)
 
 int session_auth_count(void)
 {
+    SESSION_LOCK();
     int count = 0;
     for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
         if (s_sessions[i].valid && !is_session_expired(&s_sessions[i])) {
             count++;
         }
     }
+    SESSION_UNLOCK();
     return count;
 }
 
 void session_auth_cleanup(void)
 {
+    SESSION_LOCK();
     for (int i = 0; i < SESSION_MAX_ACTIVE; i++) {
         if (s_sessions[i].valid && is_session_expired(&s_sessions[i])) {
-            ESP_LOGD(TAG, "Cleaning up expired session from %s", 
+            ESP_LOGI(TAG, "Cleanup: expired session from %s",
                      s_sessions[i].ip_address);
             memset(&s_sessions[i], 0, sizeof(session_t));
         }
     }
+    SESSION_UNLOCK();
 }
 
 int session_auth_remaining_attempts(void)
