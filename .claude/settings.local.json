@@ -4,7 +4,29 @@
       "Bash(/tmp/partition_check.py:*)",
       "Bash(python:*)",
       "Bash(comm:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(\"C:\\\\Espressif\\\\idf_cmd_init.bat\" \"esp-idf-v5.5.2\")",
+      "Bash(idf.py set-target:*)",
+      "Bash(cmd /c:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \"& ''C:\\\\Espressif\\\\Initialize-Idf.ps1'' -IdfId ''esp-idf-v5.5.2''; cd ''C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\LebensSpur\\\\HW_esp32C6''; idf.py --version\")",
+      "Bash(powershell:*)",
+      "Bash(cmd.exe /c \"set IDF_PATH=C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2 && set IDF_TOOLS_PATH=C:\\\\Espressif && call C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2\\\\export.bat && cd /d C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\LebensSpur\\\\HW_esp32C6 && idf.py --version\")",
+      "Bash(cmd.exe /c \"set IDF_PATH=C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2&& set IDF_TOOLS_PATH=C:\\\\Espressif&& C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2\\\\export.bat&& cd /d C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\LebensSpur\\\\HW_esp32C6&& idf.py --version\")",
+      "Bash(cmd.exe /V:ON /c \"set IDF_PATH=C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2 && set IDF_TOOLS_PATH=C:\\\\Espressif && call C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2\\\\export.bat >nul 2>&1 && echo EXPORT_DONE && where idf.py && idf.py --version\":*)",
+      "Bash(cmd.exe /c \"C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\LebensSpur\\\\HW_esp32C6\\\\build_idf.bat\")",
+      "Bash(\"C:\\\\Espressif\\\\python_env\\\\idf5.5_py3.13_env\\\\Scripts\\\\python.exe\" \"C:\\\\Espressif\\\\frameworks\\\\esp-idf-v5.5.2\\\\tools\\\\idf.py\" --version)",
+      "Bash(export IDF_PATH=\"C:/Espressif/frameworks/esp-idf-v5.5.2\")",
+      "Bash(export IDF_TOOLS_PATH=\"C:/Espressif\")",
+      "Bash(export MSYSTEM=\"\")",
+      "Bash(\"C:/Espressif/python_env/idf5.5_py3.13_env/Scripts/python.exe\" \"C:/Espressif/frameworks/esp-idf-v5.5.2/tools/idf.py\" --version)",
+      "Bash(\"C:/Espressif/python_env/idf5.5_py3.13_env/Scripts/python.exe\" \"$IDF_PATH/tools/idf.py\" set-target esp32c6)",
+      "Bash(export:*)",
+      "Bash(IDF_PYTHON=\"C:/Espressif/python_env/idf5.5_py3.13_env/Scripts/python.exe\")",
+      "Bash(\"$IDF_PYTHON\" \"$IDF_PATH/tools/idf.py\" build)",
+      "Bash(powershell.exe -NoProfile -Command \"Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\LebensSpur\\\\HW_esp32C6\\\\build_idf.bat'' -Wait -NoNewWindow\")",
+      "Bash(powershell.exe -NoProfile -Command \"Start-Process -FilePath ''cmd.exe'' -ArgumentList ''/c C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\C6_build\\\\_claude_build.bat'' -Wait -NoNewWindow\")",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\SEU\\\\Desktop\\\\GitHub\\\\2-LebensSpur\\\\C6_build && _claude_build.bat\")",
+      "Bash(git status:*)"
     ]
   }
 }
