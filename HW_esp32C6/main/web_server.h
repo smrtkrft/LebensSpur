@@ -24,8 +24,8 @@ extern "C" {
 
 // Sunucu ayarlari
 #define WEB_SERVER_PORT         80
-#define WEB_SERVER_MAX_URI      40
-#define WEB_SERVER_STACK_SIZE   8192
+#define WEB_SERVER_MAX_URI      55
+#define WEB_SERVER_STACK_SIZE   10240
 
 /**
  * Web sunucuyu baslat
