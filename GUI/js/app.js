@@ -9,29 +9,63 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Module Check — eksik JS dosyalarini tespit et
+// ─────────────────────────────────────────────────────────────────────────────
+function checkRequiredModules() {
+    const required = [
+        ['cacheElements',  'ui.js'],
+        ['showPage',       'ui.js'],
+        ['authFetch',      'utils.js'],
+        ['handleLogin',    'auth.js'],
+        ['pollTimerStatus','timer.js'],
+        ['initTheme',      'theme.js'],
+        ['initActionCards','actions.js'],
+        ['loadMailGroups', 'mailGroups.js'],
+        ['initLogs',       'logs.js'],
+        ['checkForUpdates','ota.js'],
+    ];
+    const missing = required.filter(([fn]) => typeof window[fn] !== 'function');
+    if (missing.length > 0) {
+        const files = [...new Set(missing.map(([,f]) => f))].join(', ');
+        throw new Error('Eksik GUI dosyalari: ' + files);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    cacheElements();
-    initTheme();
-    initEventListeners();
-    initAutoLogout();
-    initPWA();
-    initLogs();
+    try {
+        checkRequiredModules();
+        cacheElements();
+        initTheme();
+        initEventListeners();
+        initAutoLogout();
+        initPWA();
+        initLogs();
 
-    // Sayfa yuklendiginde auth kontrol et
-    checkAuthOnLoad();
+        // Sayfa yuklendiginde auth kontrol et
+        checkAuthOnLoad();
 
-    // Initialize i18n language system
-    if (window.I18n) {
-        I18n.init().then(() => {
-            const sel = document.getElementById('languageSelect');
-            if (sel) sel.value = I18n.getLanguage();
-        });
-        // Re-render dynamic content when language changes
-        window.addEventListener('languageChanged', () => {
-            if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
-        });
+        // Initialize i18n language system
+        if (window.I18n) {
+            I18n.init().then(() => {
+                const sel = document.getElementById('languageSelect');
+                if (sel) sel.value = I18n.getLanguage();
+            });
+            // Re-render dynamic content when language changes
+            window.addEventListener('languageChanged', () => {
+                if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
+            });
+        }
+    } catch (e) {
+        console.error('[LebensSpur] Init hatasi:', e);
+        const el = document.getElementById('login-page') || document.body;
+        el.innerHTML = '<div style="padding:2rem;text-align:center;color:#ff4444;font-family:sans-serif">'
+            + '<h2>GUI Hatasi</h2>'
+            + '<p>' + e.message + '</p>'
+            + '<p style="color:#aaa;font-size:0.85rem">Ayarlar > GUI Guncelle ile dosyalari yeniden indirin.</p>'
+            + '</div>';
     }
 });
 
