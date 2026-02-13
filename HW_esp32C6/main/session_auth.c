@@ -343,8 +343,9 @@ esp_err_t session_set_initial_password(const char *password)
     if (!s_initialized) return ESP_ERR_INVALID_STATE;
     if (!password) return ESP_ERR_INVALID_ARG;
 
-    // Şifre zaten varsa reddet
-    if (s_auth.password[0] != '\0') {
+    // Setup tamamlanmissa ve sifre varsa reddet
+    // Setup tamamlanmamissa (ilk kurulum) sifre degistirilebilir
+    if (s_auth.password[0] != '\0' && config_is_setup_completed()) {
         ESP_LOGW(TAG, "Sifre zaten ayarli, set_initial reddedildi");
         return ESP_ERR_INVALID_STATE;
     }
