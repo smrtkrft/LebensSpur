@@ -197,7 +197,6 @@ void app_main(void)
     timer_scheduler_init();
 
     ESP_LOGI(TAG, "[14/14] Web Server");
-    web_assets_deploy(false);   // Gomulu HTML'leri flash'a yaz (yoksa)
     web_server_start();
 
     // ========================================

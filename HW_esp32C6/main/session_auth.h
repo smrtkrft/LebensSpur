@@ -31,7 +31,7 @@ extern "C" {
 #define SESSION_TOKEN_LEN       32      // 16 byte = 32 hex karakter
 #define SESSION_MAX_COUNT       4       // Maksimum eşzamanlı oturum
 #define SESSION_COOKIE_NAME     "ls_token"
-#define SESSION_MIN_PASSWORD    4       // Minimum şifre uzunluğu
+#define SESSION_MIN_PASSWORD    1       // Minimum şifre uzunluğu
 
 // ============================================
 // SESSION YAPISI

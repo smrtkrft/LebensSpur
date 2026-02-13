@@ -1,10 +1,20 @@
 idf_component_register(
-    SRCS 
+    SRCS
         "main.c"
         "device_id.c"
         "time_manager.c"
         "wifi_manager.c"
         "web_server.c"
+        "api_auth.c"
+        "api_timer.c"
+        "api_mail.c"
+        "api_device.c"
+        "api_relay.c"
+        "api_wifi.c"
+        "api_setup.c"
+        "api_config.c"
+        "api_ota.c"
+        "api_logs.c"
         "ext_flash.c"
         "file_manager.c"
         "ota_manager.c"
