@@ -26,6 +26,8 @@
 #include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "log_manager.h"
+#include "esp_random.h"
 #include <string.h>
 #include <cJSON.h>
 
@@ -468,7 +470,7 @@ static esp_err_t h_api_device_info(httpd_req_t *req)
     snprintf(json, sizeof(json),
         "{"
         "\"device_id\":\"%s\","
-        "\"firmware_version\":\"%s\","
+        "\"firmware\":\"%s\","
         "\"chip\":\"ESP32-C6\","
         "\"cores\":%d,"
         "\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\","
