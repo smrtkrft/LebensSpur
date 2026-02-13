@@ -44,24 +44,38 @@ typedef struct {
 } gui_file_entry_t;
 
 static const gui_file_entry_t GUI_FILES[] = {
-    { "index.html",         "index.html" },
-    { "js/app.js",          "app.js" },
-    { "style.css",          "style.css" },
-    { "js/i18n.js",         "i18n.js" },
-    { "manifest.json",      "manifest.json" },
-    { "sw.js",              "sw.js" },
-    { "pic/logo.png",       "logo.png" },
-    { "pic/darklogo.png",   "darklogo.png" },
-    { "i18n/en.json",       "i18n/en.json" },
-    { "i18n/tr.json",       "i18n/tr.json" },
+    { "index.html",             "index.html" },
+    { "style.css",              "style.css" },
+    { "js/state.js",            "state.js" },
+    { "js/utils.js",            "utils.js" },
+    { "js/ui.js",               "ui.js" },
+    { "js/auth.js",             "auth.js" },
+    { "js/timer.js",            "timer.js" },
+    { "js/settings.js",         "settings.js" },
+    { "js/actions.js",          "actions.js" },
+    { "js/mailGroups.js",       "mailGroups.js" },
+    { "js/logs.js",             "logs.js" },
+    { "js/ota.js",              "ota.js" },
+    { "js/theme.js",            "theme.js" },
+    { "js/app.js",              "app.js" },
+    { "js/i18n.js",             "i18n.js" },
+    { "manifest.json",          "manifest.json" },
+    { "sw.js",                  "sw.js" },
+    { "pic/logo.png",           "logo.png" },
+    { "pic/darklogo.png",       "darklogo.png" },
+    { "i18n/en.json",           "i18n/en.json" },
+    { "i18n/tr.json",           "i18n/tr.json" },
     { NULL, NULL }
 };
 
 // Kritik dosyalar - yerel isimler (bunlar olmadan GUI calismaz)
 static const char *CRITICAL_FILES[] = {
     "index.html",
-    "app.js",
     "style.css",
+    "state.js",
+    "utils.js",
+    "ui.js",
+    "app.js",
     NULL
 };
 
@@ -444,6 +458,7 @@ void gui_downloader_cancel(void)
 bool gui_downloader_files_exist(void)
 {
     return file_manager_exists(FILE_MGR_WEB_PATH "/index.html") &&
+           file_manager_exists(FILE_MGR_WEB_PATH "/state.js") &&
            file_manager_exists(FILE_MGR_WEB_PATH "/app.js") &&
            file_manager_exists(FILE_MGR_WEB_PATH "/style.css");
 }

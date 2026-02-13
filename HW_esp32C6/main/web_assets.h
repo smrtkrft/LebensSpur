@@ -1,9 +1,9 @@
 /**
- * Web Assets - Gomulu HTML Sayfalari
+ * Web Assets - Gomulu Setup Sayfasi
  *
- * Firmware icine gomulu login/index/setup HTML sayfalari.
- * Harici flash'ta GUI dosyalari yoksa fallback olarak kullanilir.
- * setup.html CMakeLists.txt'de EMBED_TXTFILES ile dahil edilir.
+ * Sadece setup.html firmware icinde gomulu.
+ * GUI dosyalari (index.html, login vb.) setup sirasinda
+ * GitHub'dan indirilir ve LittleFS'ten servis edilir.
  *
  * Bagimlilik: file_manager (Katman 1)
  * Katman: 4 (Uygulama)
@@ -20,31 +20,13 @@ extern "C" {
 #endif
 
 /**
- * Web dosyalarini harici flash'a yukle (ilk boot veya guncelleme)
- * @param force true ise mevcut dosyalarin uzerine yazar
- */
-esp_err_t web_assets_deploy(bool force);
-
-/**
- * Web dosyalarinin yuklu olup olmadigini kontrol et
+ * GUI dosyalarinin yuklu olup olmadigini kontrol et
  */
 bool web_assets_installed(void);
 
 /**
- * Web assets versiyonunu al
+ * Gomulu setup.html sayfasini al
  */
-const char *web_assets_get_version(void);
-
-/**
- * Varsayilan web dosyalarini olustur (fallback icin)
- */
-esp_err_t web_assets_create_defaults(void);
-
-/**
- * Gomulu HTML stringlerini al
- */
-const char *web_assets_get_login_html(void);
-const char *web_assets_get_index_html(void);
 const char *web_assets_get_setup_html(void);
 
 #ifdef __cplusplus

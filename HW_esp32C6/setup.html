@@ -684,7 +684,7 @@
                         });
                         const d = await r.json();
                         if (!d.success) {
-                            alert('Failed to save password');
+                            alert(d.error || 'Failed to save password');
                             nextBtn.textContent = 'Continue';
                             return false;
                         }
