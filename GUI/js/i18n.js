@@ -42,6 +42,7 @@ const I18n = (function() {
         { s: '.nav-item[data-tab="mail"]', k: 'settings.connections' },
         { s: '.nav-item[data-tab="actions"]', k: 'settings.actions' },
         { s: '.nav-item[data-tab="system"]', k: 'settings.system' },
+        { s: '.nav-item[data-tab="info"]', k: 'settings.info' },
 
         // ── MODAL FOOTER ──
         { s: '#cancelSettings', k: 'common.cancel' },
@@ -110,7 +111,7 @@ const I18n = (function() {
         { s: '#startImportBtn', k: 'importExport.startImport', m: 'last' },
 
         // ── EXPORT SUBPAGE ──
-        { s: '#exportSubpage [data-title]', k: 'exportExport.exportTitle', m: 'attr', a: 'data-title' },
+        { s: '#exportSubpage [data-title]', k: 'importExport.exportTitle', m: 'attr', a: 'data-title' },
         { s: '#exportSubpage > .setting-section:nth-child(1) .section-desc', k: 'importExport.exportDesc' },
         { s: '#startExportBtn', k: 'importExport.startExport', m: 'last' },
 
