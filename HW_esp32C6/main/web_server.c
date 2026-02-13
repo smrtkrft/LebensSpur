@@ -2049,7 +2049,7 @@ static esp_err_t h_404(httpd_req_t *req, httpd_err_code_t err)
     }
 
     // Dosya yolu olustur
-    char filepath[128];
+    char filepath[576];
     snprintf(filepath, sizeof(filepath), "%s%s", FILE_MGR_WEB_PATH, uri);
 
     // Path traversal engelle
