@@ -1,102 +1,113 @@
 /**
- * @file device_id.c
- * @brief Device ID implementation for LebensSpur ESP32-C6
- * 
- * Generates unique device ID from ESP32-C6 chip's MAC address.
- * Format: LS-XXXXXXXXXXXX (LS- prefix + 12 hex chars from MAC)
+ * Device ID - ESP32-C6 Benzersiz Cihaz Kimliği
+ *
+ * MAC adresinin 48 bitini base36'ya çevirir.
+ * 48 bit → max 10 base36 karakter (36^10 = ~3.6×10^15 > 2^48 = ~2.8×10^14)
  */
 
 #include "device_id.h"
 #include "esp_mac.h"
 #include "esp_log.h"
-#include "esp_err.h"
 #include <string.h>
 #include <stdio.h>
 
-static const char *TAG = "device_id";
+static const char *TAG = "DEVICE_ID";
 
-/** Device ID string storage */
-static char s_device_id[DEVICE_ID_MAX_LEN] = {0};
-
-/** Hex string without prefix */
-static char s_device_hex[13] = {0};
-
-/** Chip ID (MAC address) */
-static uint8_t s_chip_id[6] = {0};
-
-/** Initialization flag */
+static uint8_t s_mac[6] = {0};
+static char s_id[DEVICE_ID_LENGTH] = {0};
 static bool s_initialized = false;
 
+static const char BASE36[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
 /**
- * @brief Convert byte to uppercase hex characters
+ * 6 byte MAC → 10 karakter base36
  */
-static void byte_to_hex(uint8_t byte, char *hex)
+static void mac_to_base36(const uint8_t *mac, char *out)
 {
-    static const char hex_chars[] = "0123456789ABCDEF";
-    hex[0] = hex_chars[(byte >> 4) & 0x0F];
-    hex[1] = hex_chars[byte & 0x0F];
+    uint64_t num = 0;
+    for (int i = 0; i < 6; i++) {
+        num = (num << 8) | mac[i];
+    }
+
+    char tmp[11];
+    int idx = 0;
+
+    while (num > 0 && idx < 10) {
+        tmp[idx++] = BASE36[num % 36];
+        num /= 36;
+    }
+
+    // Kalan basamakları '0' ile doldur
+    while (idx < 10) {
+        tmp[idx++] = '0';
+    }
+
+    // Ters çevir (MSB önce)
+    for (int i = 0; i < 10; i++) {
+        out[i] = tmp[9 - i];
+    }
+    out[10] = '\0';
 }
 
-int device_id_init(void)
+esp_err_t device_id_init(void)
 {
     if (s_initialized) {
-        ESP_LOGW(TAG, "Already initialized");
         return ESP_OK;
     }
 
-    // Get base MAC address (unique per chip)
-    esp_err_t ret = esp_efuse_mac_get_default(s_chip_id);
+    // WiFi STA MAC adresini oku
+    esp_err_t ret = esp_read_mac(s_mac, ESP_MAC_WIFI_STA);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get MAC address: %s", esp_err_to_name(ret));
-        return ret;
+        ESP_LOGW(TAG, "WiFi MAC okunamadı, efuse deneniyor...");
+        ret = esp_efuse_mac_get_default(s_mac);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "MAC adresi alınamadı: %s", esp_err_to_name(ret));
+            return ret;
+        }
     }
 
-    // Convert to hex string (uppercase)
-    for (int i = 0; i < 6; i++) {
-        byte_to_hex(s_chip_id[i], &s_device_hex[i * 2]);
-    }
-    s_device_hex[12] = '\0';
-
-    // Build device ID: LS-XXXXXXXXXXXX
-    snprintf(s_device_id, DEVICE_ID_MAX_LEN, "%s%s", DEVICE_ID_PREFIX, s_device_hex);
+    // ID oluştur: "LS-" + base36(MAC)
+    strcpy(s_id, DEVICE_ID_PREFIX);
+    mac_to_base36(s_mac, s_id + strlen(DEVICE_ID_PREFIX));
 
     s_initialized = true;
-
-    ESP_LOGI(TAG, "Device ID initialized: %s", s_device_id);
-    ESP_LOGI(TAG, "Chip ID (MAC): %02X:%02X:%02X:%02X:%02X:%02X",
-             s_chip_id[0], s_chip_id[1], s_chip_id[2],
-             s_chip_id[3], s_chip_id[4], s_chip_id[5]);
+    ESP_LOGI(TAG, "ID: %s", s_id);
 
     return ESP_OK;
 }
 
-const char* device_id_get(void)
+const char *device_id_get(void)
 {
-    if (!s_initialized) {
-        ESP_LOGW(TAG, "Not initialized, returning empty string");
-        return "";
-    }
-    return s_device_id;
+    return s_initialized ? s_id : "LS-UNKNOWN";
 }
 
-int device_id_get_chip_id(uint8_t chip_id[6])
+esp_err_t device_id_get_str(char *buffer, size_t len)
 {
-    if (!s_initialized) {
-        return ESP_ERR_INVALID_STATE;
+    if (!buffer || len < DEVICE_ID_LENGTH) {
+        return ESP_ERR_INVALID_ARG;
     }
-    memcpy(chip_id, s_chip_id, 6);
+
+    strncpy(buffer, device_id_get(), len - 1);
+    buffer[len - 1] = '\0';
     return ESP_OK;
 }
 
-const char* device_id_get_hex(void)
+esp_err_t device_id_get_mac(uint8_t *mac)
 {
-    if (!s_initialized) {
-        return "";
+    if (!mac) {
+        return ESP_ERR_INVALID_ARG;
     }
-    return s_device_hex;
+
+    memcpy(mac, s_mac, 6);
+    return ESP_OK;
 }
 
-bool device_id_is_valid(void)
+void device_id_print_info(void)
 {
-    return s_initialized;
+    ESP_LOGI(TAG, "┌──────────────────────────────────────");
+    ESP_LOGI(TAG, "│ Device ID:  %s", s_id);
+    ESP_LOGI(TAG, "│ MAC:        %02X:%02X:%02X:%02X:%02X:%02X",
+             s_mac[0], s_mac[1], s_mac[2],
+             s_mac[3], s_mac[4], s_mac[5]);
+    ESP_LOGI(TAG, "└──────────────────────────────────────");
 }

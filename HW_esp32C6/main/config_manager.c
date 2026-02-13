@@ -1,47 +1,46 @@
 /**
- * @file config_manager.c
- * @brief Configuration Manager - JSON Implementation
- * 
- * Uses cJSON library for JSON parsing/serialization.
- * All config files stored on external flash.
+ * Config Manager - JSON Ayar Yönetimi
+ *
+ * cJSON ile JSON serialization/deserialization.
+ * Tüm config dosyaları /ext/config/ altında.
+ *
+ * Bağımlılık: file_manager (Katman 1)
+ * Katman: 2 (Yapılandırma)
  */
 
 #include "config_manager.h"
 #include "file_manager.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "esp_random.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdio.h>
-#include <time.h>
-#include <sys/time.h>
 
-static const char *TAG = "config_mgr";
+static const char *TAG = "CONFIG";
 
-/* ============================================
- * HELPER FUNCTIONS
- * ============================================ */
+// ============================================================================
+// Yardımcı Fonksiyonlar
+// ============================================================================
 
-static cJSON* read_json_file(const char *filepath)
+static cJSON *read_json_file(const char *filepath)
 {
     if (!file_manager_exists(filepath)) {
-        ESP_LOGD(TAG, "File not found: %s", filepath);
+        ESP_LOGD(TAG, "Dosya yok: %s", filepath);
         return NULL;
     }
-    
+
     int32_t file_size = file_manager_get_size(filepath);
-    if (file_size <= 0 || file_size > 16384) {  // Max 16KB
-        ESP_LOGW(TAG, "Invalid file size: %s (%ld)", filepath, file_size);
+    if (file_size <= 0 || file_size > 8192) {
+        ESP_LOGW(TAG, "Gecersiz dosya boyutu: %s (%ld)", filepath, file_size);
         return NULL;
     }
-    
+
     char *buffer = malloc(file_size + 1);
     if (!buffer) {
-        ESP_LOGE(TAG, "Memory allocation failed");
+        ESP_LOGE(TAG, "Bellek ayrilamadi: %ld byte", file_size + 1);
         return NULL;
     }
-    
+
     size_t read_bytes = 0;
     esp_err_t ret = file_manager_read(filepath, buffer, file_size, &read_bytes);
     if (ret != ESP_OK) {
@@ -49,27 +48,30 @@ static cJSON* read_json_file(const char *filepath)
         return NULL;
     }
     buffer[read_bytes] = '\0';
-    
+
     cJSON *json = cJSON_Parse(buffer);
     free(buffer);
-    
+
     if (!json) {
-        ESP_LOGE(TAG, "JSON parse error: %s", filepath);
+        ESP_LOGE(TAG, "JSON parse hatasi: %s", filepath);
     }
-    
     return json;
 }
 
 static esp_err_t write_json_file(const char *filepath, cJSON *json)
 {
-    char *json_str = cJSON_PrintUnformatted(json);
-    if (!json_str) {
+    char *str = cJSON_PrintUnformatted(json);
+    if (!str) {
+        ESP_LOGE(TAG, "JSON serialize hatasi");
         return ESP_FAIL;
     }
-    
-    esp_err_t ret = file_manager_write(filepath, json_str, strlen(json_str));
-    free(json_str);
-    
+
+    esp_err_t ret = file_manager_write(filepath, str, strlen(str));
+    free(str);
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Yazilamadi: %s", filepath);
+    }
     return ret;
 }
 
@@ -83,65 +85,41 @@ static void safe_strcpy(char *dest, const char *src, size_t dest_size)
     }
 }
 
-static void json_get_string(cJSON *json, const char *key, char *dest, size_t dest_size)
+static void json_get_str(cJSON *json, const char *key, char *dest, size_t size)
 {
     cJSON *item = cJSON_GetObjectItem(json, key);
     if (item && cJSON_IsString(item) && item->valuestring) {
-        safe_strcpy(dest, item->valuestring, dest_size);
+        safe_strcpy(dest, item->valuestring, size);
     }
 }
 
-static int json_get_int(cJSON *json, const char *key, int default_val)
+static int json_get_int(cJSON *json, const char *key, int def)
 {
     cJSON *item = cJSON_GetObjectItem(json, key);
-    if (item && cJSON_IsNumber(item)) {
-        return item->valueint;
-    }
-    return default_val;
+    return (item && cJSON_IsNumber(item)) ? item->valueint : def;
 }
 
-static bool json_get_bool(cJSON *json, const char *key, bool default_val)
+static bool json_get_bool(cJSON *json, const char *key, bool def)
 {
     cJSON *item = cJSON_GetObjectItem(json, key);
-    if (item && cJSON_IsBool(item)) {
-        return cJSON_IsTrue(item);
-    }
-    return default_val;
+    return (item && cJSON_IsBool(item)) ? cJSON_IsTrue(item) : def;
 }
 
-static int64_t json_get_int64(cJSON *json, const char *key, int64_t default_val)
+static double json_get_double(cJSON *json, const char *key, double def)
 {
     cJSON *item = cJSON_GetObjectItem(json, key);
-    if (item && cJSON_IsNumber(item)) {
-        return (int64_t)item->valuedouble;
-    }
-    return default_val;
+    return (item && cJSON_IsNumber(item)) ? item->valuedouble : def;
 }
 
-static int64_t get_current_time_ms(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
-/* ============================================
- * INIT
- * ============================================ */
+// ============================================================================
+// Init
+// ============================================================================
 
 esp_err_t config_manager_init(void)
 {
-    ESP_LOGI(TAG, "Initializing config manager...");
-    
-    if (!file_manager_is_mounted()) {
-        ESP_LOGE(TAG, "File manager not mounted!");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    // Create config directory
     file_manager_mkdir(CONFIG_BASE_PATH);
-    
-    ESP_LOGI(TAG, "Config manager ready");
+
+    ESP_LOGI(TAG, "OK - %s", CONFIG_BASE_PATH);
     return ESP_OK;
 }
 
@@ -150,31 +128,27 @@ bool config_directory_exists(void)
     return file_manager_exists(CONFIG_BASE_PATH);
 }
 
-/* ============================================
- * TIMER CONFIG
- * ============================================ */
+// ============================================================================
+// Timer Config
+// ============================================================================
 
 esp_err_t config_load_timer(timer_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
-    timer_config_t defaults = TIMER_CONFIG_DEFAULT();
-    *config = defaults;
-    
+
+    timer_config_t def = TIMER_CONFIG_DEFAULT();
+    *config = def;
+
     cJSON *json = read_json_file(CONFIG_TIMER_FILE);
-    if (!json) return ESP_OK;  // Use defaults
-    
-    config->enabled = json_get_bool(json, "enabled", defaults.enabled);
-    config->interval_minutes = json_get_int(json, "intervalMinutes", defaults.interval_minutes);
-    config->warning_minutes = json_get_int(json, "warningMinutes", defaults.warning_minutes);
-    config->alarm_count = json_get_int(json, "alarmCount", defaults.alarm_count);
-    json_get_string(json, "checkStart", config->check_start, sizeof(config->check_start));
-    json_get_string(json, "checkEnd", config->check_end, sizeof(config->check_end));
-    config->relay_trigger = json_get_bool(json, "relayTrigger", defaults.relay_trigger);
-    config->vacation_enabled = json_get_bool(json, "vacationEnabled", defaults.vacation_enabled);
-    config->vacation_days = json_get_int(json, "vacationDays", defaults.vacation_days);
-    config->vacation_start = json_get_int64(json, "vacationStart", defaults.vacation_start);
-    
+    if (!json) return ESP_OK;
+
+    config->enabled = json_get_bool(json, "enabled", def.enabled);
+    config->interval_hours = json_get_int(json, "intervalHours", def.interval_hours);
+    config->warning_minutes = json_get_int(json, "warningMinutes", def.warning_minutes);
+    json_get_str(json, "checkStart", config->check_start, sizeof(config->check_start));
+    json_get_str(json, "checkEnd", config->check_end, sizeof(config->check_end));
+    json_get_str(json, "relayAction", config->relay_action, sizeof(config->relay_action));
+
     cJSON_Delete(json);
     return ESP_OK;
 }
@@ -182,47 +156,42 @@ esp_err_t config_load_timer(timer_config_t *config)
 esp_err_t config_save_timer(const timer_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return ESP_ERR_NO_MEM;
-    
+
     cJSON_AddBoolToObject(json, "enabled", config->enabled);
-    cJSON_AddNumberToObject(json, "intervalMinutes", config->interval_minutes);
+    cJSON_AddNumberToObject(json, "intervalHours", config->interval_hours);
     cJSON_AddNumberToObject(json, "warningMinutes", config->warning_minutes);
-    cJSON_AddNumberToObject(json, "alarmCount", config->alarm_count);
     cJSON_AddStringToObject(json, "checkStart", config->check_start);
     cJSON_AddStringToObject(json, "checkEnd", config->check_end);
-    cJSON_AddBoolToObject(json, "relayTrigger", config->relay_trigger);
-    cJSON_AddBoolToObject(json, "vacationEnabled", config->vacation_enabled);
-    cJSON_AddNumberToObject(json, "vacationDays", config->vacation_days);
-    cJSON_AddNumberToObject(json, "vacationStart", (double)config->vacation_start);
-    
+    cJSON_AddStringToObject(json, "relayAction", config->relay_action);
+
     esp_err_t ret = write_json_file(CONFIG_TIMER_FILE, json);
     cJSON_Delete(json);
     return ret;
 }
 
-/* ============================================
- * TIMER RUNTIME
- * ============================================ */
+// ============================================================================
+// Timer Runtime
+// ============================================================================
 
 esp_err_t config_load_runtime(timer_runtime_t *runtime)
 {
     if (!runtime) return ESP_ERR_INVALID_ARG;
-    
-    timer_runtime_t defaults = TIMER_RUNTIME_DEFAULT();
-    *runtime = defaults;
-    
+
+    timer_runtime_t def = TIMER_RUNTIME_DEFAULT();
+    *runtime = def;
+
     cJSON *json = read_json_file(CONFIG_RUNTIME_FILE);
     if (!json) return ESP_OK;
-    
-    runtime->triggered = json_get_bool(json, "triggered", defaults.triggered);
-    runtime->last_reset = json_get_int64(json, "lastReset", defaults.last_reset);
-    runtime->next_deadline = json_get_int64(json, "nextDeadline", defaults.next_deadline);
-    runtime->reset_count = json_get_int(json, "resetCount", defaults.reset_count);
-    runtime->trigger_count = json_get_int(json, "triggerCount", defaults.trigger_count);
-    runtime->warnings_sent = json_get_int(json, "warningsSent", defaults.warnings_sent);
-    
+
+    runtime->triggered = json_get_bool(json, "triggered", false);
+    runtime->last_reset = (int64_t)json_get_double(json, "lastReset", 0);
+    runtime->next_deadline = (int64_t)json_get_double(json, "nextDeadline", 0);
+    runtime->reset_count = json_get_int(json, "resetCount", 0);
+    runtime->trigger_count = json_get_int(json, "triggerCount", 0);
+
     cJSON_Delete(json);
     return ESP_OK;
 }
@@ -230,220 +199,128 @@ esp_err_t config_load_runtime(timer_runtime_t *runtime)
 esp_err_t config_save_runtime(const timer_runtime_t *runtime)
 {
     if (!runtime) return ESP_ERR_INVALID_ARG;
-    
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return ESP_ERR_NO_MEM;
-    
+
     cJSON_AddBoolToObject(json, "triggered", runtime->triggered);
     cJSON_AddNumberToObject(json, "lastReset", (double)runtime->last_reset);
     cJSON_AddNumberToObject(json, "nextDeadline", (double)runtime->next_deadline);
     cJSON_AddNumberToObject(json, "resetCount", runtime->reset_count);
     cJSON_AddNumberToObject(json, "triggerCount", runtime->trigger_count);
-    cJSON_AddNumberToObject(json, "warningsSent", runtime->warnings_sent);
-    
+
     esp_err_t ret = write_json_file(CONFIG_RUNTIME_FILE, json);
     cJSON_Delete(json);
     return ret;
 }
 
-/* ============================================
- * WIFI CONFIG
- * ============================================ */
+// ============================================================================
+// WiFi Config
+// ============================================================================
 
-esp_err_t config_load_wifi(app_wifi_config_t *config)
+static void load_static_ip(cJSON *parent, const char *key, static_ip_config_t *ip)
+{
+    cJSON *obj = cJSON_GetObjectItem(parent, key);
+    if (!obj) return;
+
+    json_get_str(obj, "ip", ip->ip, sizeof(ip->ip));
+    json_get_str(obj, "gateway", ip->gateway, sizeof(ip->gateway));
+    json_get_str(obj, "subnet", ip->subnet, sizeof(ip->subnet));
+    json_get_str(obj, "dns", ip->dns, sizeof(ip->dns));
+}
+
+static void save_static_ip(cJSON *parent, const char *key, const static_ip_config_t *ip)
+{
+    cJSON *obj = cJSON_CreateObject();
+    cJSON_AddStringToObject(obj, "ip", ip->ip);
+    cJSON_AddStringToObject(obj, "gateway", ip->gateway);
+    cJSON_AddStringToObject(obj, "subnet", ip->subnet);
+    cJSON_AddStringToObject(obj, "dns", ip->dns);
+    cJSON_AddItemToObject(parent, key, obj);
+}
+
+esp_err_t config_load_wifi(ls_wifi_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
-    app_wifi_config_t defaults = WIFI_CONFIG_DEFAULT();
-    *config = defaults;
-    
+
+    ls_wifi_config_t def = LS_WIFI_CONFIG_DEFAULT();
+    *config = def;
+
     cJSON *json = read_json_file(CONFIG_WIFI_FILE);
     if (!json) return ESP_OK;
-    
-    json_get_string(json, "ssid", config->ssid, sizeof(config->ssid));
-    json_get_string(json, "password", config->password, sizeof(config->password));
-    config->configured = json_get_bool(json, "configured", defaults.configured);
-    config->static_ip_enabled = json_get_bool(json, "staticIpEnabled", defaults.static_ip_enabled);
-    json_get_string(json, "staticIp", config->static_ip, sizeof(config->static_ip));
-    json_get_string(json, "gateway", config->gateway, sizeof(config->gateway));
-    json_get_string(json, "subnet", config->subnet, sizeof(config->subnet));
-    json_get_string(json, "dns", config->dns, sizeof(config->dns));
-    json_get_string(json, "mdnsHostname", config->mdns_hostname, sizeof(config->mdns_hostname));
-    
+
+    // Primary
+    json_get_str(json, "primarySSID", config->primary_ssid, MAX_SSID_LEN);
+    json_get_str(json, "primaryPassword", config->primary_password, MAX_PASSWORD_LEN);
+    config->primary_static_enabled = json_get_bool(json, "primaryStaticEnabled", false);
+    json_get_str(json, "primaryMDNS", config->primary_mdns, MAX_HOSTNAME_LEN);
+    load_static_ip(json, "primaryStatic", &config->primary_static);
+
+    // Secondary
+    json_get_str(json, "secondarySSID", config->secondary_ssid, MAX_SSID_LEN);
+    json_get_str(json, "secondaryPassword", config->secondary_password, MAX_PASSWORD_LEN);
+    config->secondary_static_enabled = json_get_bool(json, "secondaryStaticEnabled", false);
+    json_get_str(json, "secondaryMDNS", config->secondary_mdns, MAX_HOSTNAME_LEN);
+    load_static_ip(json, "secondaryStatic", &config->secondary_static);
+
+    // Genel
+    config->ap_mode_enabled = json_get_bool(json, "apModeEnabled", true);
+    config->allow_open_networks = json_get_bool(json, "allowOpenNetworks", false);
+
     cJSON_Delete(json);
     return ESP_OK;
 }
 
-esp_err_t config_save_wifi(const app_wifi_config_t *config)
+esp_err_t config_save_wifi(const ls_wifi_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return ESP_ERR_NO_MEM;
-    
-    cJSON_AddStringToObject(json, "ssid", config->ssid);
-    cJSON_AddStringToObject(json, "password", config->password);
-    cJSON_AddBoolToObject(json, "configured", config->configured);
-    cJSON_AddBoolToObject(json, "staticIpEnabled", config->static_ip_enabled);
-    cJSON_AddStringToObject(json, "staticIp", config->static_ip);
-    cJSON_AddStringToObject(json, "gateway", config->gateway);
-    cJSON_AddStringToObject(json, "subnet", config->subnet);
-    cJSON_AddStringToObject(json, "dns", config->dns);
-    cJSON_AddStringToObject(json, "mdnsHostname", config->mdns_hostname);
-    
+
+    // Primary
+    cJSON_AddStringToObject(json, "primarySSID", config->primary_ssid);
+    cJSON_AddStringToObject(json, "primaryPassword", config->primary_password);
+    cJSON_AddBoolToObject(json, "primaryStaticEnabled", config->primary_static_enabled);
+    cJSON_AddStringToObject(json, "primaryMDNS", config->primary_mdns);
+    save_static_ip(json, "primaryStatic", &config->primary_static);
+
+    // Secondary
+    cJSON_AddStringToObject(json, "secondarySSID", config->secondary_ssid);
+    cJSON_AddStringToObject(json, "secondaryPassword", config->secondary_password);
+    cJSON_AddBoolToObject(json, "secondaryStaticEnabled", config->secondary_static_enabled);
+    cJSON_AddStringToObject(json, "secondaryMDNS", config->secondary_mdns);
+    save_static_ip(json, "secondaryStatic", &config->secondary_static);
+
+    // Genel
+    cJSON_AddBoolToObject(json, "apModeEnabled", config->ap_mode_enabled);
+    cJSON_AddBoolToObject(json, "allowOpenNetworks", config->allow_open_networks);
+
     esp_err_t ret = write_json_file(CONFIG_WIFI_FILE, json);
     cJSON_Delete(json);
     return ret;
 }
 
-/* ============================================
- * WIFI BACKUP CONFIG
- * ============================================ */
-
-esp_err_t config_load_wifi_backup(app_wifi_config_t *config)
-{
-    if (!config) return ESP_ERR_INVALID_ARG;
-    
-    app_wifi_config_t defaults = WIFI_CONFIG_DEFAULT();
-    *config = defaults;
-    
-    cJSON *json = read_json_file(CONFIG_WIFI_BACKUP_FILE);
-    if (!json) return ESP_OK;
-    
-    json_get_string(json, "ssid", config->ssid, sizeof(config->ssid));
-    json_get_string(json, "password", config->password, sizeof(config->password));
-    config->configured = json_get_bool(json, "configured", defaults.configured);
-    config->static_ip_enabled = json_get_bool(json, "staticIpEnabled", defaults.static_ip_enabled);
-    json_get_string(json, "staticIp", config->static_ip, sizeof(config->static_ip));
-    json_get_string(json, "gateway", config->gateway, sizeof(config->gateway));
-    json_get_string(json, "subnet", config->subnet, sizeof(config->subnet));
-    json_get_string(json, "dns", config->dns, sizeof(config->dns));
-    
-    cJSON_Delete(json);
-    return ESP_OK;
-}
-
-esp_err_t config_save_wifi_backup(const app_wifi_config_t *config)
-{
-    if (!config) return ESP_ERR_INVALID_ARG;
-    
-    cJSON *json = cJSON_CreateObject();
-    if (!json) return ESP_ERR_NO_MEM;
-    
-    cJSON_AddStringToObject(json, "ssid", config->ssid);
-    cJSON_AddStringToObject(json, "password", config->password);
-    cJSON_AddBoolToObject(json, "configured", config->configured);
-    cJSON_AddBoolToObject(json, "staticIpEnabled", config->static_ip_enabled);
-    cJSON_AddStringToObject(json, "staticIp", config->static_ip);
-    cJSON_AddStringToObject(json, "gateway", config->gateway);
-    cJSON_AddStringToObject(json, "subnet", config->subnet);
-    cJSON_AddStringToObject(json, "dns", config->dns);
-    
-    esp_err_t ret = write_json_file(CONFIG_WIFI_BACKUP_FILE, json);
-    cJSON_Delete(json);
-    return ret;
-}
-
-/* ============================================
- * AUTH CONFIG
- * ============================================ */
-
-esp_err_t config_load_auth(auth_config_t *config)
-{
-    if (!config) return ESP_ERR_INVALID_ARG;
-    
-    auth_config_t defaults = AUTH_CONFIG_DEFAULT();
-    *config = defaults;
-    
-    cJSON *json = read_json_file(CONFIG_AUTH_FILE);
-    if (!json) return ESP_OK;
-    
-    json_get_string(json, "password", config->password, sizeof(config->password));
-    config->session_timeout_min = json_get_int(json, "sessionTimeoutMin", defaults.session_timeout_min);
-    config->max_login_attempts = json_get_int(json, "maxLoginAttempts", defaults.max_login_attempts);
-    config->lockout_duration_min = json_get_int(json, "lockoutDurationMin", defaults.lockout_duration_min);
-    config->lockout_until = json_get_int64(json, "lockoutUntil", defaults.lockout_until);
-    config->failed_attempts = json_get_int(json, "failedAttempts", defaults.failed_attempts);
-    json_get_string(json, "apiKey", config->api_key, sizeof(config->api_key));
-    config->reset_api_enabled = json_get_bool(json, "resetApiEnabled", defaults.reset_api_enabled);
-    
-    cJSON_Delete(json);
-    return ESP_OK;
-}
-
-esp_err_t config_save_auth(const auth_config_t *config)
-{
-    if (!config) return ESP_ERR_INVALID_ARG;
-    
-    cJSON *json = cJSON_CreateObject();
-    if (!json) return ESP_ERR_NO_MEM;
-    
-    cJSON_AddStringToObject(json, "password", config->password);
-    cJSON_AddNumberToObject(json, "sessionTimeoutMin", config->session_timeout_min);
-    cJSON_AddNumberToObject(json, "maxLoginAttempts", config->max_login_attempts);
-    cJSON_AddNumberToObject(json, "lockoutDurationMin", config->lockout_duration_min);
-    cJSON_AddNumberToObject(json, "lockoutUntil", (double)config->lockout_until);
-    cJSON_AddNumberToObject(json, "failedAttempts", config->failed_attempts);
-    cJSON_AddStringToObject(json, "apiKey", config->api_key);
-    cJSON_AddBoolToObject(json, "resetApiEnabled", config->reset_api_enabled);
-    
-    esp_err_t ret = write_json_file(CONFIG_AUTH_FILE, json);
-    cJSON_Delete(json);
-    return ret;
-}
-
-/* ============================================
- * MAIL CONFIG (simplified - no groups for now)
- * ============================================ */
+// ============================================================================
+// Mail Config
+// ============================================================================
 
 esp_err_t config_load_mail(mail_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
-    mail_config_t defaults = MAIL_CONFIG_DEFAULT();
-    *config = defaults;
-    
+
+    mail_config_t def = MAIL_CONFIG_DEFAULT();
+    *config = def;
+
     cJSON *json = read_json_file(CONFIG_MAIL_FILE);
     if (!json) return ESP_OK;
-    
-    json_get_string(json, "smtpServer", config->smtp_server, sizeof(config->smtp_server));
-    config->smtp_port = json_get_int(json, "smtpPort", defaults.smtp_port);
-    json_get_string(json, "smtpUsername", config->smtp_username, sizeof(config->smtp_username));
-    json_get_string(json, "smtpPassword", config->smtp_password, sizeof(config->smtp_password));
-    json_get_string(json, "senderName", config->sender_name, sizeof(config->sender_name));
-    config->use_tls = json_get_bool(json, "useTls", defaults.use_tls);
-    
-    // Load groups array
-    cJSON *groups = cJSON_GetObjectItem(json, "groups");
-    if (groups && cJSON_IsArray(groups)) {
-        config->group_count = 0;
-        cJSON *group_item;
-        cJSON_ArrayForEach(group_item, groups) {
-            if (config->group_count >= MAX_MAIL_GROUPS) break;
-            
-            mail_group_t *g = &config->groups[config->group_count];
-            json_get_string(group_item, "name", g->name, sizeof(g->name));
-            g->enabled = json_get_bool(group_item, "enabled", false);
-            json_get_string(group_item, "subject", g->subject, sizeof(g->subject));
-            json_get_string(group_item, "body", g->body, sizeof(g->body));
-            
-            // Load recipients
-            cJSON *recipients = cJSON_GetObjectItem(group_item, "recipients");
-            g->recipient_count = 0;
-            if (recipients && cJSON_IsArray(recipients)) {
-                cJSON *rcpt;
-                cJSON_ArrayForEach(rcpt, recipients) {
-                    if (g->recipient_count >= MAX_RECIPIENTS) break;
-                    if (cJSON_IsString(rcpt) && rcpt->valuestring) {
-                        safe_strcpy(g->recipients[g->recipient_count], rcpt->valuestring, MAX_EMAIL_LEN + 1);
-                        g->recipient_count++;
-                    }
-                }
-            }
-            config->group_count++;
-        }
-    }
-    
+
+    json_get_str(json, "server", config->server, MAX_HOSTNAME_LEN);
+    config->port = json_get_int(json, "port", def.port);
+    json_get_str(json, "username", config->username, MAX_EMAIL_LEN);
+    json_get_str(json, "password", config->password, MAX_PASSWORD_LEN);
+    json_get_str(json, "senderName", config->sender_name, MAX_GROUP_NAME_LEN);
+
     cJSON_Delete(json);
     return ESP_OK;
 }
@@ -451,106 +328,228 @@ esp_err_t config_load_mail(mail_config_t *config)
 esp_err_t config_save_mail(const mail_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return ESP_ERR_NO_MEM;
-    
-    cJSON_AddStringToObject(json, "smtpServer", config->smtp_server);
-    cJSON_AddNumberToObject(json, "smtpPort", config->smtp_port);
-    cJSON_AddStringToObject(json, "smtpUsername", config->smtp_username);
-    cJSON_AddStringToObject(json, "smtpPassword", config->smtp_password);
+
+    cJSON_AddStringToObject(json, "server", config->server);
+    cJSON_AddNumberToObject(json, "port", config->port);
+    cJSON_AddStringToObject(json, "username", config->username);
+    cJSON_AddStringToObject(json, "password", config->password);
     cJSON_AddStringToObject(json, "senderName", config->sender_name);
-    cJSON_AddBoolToObject(json, "useTls", config->use_tls);
-    
-    // Save groups
-    cJSON *groups = cJSON_AddArrayToObject(json, "groups");
-    for (int i = 0; i < config->group_count; i++) {
-        const mail_group_t *g = &config->groups[i];
-        cJSON *group_obj = cJSON_CreateObject();
-        
-        cJSON_AddStringToObject(group_obj, "name", g->name);
-        cJSON_AddBoolToObject(group_obj, "enabled", g->enabled);
-        cJSON_AddStringToObject(group_obj, "subject", g->subject);
-        cJSON_AddStringToObject(group_obj, "body", g->body);
-        
-        cJSON *recipients = cJSON_AddArrayToObject(group_obj, "recipients");
-        for (int j = 0; j < g->recipient_count; j++) {
-            cJSON_AddItemToArray(recipients, cJSON_CreateString(g->recipients[j]));
-        }
-        
-        cJSON_AddItemToArray(groups, group_obj);
-    }
-    
+
     esp_err_t ret = write_json_file(CONFIG_MAIL_FILE, json);
     cJSON_Delete(json);
     return ret;
 }
 
-/* ============================================
- * RELAY CONFIG
- * ============================================ */
+// ============================================================================
+// Mail Group Config
+// ============================================================================
 
-esp_err_t config_load_relay(relay_config_t *config)
+#define MAIL_GROUP_FILE_FMT  CONFIG_BASE_PATH "/mail_group_%d.json"
+
+esp_err_t config_load_mail_group(int index, mail_group_t *group)
 {
-    if (!config) return ESP_ERR_INVALID_ARG;
-    
-    relay_config_t defaults = RELAY_CONFIG_DEFAULT();
-    *config = defaults;
-    
-    cJSON *json = read_json_file(CONFIG_RELAY_FILE);
-    if (!json) return ESP_OK;
-    
-    config->inverted = json_get_bool(json, "inverted", defaults.inverted);
-    config->on_delay_ms = json_get_int(json, "onDelayMs", defaults.on_delay_ms);
-    config->off_delay_ms = json_get_int(json, "offDelayMs", defaults.off_delay_ms);
-    config->pulse_duration_ms = json_get_int(json, "pulseDurationMs", defaults.pulse_duration_ms);
-    config->pulse_mode = json_get_bool(json, "pulseMode", defaults.pulse_mode);
-    config->pulse_interval_ms = json_get_int(json, "pulseIntervalMs", defaults.pulse_interval_ms);
-    config->pulse_count = json_get_int(json, "pulseCount", defaults.pulse_count);
-    
+    if (!group || index < 0 || index >= MAX_MAIL_GROUPS) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    mail_group_t def = MAIL_GROUP_DEFAULT();
+    *group = def;
+
+    char path[64];
+    snprintf(path, sizeof(path), MAIL_GROUP_FILE_FMT, index);
+
+    cJSON *json = read_json_file(path);
+    if (!json) return ESP_ERR_NOT_FOUND;
+
+    json_get_str(json, "name", group->name, MAX_GROUP_NAME_LEN);
+    group->enabled = json_get_bool(json, "enabled", false);
+
+    cJSON *arr = cJSON_GetObjectItem(json, "recipients");
+    if (arr && cJSON_IsArray(arr)) {
+        int count = cJSON_GetArraySize(arr);
+        group->recipient_count = 0;
+        for (int i = 0; i < count && i < MAX_RECIPIENTS; i++) {
+            cJSON *item = cJSON_GetArrayItem(arr, i);
+            if (item && cJSON_IsString(item) && item->valuestring) {
+                safe_strcpy(group->recipients[i], item->valuestring, MAX_EMAIL_LEN);
+                group->recipient_count++;
+            }
+        }
+    }
+
     cJSON_Delete(json);
     return ESP_OK;
 }
 
-esp_err_t config_save_relay(const relay_config_t *config)
+esp_err_t config_save_mail_group(int index, const mail_group_t *group)
 {
-    if (!config) return ESP_ERR_INVALID_ARG;
-    
+    if (!group || index < 0 || index >= MAX_MAIL_GROUPS) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char path[64];
+    snprintf(path, sizeof(path), MAIL_GROUP_FILE_FMT, index);
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return ESP_ERR_NO_MEM;
-    
+
+    cJSON_AddStringToObject(json, "name", group->name);
+    cJSON_AddBoolToObject(json, "enabled", group->enabled);
+
+    cJSON *arr = cJSON_CreateArray();
+    for (int i = 0; i < group->recipient_count && i < MAX_RECIPIENTS; i++) {
+        if (group->recipients[i][0] != '\0') {
+            cJSON_AddItemToArray(arr, cJSON_CreateString(group->recipients[i]));
+        }
+    }
+    cJSON_AddItemToObject(json, "recipients", arr);
+
+    esp_err_t ret = write_json_file(path, json);
+    cJSON_Delete(json);
+    return ret;
+}
+
+// ============================================================================
+// API Config
+// ============================================================================
+
+esp_err_t config_load_api(api_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+
+    api_config_t def = API_CONFIG_DEFAULT();
+    *config = def;
+
+    cJSON *json = read_json_file(CONFIG_API_FILE);
+    if (!json) return ESP_OK;
+
+    config->enabled = json_get_bool(json, "enabled", def.enabled);
+    json_get_str(json, "endpoint", config->endpoint, MAX_HOSTNAME_LEN);
+    config->require_token = json_get_bool(json, "requireToken", def.require_token);
+    json_get_str(json, "token", config->token, MAX_TOKEN_LEN);
+
+    cJSON_Delete(json);
+    return ESP_OK;
+}
+
+esp_err_t config_save_api(const api_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return ESP_ERR_NO_MEM;
+
+    cJSON_AddBoolToObject(json, "enabled", config->enabled);
+    cJSON_AddStringToObject(json, "endpoint", config->endpoint);
+    cJSON_AddBoolToObject(json, "requireToken", config->require_token);
+    cJSON_AddStringToObject(json, "token", config->token);
+
+    esp_err_t ret = write_json_file(CONFIG_API_FILE, json);
+    cJSON_Delete(json);
+    return ret;
+}
+
+// ============================================================================
+// Auth Config
+// ============================================================================
+
+esp_err_t config_load_auth(auth_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+
+    auth_config_t def = AUTH_CONFIG_DEFAULT();
+    *config = def;
+
+    cJSON *json = read_json_file(CONFIG_AUTH_FILE);
+    if (!json) return ESP_OK;
+
+    json_get_str(json, "password", config->password, sizeof(config->password));
+    config->session_timeout_min = json_get_int(json, "sessionTimeout", def.session_timeout_min);
+
+    cJSON_Delete(json);
+    return ESP_OK;
+}
+
+esp_err_t config_save_auth(const auth_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return ESP_ERR_NO_MEM;
+
+    cJSON_AddStringToObject(json, "password", config->password);
+    cJSON_AddNumberToObject(json, "sessionTimeout", config->session_timeout_min);
+
+    esp_err_t ret = write_json_file(CONFIG_AUTH_FILE, json);
+    cJSON_Delete(json);
+    return ret;
+}
+
+// ============================================================================
+// Relay Config (ls_relay_config_t - relay_config_t ile uyumlu)
+// ============================================================================
+
+esp_err_t config_load_relay(ls_relay_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+
+    ls_relay_config_t def = LS_RELAY_CONFIG_DEFAULT();
+    *config = def;
+
+    cJSON *json = read_json_file(CONFIG_RELAY_FILE);
+    if (!json) return ESP_OK;
+
+    config->inverted = json_get_bool(json, "inverted", def.inverted);
+    config->delay_seconds = json_get_int(json, "delaySeconds", def.delay_seconds);
+    config->duration_seconds = json_get_int(json, "durationSeconds", def.duration_seconds);
+    config->pulse_enabled = json_get_bool(json, "pulseEnabled", def.pulse_enabled);
+    config->pulse_on_ms = json_get_int(json, "pulseOnMs", def.pulse_on_ms);
+    config->pulse_off_ms = json_get_int(json, "pulseOffMs", def.pulse_off_ms);
+
+    cJSON_Delete(json);
+    return ESP_OK;
+}
+
+esp_err_t config_save_relay(const ls_relay_config_t *config)
+{
+    if (!config) return ESP_ERR_INVALID_ARG;
+
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return ESP_ERR_NO_MEM;
+
     cJSON_AddBoolToObject(json, "inverted", config->inverted);
-    cJSON_AddNumberToObject(json, "onDelayMs", config->on_delay_ms);
-    cJSON_AddNumberToObject(json, "offDelayMs", config->off_delay_ms);
-    cJSON_AddNumberToObject(json, "pulseDurationMs", config->pulse_duration_ms);
-    cJSON_AddBoolToObject(json, "pulseMode", config->pulse_mode);
-    cJSON_AddNumberToObject(json, "pulseIntervalMs", config->pulse_interval_ms);
-    cJSON_AddNumberToObject(json, "pulseCount", config->pulse_count);
-    
+    cJSON_AddNumberToObject(json, "delaySeconds", config->delay_seconds);
+    cJSON_AddNumberToObject(json, "durationSeconds", config->duration_seconds);
+    cJSON_AddBoolToObject(json, "pulseEnabled", config->pulse_enabled);
+    cJSON_AddNumberToObject(json, "pulseOnMs", config->pulse_on_ms);
+    cJSON_AddNumberToObject(json, "pulseOffMs", config->pulse_off_ms);
+
     esp_err_t ret = write_json_file(CONFIG_RELAY_FILE, json);
     cJSON_Delete(json);
     return ret;
 }
 
-/* ============================================
- * SETUP CONFIG
- * ============================================ */
+// ============================================================================
+// Setup Config
+// ============================================================================
 
 esp_err_t config_load_setup(setup_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
-    setup_config_t defaults = SETUP_CONFIG_DEFAULT();
-    *config = defaults;
-    
+
+    setup_config_t def = SETUP_CONFIG_DEFAULT();
+    *config = def;
+
     cJSON *json = read_json_file(CONFIG_SETUP_FILE);
     if (!json) return ESP_OK;
-    
-    config->setup_completed = json_get_bool(json, "setupCompleted", defaults.setup_completed);
-    config->first_setup_time = json_get_int64(json, "firstSetupTime", defaults.first_setup_time);
-    json_get_string(json, "deviceName", config->device_name, sizeof(config->device_name));
-    config->boot_count = json_get_int(json, "bootCount", defaults.boot_count);
-    
+
+    config->setup_completed = json_get_bool(json, "setupCompleted", false);
+    config->first_setup_time = (int64_t)json_get_double(json, "firstSetupTime", 0);
+    json_get_str(json, "deviceName", config->device_name, MAX_HOSTNAME_LEN);
+
     cJSON_Delete(json);
     return ESP_OK;
 }
@@ -558,151 +557,76 @@ esp_err_t config_load_setup(setup_config_t *config)
 esp_err_t config_save_setup(const setup_config_t *config)
 {
     if (!config) return ESP_ERR_INVALID_ARG;
-    
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return ESP_ERR_NO_MEM;
-    
+
     cJSON_AddBoolToObject(json, "setupCompleted", config->setup_completed);
     cJSON_AddNumberToObject(json, "firstSetupTime", (double)config->first_setup_time);
     cJSON_AddStringToObject(json, "deviceName", config->device_name);
-    cJSON_AddNumberToObject(json, "bootCount", config->boot_count);
-    
+
     esp_err_t ret = write_json_file(CONFIG_SETUP_FILE, json);
     cJSON_Delete(json);
     return ret;
 }
 
-/* ============================================
- * SETUP HELPERS
- * ============================================ */
-
 bool config_is_setup_completed(void)
 {
-    setup_config_t config;
-    config_load_setup(&config);
-    return config.setup_completed;
+    setup_config_t cfg = SETUP_CONFIG_DEFAULT();
+    config_load_setup(&cfg);
+    return cfg.setup_completed;
 }
 
 esp_err_t config_mark_setup_completed(void)
 {
-    setup_config_t config;
-    config_load_setup(&config);
-    config.setup_completed = true;
-    config.first_setup_time = get_current_time_ms();
-    return config_save_setup(&config);
+    setup_config_t cfg = SETUP_CONFIG_DEFAULT();
+    config_load_setup(&cfg);
+
+    cfg.setup_completed = true;
+    if (cfg.first_setup_time == 0) {
+        cfg.first_setup_time = esp_timer_get_time() / 1000;
+    }
+
+    return config_save_setup(&cfg);
 }
 
-uint32_t config_increment_boot_count(void)
-{
-    setup_config_t config;
-    config_load_setup(&config);
-    config.boot_count++;
-    config_save_setup(&config);
-    ESP_LOGI(TAG, "Boot count: %lu", config.boot_count);
-    return config.boot_count;
-}
-
-/* ============================================
- * SECURITY HELPERS
- * ============================================ */
-
-bool config_verify_password(const char *password)
-{
-    if (!password) return false;
-    
-    // Check lockout
-    if (config_is_locked_out()) {
-        ESP_LOGW(TAG, "Account locked out");
-        return false;
-    }
-    
-    auth_config_t auth;
-    config_load_auth(&auth);
-    
-    // Constant-time comparison to prevent timing attacks
-    size_t pw_len = strlen(password);
-    size_t stored_len = strlen(auth.password);
-    
-    volatile uint8_t result = (pw_len == stored_len) ? 0 : 1;
-    size_t min_len = (pw_len < stored_len) ? pw_len : stored_len;
-    
-    for (size_t i = 0; i < min_len; i++) {
-        result |= (password[i] ^ auth.password[i]);
-    }
-    
-    if (result == 0) {
-        config_clear_failed_attempts();
-        return true;
-    } else {
-        config_record_failed_login();
-        return false;
-    }
-}
-
-void config_record_failed_login(void)
-{
-    auth_config_t auth;
-    config_load_auth(&auth);
-    
-    auth.failed_attempts++;
-    ESP_LOGW(TAG, "Failed login attempt: %lu/%lu", 
-             auth.failed_attempts, auth.max_login_attempts);
-    
-    if (auth.failed_attempts >= auth.max_login_attempts) {
-        auth.lockout_until = get_current_time_ms() + 
-                            (auth.lockout_duration_min * 60 * 1000);
-        ESP_LOGW(TAG, "Account locked for %lu minutes", auth.lockout_duration_min);
-    }
-    
-    config_save_auth(&auth);
-}
-
-void config_clear_failed_attempts(void)
-{
-    auth_config_t auth;
-    config_load_auth(&auth);
-    auth.failed_attempts = 0;
-    auth.lockout_until = 0;
-    config_save_auth(&auth);
-}
-
-bool config_is_locked_out(void)
-{
-    auth_config_t auth;
-    config_load_auth(&auth);
-    
-    if (auth.lockout_until == 0) {
-        return false;
-    }
-    
-    int64_t now = get_current_time_ms();
-    if (now >= auth.lockout_until) {
-        // Lockout expired, clear it
-        auth.lockout_until = 0;
-        auth.failed_attempts = 0;
-        config_save_auth(&auth);
-        return false;
-    }
-    
-    return true;
-}
-
-/* ============================================
- * FACTORY RESET
- * ============================================ */
+// ============================================================================
+// Factory Reset
+// ============================================================================
 
 esp_err_t config_factory_reset(void)
 {
-    ESP_LOGW(TAG, "Factory reset - deleting all config files");
-    
-    file_manager_delete(CONFIG_TIMER_FILE);
-    file_manager_delete(CONFIG_WIFI_FILE);
-    file_manager_delete(CONFIG_MAIL_FILE);
-    file_manager_delete(CONFIG_AUTH_FILE);
-    file_manager_delete(CONFIG_RUNTIME_FILE);
-    file_manager_delete(CONFIG_RELAY_FILE);
-    file_manager_delete(CONFIG_SETUP_FILE);
-    
-    ESP_LOGI(TAG, "Factory reset complete");
+    ESP_LOGW(TAG, "FABRIKA AYARLARINA DONULUYOR!");
+
+    const char *files[] = {
+        CONFIG_TIMER_FILE,
+        CONFIG_WIFI_FILE,
+        CONFIG_MAIL_FILE,
+        CONFIG_API_FILE,
+        CONFIG_AUTH_FILE,
+        CONFIG_RUNTIME_FILE,
+        CONFIG_RELAY_FILE,
+        CONFIG_SETUP_FILE,
+    };
+
+    int deleted = 0;
+    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        if (file_manager_exists(files[i])) {
+            file_manager_delete(files[i]);
+            deleted++;
+        }
+    }
+
+    // Mail group dosyalarını da sil
+    for (int i = 0; i < MAX_MAIL_GROUPS; i++) {
+        char path[64];
+        snprintf(path, sizeof(path), MAIL_GROUP_FILE_FMT, i);
+        if (file_manager_exists(path)) {
+            file_manager_delete(path);
+            deleted++;
+        }
+    }
+
+    ESP_LOGI(TAG, "Fabrika ayarlari tamamlandi (%d dosya silindi)", deleted);
     return ESP_OK;
 }

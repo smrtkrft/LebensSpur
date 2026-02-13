@@ -1,165 +1,156 @@
 /**
- * @file session_auth.h
- * @brief Session-based Authentication
- * 
- * Provides:
- * - Session token generation
- * - Token validation
- * - Cookie management
- * - Rate limiting (via config_manager)
+ * Session Auth - Token Bazlı Oturum Yönetimi
+ *
+ * Bearer token ile kimlik doğrulama.
+ * Login sonrası token üretilir, client her istekte
+ * "Authorization: Bearer <token>" header'ı gönderir.
+ * Cookie fallback desteklenir (eski tarayıcılar için).
+ *
+ * Session'lar RAM'de tutulur (restart'ta kaybolur).
+ * Timeout config'den okunur (varsayılan 60 dk).
+ *
+ * Bağımlılık: config_manager (Katman 2)
+ * Katman: 2 (Yapılandırma)
  */
 
 #ifndef SESSION_AUTH_H
 #define SESSION_AUTH_H
 
+#include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "esp_err.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================
- * CONFIGURATION
- * ============================================ */
-#define SESSION_TOKEN_LEN       32          // Length of session token (hex chars)
-#define SESSION_MAX_ACTIVE      4           // Max concurrent sessions
-#define SESSION_COOKIE_NAME     "LS_SID"    // Session cookie name
+// ============================================
+// SABİTLER
+// ============================================
+#define SESSION_TOKEN_LEN       32      // 16 byte = 32 hex karakter
+#define SESSION_MAX_COUNT       4       // Maksimum eşzamanlı oturum
+#define SESSION_COOKIE_NAME     "ls_token"
+#define SESSION_MIN_PASSWORD    4       // Minimum şifre uzunluğu
 
-/* ============================================
- * SESSION STRUCTURE
- * ============================================ */
+// ============================================
+// SESSION YAPISI
+// ============================================
 typedef struct {
     char token[SESSION_TOKEN_LEN + 1];
-    int64_t created_at;         // Unix timestamp (ms)
-    int64_t last_access;        // Last activity timestamp
-    int64_t expires_at;         // Expiration timestamp
-    char ip_address[16];        // Client IP
-    char user_agent[64];        // User agent (truncated)
-    bool valid;                 // Is session active
+    uint32_t created_at;        // Oluşturulma (uptime saniye)
+    uint32_t last_access;       // Son erişim (uptime saniye)
+    bool valid;
 } session_t;
 
-/* ============================================
- * INITIALIZATION
- * ============================================ */
+// ============================================
+// FONKSİYON PROTOTİPLERİ
+// ============================================
 
 /**
- * @brief Initialize session manager
+ * Session sistemini başlat (config_manager_init sonrası)
  */
 esp_err_t session_auth_init(void);
 
 /**
- * @brief Deinitialize session manager
+ * Şifre doğrula
+ * @return true: şifre doğru
  */
-void session_auth_deinit(void);
-
-/* ============================================
- * AUTHENTICATION
- * ============================================ */
+bool session_check_password(const char *password);
 
 /**
- * @brief Attempt login with password
- * @param password User-provided password
- * @param ip_address Client IP (for logging)
- * @param user_agent Client user agent
- * @param out_token Output: session token if success
- * @return ESP_OK on success, ESP_ERR_INVALID_ARG for wrong password
+ * Şifre ayarlanmış mı kontrol et
+ * @return true: şifre mevcut (boş değil)
  */
-esp_err_t session_auth_login(const char *password, 
-                              const char *ip_address,
-                              const char *user_agent,
-                              char *out_token);
+bool session_has_password(void);
 
 /**
- * @brief Logout (invalidate session)
- * @param token Session token to invalidate
+ * Yeni session oluştur, token döndür
+ * @param token_out min SESSION_TOKEN_LEN+1 boyutunda buffer
+ * @return ESP_OK: başarılı
  */
-esp_err_t session_auth_logout(const char *token);
+esp_err_t session_create(char *token_out);
 
 /**
- * @brief Logout all sessions
+ * Token geçerli mi kontrol et (timeout dahil)
+ * Geçerliyse last_access güncellenir
+ * @return true: geçerli oturum
  */
-esp_err_t session_auth_logout_all(void);
-
-/* ============================================
- * SESSION VALIDATION
- * ============================================ */
+bool session_validate(const char *token);
 
 /**
- * @brief Validate session token
- * @param token Session token
- * @return true if valid and not expired
+ * Oturumu sonlandır
  */
-bool session_auth_validate(const char *token);
+void session_destroy(const char *token);
 
 /**
- * @brief Refresh session (update last access time)
- * @param token Session token
- * @return ESP_OK on success
+ * Tüm oturumları temizle
  */
-esp_err_t session_auth_refresh(const char *token);
+void session_destroy_all(void);
 
 /**
- * @brief Get session info
- * @param token Session token
- * @param session Output session info
- * @return ESP_OK if found
+ * Aktif oturum sayısı
  */
-esp_err_t session_auth_get_session(const char *token, session_t *session);
-
-/* ============================================
- * SESSION MANAGEMENT
- * ============================================ */
+int session_get_active_count(void);
 
 /**
- * @brief Get number of active sessions
+ * HTTP Authorization header'ından token çıkar
+ * Format: "Bearer <token>"
+ * @param auth_header Authorization header değeri
+ * @param token_out Token buffer (min SESSION_TOKEN_LEN+1)
+ * @return true: token bulundu
  */
-int session_auth_count(void);
+bool session_extract_bearer_token(const char *auth_header, char *token_out);
 
 /**
- * @brief Cleanup expired sessions
+ * HTTP Cookie header'ından token çıkar (fallback)
+ * Format: "ls_token=<token>; ..."
+ * @param cookie_header Cookie header değeri
+ * @param token_out Token buffer (min SESSION_TOKEN_LEN+1)
+ * @return true: token bulundu
  */
-void session_auth_cleanup(void);
+bool session_extract_cookie_token(const char *cookie_header, char *token_out);
 
 /**
- * @brief Get remaining login attempts before lockout
- * @return Number of attempts remaining, 0 if locked out
+ * HTTP request'ten token çıkar (önce Bearer, sonra Cookie)
+ * web_server kolaylık fonksiyonu
+ * @param auth_header Authorization header (NULL olabilir)
+ * @param cookie_header Cookie header (NULL olabilir)
+ * @param token_out Token buffer (min SESSION_TOKEN_LEN+1)
+ * @return true: token bulundu
  */
-int session_auth_remaining_attempts(void);
+bool session_extract_token(const char *auth_header, const char *cookie_header, char *token_out);
 
 /**
- * @brief Get lockout remaining time in seconds
- * @return Seconds until lockout ends, 0 if not locked
+ * Set-Cookie header oluştur (login response için)
+ * @return yazılan karakter sayısı
  */
-int session_auth_lockout_remaining(void);
-
-/* ============================================
- * COOKIE HELPERS
- * ============================================ */
+int session_format_cookie(const char *token, char *buffer, size_t size);
 
 /**
- * @brief Generate Set-Cookie header value
- * @param token Session token
- * @param buffer Output buffer
- * @param buffer_size Buffer size
+ * Cookie silme header'ı oluştur (logout için)
+ * @return yazılan karakter sayısı
  */
-void session_auth_cookie_header(const char *token, char *buffer, size_t buffer_size);
+int session_format_logout_cookie(char *buffer, size_t size);
 
 /**
- * @brief Extract session token from Cookie header
- * @param cookie_header Full Cookie header string
- * @param out_token Output token buffer (SESSION_TOKEN_LEN + 1)
- * @return ESP_OK if found
+ * Şifre değiştir
+ * @param current Mevcut şifre (doğrulama)
+ * @param new_pass Yeni şifre
+ * @return ESP_OK, ESP_ERR_INVALID_ARG (yanlış şifre), ESP_ERR_INVALID_SIZE (çok kısa)
  */
-esp_err_t session_auth_extract_token(const char *cookie_header, char *out_token);
+esp_err_t session_change_password(const char *current, const char *new_pass);
 
 /**
- * @brief Generate logout cookie (expired)
- * @param buffer Output buffer
- * @param buffer_size Buffer size
+ * İlk kurulumda şifre ayarla (şifre henüz yoksa)
+ * @return ESP_OK, ESP_ERR_INVALID_STATE (şifre zaten var)
  */
-void session_auth_logout_cookie(char *buffer, size_t buffer_size);
+esp_err_t session_set_initial_password(const char *password);
+
+/**
+ * Session timeout değerini al (saniye)
+ */
+uint32_t session_get_timeout_sec(void);
 
 #ifdef __cplusplus
 }

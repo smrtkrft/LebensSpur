@@ -1,229 +1,186 @@
 /**
- * @file button_manager.c
- * @brief Button Input Implementation
+ * Button Manager - GPIO17 Buton Kontrolü
+ *
+ * Active LOW: Buton basıldığında GPIO=0, bırakıldığında GPIO=1 (pull-up)
+ * Debounce: 50ms stabil durum gerektirir
+ * Olay algılama: Basılı tutma süresine göre kısa/uzun/çok uzun basma
  */
 
 #include "button_manager.h"
-#include "log_manager.h"
 #include "esp_log.h"
-#include "driver/gpio.h"
 #include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
+#include "driver/gpio.h"
 
-static const char *TAG = "button";
+static const char *TAG = "BUTTON";
 
-/* ============================================
- * PRIVATE DATA
- * ============================================ */
+// Zamanlama parametreleri
+#define DEBOUNCE_MS         50
+#define LONG_PRESS_MS       1000
+#define VERY_LONG_PRESS_MS  3000
 
-static button_event_cb_t s_callback = NULL;
-static button_event_t s_last_event = BUTTON_EVENT_NONE;
-static int64_t s_press_time = 0;
-static int s_click_count = 0;
-static int64_t s_last_click_time = 0;
-static bool s_pressed = false;
-static bool s_long_press_fired = false;
-static TaskHandle_t s_task_handle = NULL;
-static QueueHandle_t s_event_queue = NULL;
+// Durum
+static bool s_initialized = false;
+static bool s_last_raw = false;        // Son ham okuma
+static bool s_stable = false;          // Debounce sonrası stabil durum
+static int64_t s_change_time = 0;      // Son durum değişiklik zamanı (us)
+static int64_t s_press_start = 0;      // Basma başlangıç zamanı (us)
+static bool s_long_fired = false;      // Uzun basma olayı gönderildi mi
+static bool s_very_long_fired = false; // Çok uzun basma olayı gönderildi mi
 
-/* ============================================
- * PRIVATE FUNCTIONS
- * ============================================ */
+// İstatistik
+static uint32_t s_press_count = 0;
+static uint32_t s_long_count = 0;
+static uint32_t s_very_long_count = 0;
 
-static void fire_event(button_event_t event)
-{
-    s_last_event = event;
-    
-    ESP_LOGD(TAG, "Button event: %s", button_event_name(event));
-    
-    if (s_callback) {
-        s_callback(event);
-    }
-}
+// Callback
+static button_callback_t s_callback = NULL;
 
-static void IRAM_ATTR gpio_isr_handler(void *arg)
-{
-    uint32_t gpio_num = (uint32_t)arg;
-    xQueueSendFromISR(s_event_queue, &gpio_num, NULL);
-}
-
-static void button_task(void *arg)
-{
-    uint32_t io_num;
-    int64_t now;
-    
-    while (1) {
-        // Wait for GPIO interrupt
-        if (xQueueReceive(s_event_queue, &io_num, pdMS_TO_TICKS(100))) {
-            // Debounce
-            vTaskDelay(pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS));
-            
-            bool level = gpio_get_level(BUTTON_GPIO);
-            bool pressed = (level == 0);  // Active LOW
-            
-            now = esp_timer_get_time() / 1000;  // Convert to ms
-            
-            if (pressed && !s_pressed) {
-                // Button pressed
-                s_pressed = true;
-                s_press_time = now;
-                s_long_press_fired = false;
-                fire_event(BUTTON_EVENT_PRESSED);
-                
-            } else if (!pressed && s_pressed) {
-                // Button released
-                s_pressed = false;
-
-                if (s_long_press_fired) {
-                    fire_event(BUTTON_EVENT_LONG_RELEASE);
-                    s_click_count = 0;
-                } else {
-                    fire_event(BUTTON_EVENT_RELEASED);
-                    
-                    // Count clicks
-                    if (now - s_last_click_time < BUTTON_MULTI_CLICK_MS) {
-                        s_click_count++;
-                    } else {
-                        s_click_count = 1;
-                    }
-                    s_last_click_time = now;
-                }
-            }
-        }
-        
-        // Check for long press while pressed
-        if (s_pressed && !s_long_press_fired) {
-            now = esp_timer_get_time() / 1000;
-            if (now - s_press_time >= BUTTON_LONG_PRESS_MS) {
-                s_long_press_fired = true;
-                fire_event(BUTTON_EVENT_LONG_PRESS);
-            }
-        }
-        
-        // Process multi-click timeout
-        if (!s_pressed && s_click_count > 0) {
-            now = esp_timer_get_time() / 1000;
-            if (now - s_last_click_time >= BUTTON_MULTI_CLICK_MS) {
-                switch (s_click_count) {
-                    case 1:
-                        fire_event(BUTTON_EVENT_CLICK);
-                        break;
-                    case 2:
-                        fire_event(BUTTON_EVENT_DOUBLE_CLICK);
-                        break;
-                    default:
-                        fire_event(BUTTON_EVENT_TRIPLE_CLICK);
-                        break;
-                }
-                s_click_count = 0;
-            }
-        }
-    }
-}
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
+// ============================================================================
+// Init / Deinit
+// ============================================================================
 
 esp_err_t button_manager_init(void)
 {
-    ESP_LOGI(TAG, "Initializing button manager (GPIO%d)", BUTTON_GPIO);
-    
-    // Configure GPIO
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << BUTTON_GPIO),
+    if (s_initialized) {
+        return ESP_OK;
+    }
+
+    gpio_config_t cfg = {
+        .pin_bit_mask = (1ULL << BUTTON_GPIO_PIN),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_ANYEDGE
+        .intr_type = GPIO_INTR_DISABLE
     };
-    
-    esp_err_t ret = gpio_config(&io_conf);
+
+    esp_err_t ret = gpio_config(&cfg);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GPIO config failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "GPIO config başarısız: %s", esp_err_to_name(ret));
         return ret;
     }
-    
-    // Create event queue
-    s_event_queue = xQueueCreate(10, sizeof(uint32_t));
-    if (!s_event_queue) {
-        ESP_LOGE(TAG, "Queue create failed");
-        return ESP_ERR_NO_MEM;
-    }
-    
-    // Install ISR service
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(BUTTON_GPIO, gpio_isr_handler, (void *)BUTTON_GPIO);
-    
-    // Create task
-    xTaskCreate(button_task, "button_task", 2048, NULL, 10, &s_task_handle);
-    if (!s_task_handle) {
-        ESP_LOGE(TAG, "Task create failed");
-        return ESP_ERR_NO_MEM;
-    }
-    
-    ESP_LOGI(TAG, "Button manager initialized");
+
+    // Başlangıç durumunu oku
+    s_stable = (gpio_get_level(BUTTON_GPIO_PIN) == 0);
+    s_last_raw = s_stable;
+    s_change_time = esp_timer_get_time();
+
+    s_initialized = true;
+    ESP_LOGI(TAG, "OK - GPIO%d (D7)", BUTTON_GPIO_PIN);
+
     return ESP_OK;
 }
 
-void button_manager_deinit(void)
+esp_err_t button_manager_deinit(void)
 {
-    if (s_task_handle) {
-        vTaskDelete(s_task_handle);
-        s_task_handle = NULL;
-    }
-    
-    gpio_isr_handler_remove(BUTTON_GPIO);
-    gpio_reset_pin(BUTTON_GPIO);
-    
-    if (s_event_queue) {
-        vQueueDelete(s_event_queue);
-        s_event_queue = NULL;
-    }
+    if (!s_initialized) return ESP_OK;
+
+    s_callback = NULL;
+    s_initialized = false;
+
+    ESP_LOGI(TAG, "Kapatıldı");
+    return ESP_OK;
 }
 
-void button_manager_set_callback(button_event_cb_t cb)
-{
-    s_callback = cb;
-}
+// ============================================================================
+// Callback & Status
+// ============================================================================
 
-/* ============================================
- * STATUS
- * ============================================ */
+void button_set_callback(button_callback_t callback)
+{
+    s_callback = callback;
+}
 
 bool button_is_pressed(void)
 {
-    return s_pressed;
-}
-
-button_event_t button_get_last_event(void)
-{
-    return s_last_event;
+    return s_stable;
 }
 
 uint32_t button_get_press_duration(void)
 {
-    if (!s_pressed) {
+    if (!s_stable || s_press_start == 0) {
         return 0;
     }
-    
-    int64_t now = esp_timer_get_time() / 1000;
-    return (uint32_t)(now - s_press_time);
+    return (uint32_t)((esp_timer_get_time() - s_press_start) / 1000);
 }
 
-const char* button_event_name(button_event_t event)
+// ============================================================================
+// Tick - ~10ms aralıkla çağrılmalı
+// ============================================================================
+
+void button_tick(void)
 {
-    switch (event) {
-        case BUTTON_EVENT_NONE:         return "NONE";
-        case BUTTON_EVENT_PRESSED:      return "PRESSED";
-        case BUTTON_EVENT_RELEASED:     return "RELEASED";
-        case BUTTON_EVENT_CLICK:        return "CLICK";
-        case BUTTON_EVENT_DOUBLE_CLICK: return "DOUBLE_CLICK";
-        case BUTTON_EVENT_TRIPLE_CLICK: return "TRIPLE_CLICK";
-        case BUTTON_EVENT_LONG_PRESS:   return "LONG_PRESS";
-        case BUTTON_EVENT_LONG_RELEASE: return "LONG_RELEASE";
-        default:                        return "UNKNOWN";
+    if (!s_initialized) return;
+
+    int64_t now = esp_timer_get_time();
+    bool raw = (gpio_get_level(BUTTON_GPIO_PIN) == 0);  // Active LOW
+
+    // Ham durum değiştiyse debounce sayacını sıfırla
+    if (raw != s_last_raw) {
+        s_last_raw = raw;
+        s_change_time = now;
+        return;
     }
+
+    // Debounce süresi geçmedi
+    if ((now - s_change_time) < (DEBOUNCE_MS * 1000)) {
+        return;
+    }
+
+    // Stabil durum değişti mi?
+    if (raw != s_stable) {
+        s_stable = raw;
+
+        if (s_stable) {
+            // Basıldı
+            s_press_start = now;
+            s_long_fired = false;
+            s_very_long_fired = false;
+        } else {
+            // Bırakıldı - kısa basma kontrolü
+            uint32_t duration = button_get_press_duration();
+
+            if (!s_long_fired && duration < LONG_PRESS_MS) {
+                s_press_count++;
+                ESP_LOGI(TAG, "Kısa basma (%lums)", duration);
+                if (s_callback) s_callback(BUTTON_EVENT_PRESS);
+            }
+
+            if (s_callback) s_callback(BUTTON_EVENT_RELEASE);
+            s_press_start = 0;
+        }
+    }
+
+    // Basılı tutuluyorsa süre kontrolü
+    if (s_stable && s_press_start > 0) {
+        uint32_t duration = button_get_press_duration();
+
+        if (!s_long_fired && duration >= LONG_PRESS_MS && duration < VERY_LONG_PRESS_MS) {
+            s_long_fired = true;
+            s_long_count++;
+            ESP_LOGI(TAG, "Uzun basma algılandı");
+            if (s_callback) s_callback(BUTTON_EVENT_LONG_PRESS);
+        }
+
+        if (!s_very_long_fired && duration >= VERY_LONG_PRESS_MS) {
+            s_very_long_fired = true;
+            s_very_long_count++;
+            ESP_LOGI(TAG, "Çok uzun basma algılandı");
+            if (s_callback) s_callback(BUTTON_EVENT_VERY_LONG);
+        }
+    }
+}
+
+// ============================================================================
+// Debug
+// ============================================================================
+
+void button_print_stats(void)
+{
+    ESP_LOGI(TAG, "┌──────────────────────────────────────");
+    ESP_LOGI(TAG, "│ GPIO:        %d (D7)", BUTTON_GPIO_PIN);
+    ESP_LOGI(TAG, "│ Durum:       %s", s_stable ? "BASILI" : "SERBEST");
+    ESP_LOGI(TAG, "│ Kısa basma:  %lu", s_press_count);
+    ESP_LOGI(TAG, "│ Uzun basma:  %lu", s_long_count);
+    ESP_LOGI(TAG, "│ Çok uzun:    %lu", s_very_long_count);
+    ESP_LOGI(TAG, "└──────────────────────────────────────");
 }

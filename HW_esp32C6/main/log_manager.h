@@ -1,221 +1,106 @@
 /**
- * @file log_manager.h
- * @brief Log Manager - Event Logging System
- * 
- * Provides:
- * - Event logging to external flash
- * - Log rotation (max file size)
- * - Log categories (system, timer, security, mail)
- * - JSON/text export
+ * Log Manager - Harici Flash'a Log Yazma
+ *
+ * LittleFS üzerinde /ext/logs/ dizinine log dosyaları yazar.
+ * Timestamp tabanlı dosya adları, otomatik rotasyon.
+ *
+ * Bağımlılık: file_manager (Katman 1)
+ * Katman: 1 (Altyapı)
  */
 
 #ifndef LOG_MANAGER_H
 #define LOG_MANAGER_H
 
+#include "esp_err.h"
+#include "esp_log.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "esp_err.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================
- * CONFIGURATION
- * ============================================ */
-#define LOG_BASE_PATH           "/gui/logs"
-#define LOG_EVENT_FILE          "/gui/logs/events.log"
-#define LOG_ARCHIVE_FILE        "/gui/logs/events.old"
+// Log ayarları
+#define LOG_MGR_MAX_FILE_SIZE   (512 * 1024)    // 512KB per file
+#define LOG_MGR_MAX_FILES       8               // Max rotasyon dosyası
+#define LOG_MGR_BUFFER_SIZE     256             // Satır buffer
 
-#define LOG_MAX_FILE_SIZE       (64 * 1024)     // 64KB per file
-#define LOG_MAX_ENTRIES         500             // Max entries before rotation
-#define LOG_ENTRY_MAX_LEN       256             // Max message length
-
-/* ============================================
- * LOG LEVELS
- * ============================================ */
+// Log seviyeleri (ESP_LOG ile uyumlu)
 typedef enum {
-    LOG_LEVEL_DEBUG = 0,
-    LOG_LEVEL_INFO,
-    LOG_LEVEL_WARN,
-    LOG_LEVEL_ERROR,
-    LOG_LEVEL_CRITICAL
+    LOG_LEVEL_NONE = 0,
+    LOG_LEVEL_ERROR = 1,
+    LOG_LEVEL_WARN = 2,
+    LOG_LEVEL_INFO = 3,
+    LOG_LEVEL_DEBUG = 4,
+    LOG_LEVEL_VERBOSE = 5
 } log_level_t;
 
-/* ============================================
- * LOG CATEGORIES
- * ============================================ */
-typedef enum {
-    LOG_CAT_SYSTEM = 0,     // General system events
-    LOG_CAT_TIMER,          // Dead man's switch events
-    LOG_CAT_SECURITY,       // Login, auth events
-    LOG_CAT_MAIL,           // Email events
-    LOG_CAT_NETWORK,        // WiFi, connectivity
-    LOG_CAT_CONFIG,         // Configuration changes
-    LOG_CAT_RELAY,          // Relay actions
-    LOG_CAT_USER,           // User actions
-    LOG_CAT_MAX
-} log_category_t;
-
-/* ============================================
- * LOG ENTRY
- * ============================================ */
-typedef struct {
-    int64_t timestamp;          // Unix timestamp (ms)
-    log_level_t level;          // Log level
-    log_category_t category;    // Category
-    char message[LOG_ENTRY_MAX_LEN];   // Message
-    char source[32];            // Source (IP, device, etc)
-} log_entry_t;
-
-/* ============================================
- * LOG FILTER
- * ============================================ */
-typedef struct {
-    log_level_t min_level;      // Minimum level to include
-    log_category_t category;    // Category filter (-1 for all)
-    int64_t from_timestamp;     // From time (0 for all)
-    int64_t to_timestamp;       // To time (0 for now)
-    uint32_t max_entries;       // Max entries to return
-    uint32_t offset;            // Skip first N entries
-} log_filter_t;
-
-#define LOG_FILTER_DEFAULT() { \
-    .min_level = LOG_LEVEL_INFO, \
-    .category = -1, \
-    .from_timestamp = 0, \
-    .to_timestamp = 0, \
-    .max_entries = 100, \
-    .offset = 0 \
-}
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
-
 /**
- * @brief Initialize log manager
+ * Log sistemini başlat (file_manager_init sonrası)
  */
 esp_err_t log_manager_init(void);
 
 /**
- * @brief Deinitialize log manager
+ * Log sistemini kapat
  */
-void log_manager_deinit(void);
-
-/* ============================================
- * LOGGING FUNCTIONS
- * ============================================ */
+esp_err_t log_manager_deinit(void);
 
 /**
- * @brief Log an event
- * @param level Log level
- * @param category Category
- * @param source Source identifier (can be NULL)
- * @param format Printf-style format string
+ * Log seviyesini ayarla
  */
-void log_event(log_level_t level, log_category_t category, 
-               const char *source, const char *format, ...) __attribute__((format(printf, 4, 5)));
+void log_manager_set_level(log_level_t level);
 
 /**
- * @brief Log a system event
+ * Log yaz (printf format)
  */
-#define LOG_SYSTEM(level, msg, ...) log_event(level, LOG_CAT_SYSTEM, NULL, msg, ##__VA_ARGS__)
+void log_manager_write(log_level_t level, const char *tag, const char *format, ...);
+
+// Kısayol makrolar
+#define LOG_E(tag, fmt, ...) log_manager_write(LOG_LEVEL_ERROR, tag, fmt, ##__VA_ARGS__)
+#define LOG_W(tag, fmt, ...) log_manager_write(LOG_LEVEL_WARN,  tag, fmt, ##__VA_ARGS__)
+#define LOG_I(tag, fmt, ...) log_manager_write(LOG_LEVEL_INFO,  tag, fmt, ##__VA_ARGS__)
+#define LOG_D(tag, fmt, ...) log_manager_write(LOG_LEVEL_DEBUG, tag, fmt, ##__VA_ARGS__)
 
 /**
- * @brief Log a timer event
+ * Mevcut log dosyasının yolu
  */
-#define LOG_TIMER(level, msg, ...) log_event(level, LOG_CAT_TIMER, NULL, msg, ##__VA_ARGS__)
+const char *log_manager_get_current_file(void);
 
 /**
- * @brief Log a security event
+ * Log dosyalarını listele
  */
-#define LOG_SECURITY(level, src, msg, ...) log_event(level, LOG_CAT_SECURITY, src, msg, ##__VA_ARGS__)
+esp_err_t log_manager_list_files(char files[][64], size_t max_files, size_t *count);
 
 /**
- * @brief Log a mail event
+ * Belirli bir log dosyasını oku
  */
-#define LOG_MAIL(level, msg, ...) log_event(level, LOG_CAT_MAIL, NULL, msg, ##__VA_ARGS__)
+esp_err_t log_manager_read_file(const char *filename, char *buffer, size_t max_size, size_t *read_size);
 
 /**
- * @brief Log a network event
+ * Tüm log dosyalarını sil
  */
-#define LOG_NETWORK(level, msg, ...) log_event(level, LOG_CAT_NETWORK, NULL, msg, ##__VA_ARGS__)
+esp_err_t log_manager_clear_all(void);
 
 /**
- * @brief Log a config event
+ * Log rotasyonu (eski dosyaları temizle, yeni dosya oluştur)
  */
-#define LOG_CONFIG(level, msg, ...) log_event(level, LOG_CAT_CONFIG, NULL, msg, ##__VA_ARGS__)
+esp_err_t log_manager_rotate(void);
 
 /**
- * @brief Log a relay event
+ * İstatistikleri al
  */
-#define LOG_RELAY(level, msg, ...) log_event(level, LOG_CAT_RELAY, NULL, msg, ##__VA_ARGS__)
+esp_err_t log_manager_get_stats(uint32_t *total_size, uint32_t *file_count);
 
 /**
- * @brief Log a user action
+ * Buffer'ı diske yaz
  */
-#define LOG_USER(level, src, msg, ...) log_event(level, LOG_CAT_USER, src, msg, ##__VA_ARGS__)
-
-/* ============================================
- * READING LOGS
- * ============================================ */
+esp_err_t log_manager_flush(void);
 
 /**
- * @brief Get log entries as JSON string
- * @param filter Filter criteria
- * @param buffer Output buffer
- * @param buffer_size Buffer size
- * @return Number of bytes written
+ * Debug bilgilerini yazdır
  */
-size_t log_get_entries_json(const log_filter_t *filter, char *buffer, size_t buffer_size);
-
-/**
- * @brief Get log count
- * @return Total number of log entries
- */
-uint32_t log_get_count(void);
-
-/**
- * @brief Get log file size in bytes
- */
-int32_t log_get_file_size(void);
-
-/* ============================================
- * MAINTENANCE
- * ============================================ */
-
-/**
- * @brief Force log rotation
- */
-esp_err_t log_rotate(void);
-
-/**
- * @brief Clear all logs
- */
-esp_err_t log_clear(void);
-
-/**
- * @brief Export logs to buffer (text format)
- * @param buffer Output buffer
- * @param buffer_size Buffer size
- * @return Bytes written
- */
-size_t log_export_text(char *buffer, size_t buffer_size);
-
-/* ============================================
- * UTILITIES
- * ============================================ */
-
-/**
- * @brief Get level name string
- */
-const char* log_level_name(log_level_t level);
-
-/**
- * @brief Get category name string
- */
-const char* log_category_name(log_category_t category);
+void log_manager_print_info(void);
 
 #ifdef __cplusplus
 }

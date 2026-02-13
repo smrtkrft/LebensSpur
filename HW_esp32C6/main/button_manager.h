@@ -1,101 +1,76 @@
 /**
- * @file button_manager.h
- * @brief Button Input Manager
- * 
- * GPIO17 = Button (Pull-up, active LOW)
- * 
- * Supports:
- * - Short press detection
- * - Long press detection
- * - Multi-click detection
+ * Button Manager - GPIO17 (D7) Fiziksel Buton Kontrolü
+ *
+ * Özellikler:
+ * - Debounce (50ms)
+ * - Kısa basma (<1s), uzun basma (1-3s), çok uzun basma (>3s) algılama
+ * - Callback tabanlı olay bildirimi
+ * - Polling tabanlı (10ms tick ile çağrılmalı)
+ *
+ * Bağımlılık: Yok (sadece ESP-IDF GPIO + Timer)
+ * Katman: 0 (Donanım)
  */
 
 #ifndef BUTTON_MANAGER_H
 #define BUTTON_MANAGER_H
 
+#include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================
- * CONFIGURATION
- * ============================================ */
-#define BUTTON_GPIO             17      // Button pin
-#define BUTTON_DEBOUNCE_MS      50      // Debounce time
-#define BUTTON_LONG_PRESS_MS    3000    // Long press threshold
-#define BUTTON_MULTI_CLICK_MS   500     // Max time between clicks
+#define BUTTON_GPIO_PIN     17  // D7 (Active LOW, dahili pull-up)
 
-/* ============================================
- * BUTTON EVENTS
- * ============================================ */
+// Buton olayları
 typedef enum {
     BUTTON_EVENT_NONE = 0,
-    BUTTON_EVENT_PRESSED,       // Button pressed (not released)
-    BUTTON_EVENT_RELEASED,      // Button released
-    BUTTON_EVENT_CLICK,         // Single short click
-    BUTTON_EVENT_DOUBLE_CLICK,  // Double click
-    BUTTON_EVENT_TRIPLE_CLICK,  // Triple click
-    BUTTON_EVENT_LONG_PRESS,    // Long press started
-    BUTTON_EVENT_LONG_RELEASE   // Released after long press
+    BUTTON_EVENT_PRESS,         // Kısa basma (< 1s)
+    BUTTON_EVENT_LONG_PRESS,    // Uzun basma (1-3s)
+    BUTTON_EVENT_VERY_LONG,     // Çok uzun basma (> 3s)
+    BUTTON_EVENT_RELEASE        // Bırakma
 } button_event_t;
 
-/* ============================================
- * CALLBACKS
- * ============================================ */
+// Olay callback tipi
+typedef void (*button_callback_t)(button_event_t event);
 
 /**
- * @brief Button event callback
- * @param event Event type
- */
-typedef void (*button_event_cb_t)(button_event_t event);
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
-
-/**
- * @brief Initialize button manager
+ * Buton yöneticisini başlat (GPIO yapılandırması)
  */
 esp_err_t button_manager_init(void);
 
 /**
- * @brief Deinitialize button manager
+ * Buton yöneticisini kapat
  */
-void button_manager_deinit(void);
+esp_err_t button_manager_deinit(void);
 
 /**
- * @brief Set event callback
+ * Olay callback'i kaydet
  */
-void button_manager_set_callback(button_event_cb_t cb);
-
-/* ============================================
- * STATUS
- * ============================================ */
+void button_set_callback(button_callback_t callback);
 
 /**
- * @brief Check if button is currently pressed
+ * Buton şu an basılı mı (debounce sonrası stabil durum)
  */
 bool button_is_pressed(void);
 
 /**
- * @brief Get last event
- */
-button_event_t button_get_last_event(void);
-
-/**
- * @brief Get press duration in milliseconds
- * @return Duration if pressed, 0 if not pressed
+ * Basılı kalma süresi (ms), basılı değilse 0
  */
 uint32_t button_get_press_duration(void);
 
 /**
- * @brief Get event name string
+ * Periyodik tick - ana döngüden ~10ms aralıkla çağrılmalı
+ * Debounce ve olay algılama yapar
  */
-const char* button_event_name(button_event_t event);
+void button_tick(void);
+
+/**
+ * Debug istatistikleri yazdır
+ */
+void button_print_stats(void);
 
 #ifdef __cplusplus
 }

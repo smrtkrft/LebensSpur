@@ -1,382 +1,272 @@
 /**
- * @file log_manager.c
- * @brief Log Manager Implementation
+ * Log Manager - LittleFS Log Yazma
+ *
+ * /ext/logs/ dizininde timestamp tabanlı log dosyaları.
+ * Dosya boyutu aşıldığında otomatik rotasyon.
+ * Her yazma append modda yapılır.
  */
 
 #include "log_manager.h"
 #include "file_manager.h"
-#include "time_manager.h"
 #include "esp_log.h"
-#include "cJSON.h"
+#include "esp_timer.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
-static const char *TAG = "log_mgr";
+static const char *TAG = "LOG_MGR";
 
-/* ============================================
- * LEVEL & CATEGORY NAMES
- * ============================================ */
-static const char *s_level_names[] = {
-    "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"
-};
+static bool s_initialized = false;
+static log_level_t s_level = LOG_LEVEL_INFO;
+static char s_current_file[128] = {0};
+static uint32_t s_current_size = 0;
+static uint32_t s_log_count = 0;
 
-static const char *s_category_names[] = {
-    "SYSTEM", "TIMER", "SECURITY", "MAIL", 
-    "NETWORK", "CONFIG", "RELAY", "USER"
-};
+static const char *level_str(log_level_t level)
+{
+    switch (level) {
+        case LOG_LEVEL_ERROR:   return "E";
+        case LOG_LEVEL_WARN:    return "W";
+        case LOG_LEVEL_INFO:    return "I";
+        case LOG_LEVEL_DEBUG:   return "D";
+        case LOG_LEVEL_VERBOSE: return "V";
+        default:                return "?";
+    }
+}
 
-/* ============================================
- * INITIALIZATION
- * ============================================ */
+static esp_err_t create_new_file(void)
+{
+    int64_t ts = esp_timer_get_time() / 1000000;
+    snprintf(s_current_file, sizeof(s_current_file),
+             FILE_MGR_LOG_PATH "/log_%lld.txt", ts);
+
+    esp_err_t ret = file_manager_write_string(s_current_file, "");
+    if (ret == ESP_OK) {
+        s_current_size = 0;
+        ESP_LOGI(TAG, "Yeni log dosyası: %s", s_current_file);
+    }
+    return ret;
+}
+
+static void cleanup_old(void)
+{
+    DIR *dir = opendir(FILE_MGR_LOG_PATH);
+    if (!dir) return;
+
+    char oldest[280] = {0};
+    int64_t oldest_ts = INT64_MAX;
+    int count = 0;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, "log_", 4) != 0) continue;
+        count++;
+
+        int64_t ts = 0;
+        if (sscanf(entry->d_name, "log_%lld.txt", &ts) == 1 && ts < oldest_ts) {
+            oldest_ts = ts;
+            snprintf(oldest, sizeof(oldest), FILE_MGR_LOG_PATH "/%s", entry->d_name);
+        }
+    }
+    closedir(dir);
+
+    if (count >= LOG_MGR_MAX_FILES && oldest[0]) {
+        file_manager_delete(oldest);
+        ESP_LOGI(TAG, "Eski log silindi: %s", oldest);
+    }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
 esp_err_t log_manager_init(void)
 {
-    ESP_LOGI(TAG, "Initializing log manager...");
-    
-    // Create logs directory
-    file_manager_mkdir(LOG_BASE_PATH);
-    
-    // Check if log file exists
-    if (!file_manager_exists(LOG_EVENT_FILE)) {
-        // Create empty log file
-        file_manager_write(LOG_EVENT_FILE, "", 0);
-        ESP_LOGI(TAG, "Created new log file");
+    if (s_initialized) return ESP_OK;
+
+    // Log dizininin var olduğundan emin ol
+    file_manager_mkdir(FILE_MGR_LOG_PATH);
+
+    esp_err_t ret = create_new_file();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Log dosyası oluşturulamadı");
+        return ret;
     }
-    
-    ESP_LOGI(TAG, "Log manager initialized");
+
+    s_initialized = true;
+    log_manager_write(LOG_LEVEL_INFO, TAG, "Log sistemi baslatildi");
+
+    ESP_LOGI(TAG, "OK - %s", FILE_MGR_LOG_PATH);
     return ESP_OK;
 }
 
-void log_manager_deinit(void)
+esp_err_t log_manager_deinit(void)
 {
-    ESP_LOGI(TAG, "Log manager deinit");
+    if (!s_initialized) return ESP_OK;
+    s_initialized = false;
+    return ESP_OK;
 }
 
-/* ============================================
- * LOGGING
- * ============================================ */
-void log_event(log_level_t level, log_category_t category, 
-               const char *source, const char *format, ...)
+void log_manager_set_level(log_level_t level)
 {
-    // Validate inputs
-    if (level >= sizeof(s_level_names)/sizeof(s_level_names[0])) {
-        level = LOG_LEVEL_INFO;
-    }
-    if (category >= LOG_CAT_MAX) {
-        category = LOG_CAT_SYSTEM;
-    }
-    
-    // Format message
-    char message[LOG_ENTRY_MAX_LEN];
+    s_level = level;
+}
+
+void log_manager_write(log_level_t level, const char *tag, const char *format, ...)
+{
+    if (!s_initialized || level > s_level) return;
+
+    // Mesajı formatla
+    char msg[LOG_MGR_BUFFER_SIZE];
     va_list args;
     va_start(args, format);
-    vsnprintf(message, sizeof(message), format, args);
+    vsnprintf(msg, sizeof(msg), format, args);
     va_end(args);
-    
-    // Get timestamp
-    char timestamp[30];
-    time_manager_get_iso8601(timestamp, sizeof(timestamp));
-    
-    // Format log line
-    char log_line[512];
-    int len;
-    if (source && source[0]) {
-        len = snprintf(log_line, sizeof(log_line), 
-                       "%s|%s|%s|%s|%s\n",
-                       timestamp, 
-                       s_level_names[level], 
-                       s_category_names[category],
-                       source,
-                       message);
-    } else {
-        len = snprintf(log_line, sizeof(log_line), 
-                       "%s|%s|%s||%s\n",
-                       timestamp, 
-                       s_level_names[level], 
-                       s_category_names[category],
-                       message);
+
+    // Timestamp (ms since boot)
+    int64_t ms = esp_timer_get_time() / 1000;
+
+    // Log satırı
+    char line[LOG_MGR_BUFFER_SIZE + 64];
+    int len = snprintf(line, sizeof(line), "[%lld][%s][%s] %s\n",
+                       ms, level_str(level), tag, msg);
+
+    // Dosya boyutu kontrolü - rotasyon
+    if (s_current_size + len > LOG_MGR_MAX_FILE_SIZE) {
+        cleanup_old();
+        create_new_file();
     }
-    
-    // Also output to ESP-IDF log
-    switch (level) {
-        case LOG_LEVEL_DEBUG:
-            ESP_LOGD(TAG, "[%s] %s", s_category_names[category], message);
-            break;
-        case LOG_LEVEL_INFO:
-            ESP_LOGI(TAG, "[%s] %s", s_category_names[category], message);
-            break;
-        case LOG_LEVEL_WARN:
-            ESP_LOGW(TAG, "[%s] %s", s_category_names[category], message);
-            break;
-        case LOG_LEVEL_ERROR:
-        case LOG_LEVEL_CRITICAL:
-            ESP_LOGE(TAG, "[%s] %s", s_category_names[category], message);
-            break;
-        default:
-            break;
+
+    // Dosyaya append
+    if (file_manager_append(s_current_file, line, len) == ESP_OK) {
+        s_current_size += len;
+        s_log_count++;
     }
-    
-    // Check file size before writing
-    int32_t file_size = log_get_file_size();
-    if (file_size > LOG_MAX_FILE_SIZE) {
-        log_rotate();
-    }
-    
-    // Append to log file
-    file_manager_append(LOG_EVENT_FILE, log_line, len);
 }
 
-/* ============================================
- * READING LOGS
- * ============================================ */
-size_t log_get_entries_json(const log_filter_t *filter, char *buffer, size_t buffer_size)
+const char *log_manager_get_current_file(void)
 {
-    if (!buffer || buffer_size == 0) return 0;
-    
-    log_filter_t f = LOG_FILTER_DEFAULT();
-    if (filter) {
-        f = *filter;
+    return s_current_file;
+}
+
+esp_err_t log_manager_list_files(char files[][64], size_t max_files, size_t *count)
+{
+    DIR *dir = opendir(FILE_MGR_LOG_PATH);
+    if (!dir) {
+        if (count) *count = 0;
+        return ESP_FAIL;
     }
-    
-    // Read log file
-    int32_t file_size = log_get_file_size();
-    if (file_size <= 0) {
-        strncpy(buffer, "[]", buffer_size);
-        return 2;
-    }
-    
-    // Allocate read buffer
-    char *file_buffer = malloc(file_size + 1);
-    if (!file_buffer) {
-        strncpy(buffer, "[]", buffer_size);
-        return 2;
-    }
-    
-    size_t bytes_read = 0;
-    if (file_manager_read(LOG_EVENT_FILE, file_buffer, file_size, &bytes_read) != ESP_OK) {
-        free(file_buffer);
-        strncpy(buffer, "[]", buffer_size);
-        return 2;
-    }
-    file_buffer[bytes_read] = '\0';
-    
-    // Create JSON array
-    cJSON *json_array = cJSON_CreateArray();
-    if (!json_array) {
-        free(file_buffer);
-        strncpy(buffer, "[]", buffer_size);
-        return 2;
-    }
-    
-    // Parse lines
-    char *line = strtok(file_buffer, "\n");
-    uint32_t entry_count = 0;
-    uint32_t skipped = 0;
-    
-    while (line && entry_count < f.max_entries) {
-        // Parse log line: timestamp|level|category|source|message
-        char timestamp[30] = "";
-        char level_str[16] = "";
-        char category_str[16] = "";
-        char source[32] = "";
-        char message[256] = "";
-        
-        // Simple parsing (for robustness)
-        char *p = line;
-        char *fields[5] = {NULL};
-        int field_idx = 0;
-        fields[0] = p;
-        
-        while (*p && field_idx < 4) {
-            if (*p == '|') {
-                *p = '\0';
-                fields[++field_idx] = p + 1;
-            }
-            p++;
+
+    size_t idx = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL && idx < max_files) {
+        if (strncmp(entry->d_name, "log_", 4) == 0) {
+            strncpy(files[idx], entry->d_name, 63);
+            files[idx][63] = '\0';
+            idx++;
         }
-        
-        if (field_idx >= 4) {
-            strncpy(timestamp, fields[0] ? fields[0] : "", sizeof(timestamp) - 1);
-            strncpy(level_str, fields[1] ? fields[1] : "", sizeof(level_str) - 1);
-            strncpy(category_str, fields[2] ? fields[2] : "", sizeof(category_str) - 1);
-            strncpy(source, fields[3] ? fields[3] : "", sizeof(source) - 1);
-            strncpy(message, fields[4] ? fields[4] : "", sizeof(message) - 1);
-            
-            // Apply filters
-            bool include = true;
-            
-            // Level filter
-            log_level_t level = LOG_LEVEL_INFO;
-            for (int i = 0; i < sizeof(s_level_names)/sizeof(s_level_names[0]); i++) {
-                if (strcmp(level_str, s_level_names[i]) == 0) {
-                    level = (log_level_t)i;
-                    break;
-                }
-            }
-            if (level < f.min_level) {
-                include = false;
-            }
-            
-            // Category filter
-            if (include && f.category >= 0) {
-                log_category_t cat = LOG_CAT_SYSTEM;
-                for (int i = 0; i < LOG_CAT_MAX; i++) {
-                    if (strcmp(category_str, s_category_names[i]) == 0) {
-                        cat = (log_category_t)i;
-                        break;
-                    }
-                }
-                if (cat != f.category) {
-                    include = false;
-                }
-            }
-            
-            // Offset filter
-            if (include && skipped < f.offset) {
-                skipped++;
-                include = false;
-            }
-            
-            if (include) {
-                cJSON *entry = cJSON_CreateObject();
-                cJSON_AddStringToObject(entry, "time", timestamp);
-                cJSON_AddStringToObject(entry, "level", level_str);
-                cJSON_AddStringToObject(entry, "category", category_str);
-                if (source[0]) {
-                    cJSON_AddStringToObject(entry, "source", source);
-                }
-                cJSON_AddStringToObject(entry, "message", message);
-                cJSON_AddItemToArray(json_array, entry);
-                entry_count++;
-            }
-        }
-        
-        line = strtok(NULL, "\n");
     }
-    
-    free(file_buffer);
-    
-    // Convert to string
-    char *json_str = cJSON_PrintUnformatted(json_array);
-    cJSON_Delete(json_array);
-    
-    if (!json_str) {
-        strncpy(buffer, "[]", buffer_size);
-        return 2;
-    }
-    
-    size_t len = strlen(json_str);
-    if (len >= buffer_size) {
-        len = buffer_size - 1;
-    }
-    memcpy(buffer, json_str, len);
-    buffer[len] = '\0';
-    free(json_str);
-    
-    return len;
-}
+    closedir(dir);
 
-uint32_t log_get_count(void)
-{
-    int32_t file_size = log_get_file_size();
-    if (file_size <= 0) return 0;
-    
-    char *buffer = malloc(file_size + 1);
-    if (!buffer) return 0;
-    
-    size_t bytes_read = 0;
-    if (file_manager_read(LOG_EVENT_FILE, buffer, file_size, &bytes_read) != ESP_OK) {
-        free(buffer);
-        return 0;
-    }
-    
-    uint32_t count = 0;
-    for (size_t i = 0; i < bytes_read; i++) {
-        if (buffer[i] == '\n') count++;
-    }
-    
-    free(buffer);
-    return count;
-}
-
-int32_t log_get_file_size(void)
-{
-    return file_manager_get_size(LOG_EVENT_FILE);
-}
-
-/* ============================================
- * MAINTENANCE
- * ============================================ */
-esp_err_t log_rotate(void)
-{
-    ESP_LOGI(TAG, "Rotating log files...");
-    
-    // Delete old archive
-    file_manager_delete(LOG_ARCHIVE_FILE);
-    
-    // Rename current to archive
-    file_manager_rename(LOG_EVENT_FILE, LOG_ARCHIVE_FILE);
-    
-    // Create new empty log
-    file_manager_write(LOG_EVENT_FILE, "", 0);
-    
-    log_event(LOG_LEVEL_INFO, LOG_CAT_SYSTEM, NULL, "Log rotated");
-    
+    if (count) *count = idx;
     return ESP_OK;
 }
 
-esp_err_t log_clear(void)
+esp_err_t log_manager_read_file(const char *filename, char *buffer, size_t max_size, size_t *read_size)
 {
-    ESP_LOGW(TAG, "Clearing all logs");
-    
-    file_manager_delete(LOG_ARCHIVE_FILE);
-    file_manager_write(LOG_EVENT_FILE, "", 0);
-    
-    log_event(LOG_LEVEL_WARN, LOG_CAT_SYSTEM, NULL, "Logs cleared");
-    
+    char path[128];
+    snprintf(path, sizeof(path), FILE_MGR_LOG_PATH "/%s", filename);
+    return file_manager_read(path, buffer, max_size, read_size);
+}
+
+esp_err_t log_manager_clear_all(void)
+{
+    ESP_LOGW(TAG, "Tüm loglar siliniyor...");
+
+    DIR *dir = opendir(FILE_MGR_LOG_PATH);
+    if (!dir) return ESP_FAIL;
+
+    struct dirent *entry;
+    char path[280];
+    int deleted = 0;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, "log_", 4) == 0) {
+            snprintf(path, sizeof(path), FILE_MGR_LOG_PATH "/%s", entry->d_name);
+            if (file_manager_delete(path) == ESP_OK) {
+                deleted++;
+            }
+        }
+    }
+    closedir(dir);
+
+    ESP_LOGI(TAG, "%d log dosyası silindi", deleted);
+    return create_new_file();
+}
+
+esp_err_t log_manager_rotate(void)
+{
+    cleanup_old();
+    return create_new_file();
+}
+
+esp_err_t log_manager_get_stats(uint32_t *total_size, uint32_t *file_count)
+{
+    DIR *dir = opendir(FILE_MGR_LOG_PATH);
+    if (!dir) {
+        if (total_size) *total_size = 0;
+        if (file_count) *file_count = 0;
+        return ESP_FAIL;
+    }
+
+    uint32_t size = 0, count = 0;
+    struct dirent *entry;
+    struct stat st;
+    char path[280];
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, "log_", 4) == 0) {
+            snprintf(path, sizeof(path), FILE_MGR_LOG_PATH "/%s", entry->d_name);
+            if (stat(path, &st) == 0) {
+                size += st.st_size;
+            }
+            count++;
+        }
+    }
+    closedir(dir);
+
+    if (total_size) *total_size = size;
+    if (file_count) *file_count = count;
     return ESP_OK;
 }
 
-size_t log_export_text(char *buffer, size_t buffer_size)
+esp_err_t log_manager_flush(void)
 {
-    if (!buffer || buffer_size == 0) return 0;
-    
-    int32_t file_size = log_get_file_size();
-    if (file_size <= 0) {
-        buffer[0] = '\0';
-        return 0;
-    }
-    
-    size_t to_read = (size_t)file_size;
-    if (to_read >= buffer_size) {
-        to_read = buffer_size - 1;
-    }
-    
-    size_t bytes_read = 0;
-    if (file_manager_read(LOG_EVENT_FILE, buffer, to_read, &bytes_read) != ESP_OK) {
-        buffer[0] = '\0';
-        return 0;
-    }
-    
-    buffer[bytes_read] = '\0';
-    return bytes_read;
+    // LittleFS'te her write fclose ile tamamlanır, explicit flush gerekmez
+    return ESP_OK;
 }
 
-/* ============================================
- * UTILITIES
- * ============================================ */
-const char* log_level_name(log_level_t level)
+void log_manager_print_info(void)
 {
-    if (level < sizeof(s_level_names)/sizeof(s_level_names[0])) {
-        return s_level_names[level];
-    }
-    return "UNKNOWN";
-}
+    ESP_LOGI(TAG, "┌──────────────────────────────────────");
 
-const char* log_category_name(log_category_t category)
-{
-    if (category < LOG_CAT_MAX) {
-        return s_category_names[category];
+    if (!s_initialized) {
+        ESP_LOGW(TAG, "│ Durum:     BAŞLATILMAMIŞ");
+        ESP_LOGI(TAG, "└──────────────────────────────────────");
+        return;
     }
-    return "UNKNOWN";
+
+    uint32_t total_size = 0, file_count = 0;
+    log_manager_get_stats(&total_size, &file_count);
+
+    ESP_LOGI(TAG, "│ Durum:     AKTİF");
+    ESP_LOGI(TAG, "│ Seviye:    %d", s_level);
+    ESP_LOGI(TAG, "│ Dosya:     %s", s_current_file);
+    ESP_LOGI(TAG, "│ Dosya #:   %lu", file_count);
+    ESP_LOGI(TAG, "│ Toplam:    %lu KB", total_size / 1024);
+    ESP_LOGI(TAG, "│ Log #:     %lu", s_log_count);
+    ESP_LOGI(TAG, "│ Max dosya: %d KB", LOG_MGR_MAX_FILE_SIZE / 1024);
+    ESP_LOGI(TAG, "└──────────────────────────────────────");
 }

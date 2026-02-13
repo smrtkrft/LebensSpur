@@ -1,478 +1,362 @@
 /**
- * @file timer_scheduler.c
- * @brief Dead Man's Switch Timer Implementation
+ * Timer Scheduler - Dead Man's Switch Mantigi
+ *
+ * FreeRTOS software timer ile 1 saniyelik tick.
+ * Config'den ayarlari okur, deadline hesaplar.
+ * Relay kontrolu relay_manager uzerinden (Katman 0).
+ * GPIO/buton isleri button_manager uzerinden (Katman 0).
  */
 
 #include "timer_scheduler.h"
 #include "config_manager.h"
-#include "time_manager.h"
-#include "log_manager.h"
+#include "relay_manager.h"
+#include "mail_sender.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "freertos/timers.h"
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 
-static const char *TAG = "timer_sched";
+static const char *TAG = "TIMER";
 
-/* ============================================
- * PRIVATE DATA
- * ============================================ */
+// FreeRTOS timer
+static TimerHandle_t s_tick_timer = NULL;
 
+// Durum
 static timer_state_t s_state = TIMER_STATE_DISABLED;
 static timer_config_t s_config;
 static timer_runtime_t s_runtime;
-static esp_timer_handle_t s_check_timer = NULL;
-static timer_trigger_cb_t s_trigger_cb = NULL;
+
+// Istatistikler
+static uint32_t s_warning_count = 0;
+
+// Callback'ler
 static timer_warning_cb_t s_warning_cb = NULL;
+static timer_trigger_cb_t s_trigger_cb = NULL;
+static timer_reset_cb_t s_reset_cb = NULL;
 
-#define CHECK_INTERVAL_MS   (60 * 1000)  // Check every minute
+// ============================================================================
+// Zaman yardimcilari
+// ============================================================================
 
-/* ============================================
- * PRIVATE FUNCTIONS
- * ============================================ */
-
-static int64_t get_now_ms(void)
+static int64_t get_current_ms(void)
 {
-    return time_manager_get_timestamp_ms();
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-static bool is_in_time_window(void)
+static void get_current_hm(int *hour, int *minute)
 {
-    // Empty check times = always active
-    if (s_config.check_start[0] == '\0' || s_config.check_end[0] == '\0') {
-        return true;
+    time_t now;
+    struct tm ti;
+    time(&now);
+    localtime_r(&now, &ti);
+    *hour = ti.tm_hour;
+    *minute = ti.tm_min;
+}
+
+static bool parse_time(const char *str, int *h, int *m)
+{
+    if (!str || strlen(str) < 5) return false;
+    return sscanf(str, "%d:%d", h, m) == 2;
+}
+
+bool timer_is_in_active_hours(void)
+{
+    int sh = 8, sm = 0, eh = 22, em = 0;
+    parse_time(s_config.check_start, &sh, &sm);
+    parse_time(s_config.check_end, &eh, &em);
+
+    int now_h, now_m;
+    get_current_hm(&now_h, &now_m);
+
+    int now_t = now_h * 60 + now_m;
+    int start_t = sh * 60 + sm;
+    int end_t = eh * 60 + em;
+
+    // Gece yarisini gecen durum (ornek: 22:00 - 06:00)
+    if (end_t < start_t) {
+        return (now_t >= start_t || now_t < end_t);
     }
-    
-    return time_manager_is_in_window(s_config.check_start, s_config.check_end);
+    return (now_t >= start_t && now_t < end_t);
 }
 
-static void calculate_next_deadline(void)
-{
-    int64_t now = get_now_ms();
-    s_runtime.last_reset = now;
-    s_runtime.next_deadline = now + ((int64_t)s_config.interval_minutes * 60 * 1000);
-    s_runtime.warnings_sent = 0;
-    config_save_runtime(&s_runtime);
-    
-    ESP_LOGI(TAG, "Next deadline in %lu minutes", (unsigned long)s_config.interval_minutes);
-}
+// ============================================================================
+// Relay aksiyon (relay_manager kullanir)
+// ============================================================================
 
-static void check_vacation_mode(void)
+static void execute_relay_action(const char *action)
 {
-    if (!s_config.vacation_enabled) {
-        if (s_state == TIMER_STATE_VACATION) {
-            s_state = TIMER_STATE_RUNNING;
-            LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode ended");
-        }
+    if (!action || action[0] == '\0' || strcmp(action, "none") == 0) {
         return;
     }
-    
-    int64_t now = get_now_ms();
-    int64_t vacation_end = s_config.vacation_start + 
-                          ((int64_t)s_config.vacation_days * 24 * 60 * 60 * 1000);
-    
-    if (now < vacation_end) {
-        if (s_state != TIMER_STATE_VACATION) {
-            s_state = TIMER_STATE_VACATION;
-            LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode active (%lu days)", (unsigned long)s_config.vacation_days);
-        }
-    } else {
-        // Vacation ended
-        s_config.vacation_enabled = false;
-        config_save_timer(&s_config);
-        s_state = TIMER_STATE_RUNNING;
-        calculate_next_deadline();
-        LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode expired, timer resumed");
+
+    if (strcmp(action, "on") == 0) {
+        relay_on();
+    } else if (strcmp(action, "off") == 0) {
+        relay_off();
+    } else if (strcmp(action, "pulse") == 0) {
+        relay_trigger();  // Config'deki pulse ayarlarina gore calisir
     }
 }
 
-static void check_warnings(int64_t time_remaining_ms)
-{
-    if (s_config.warning_minutes <= 0 || s_config.alarm_count <= 0) {
-        return;
-    }
-    
-    int64_t warning_threshold_ms = (int64_t)s_config.warning_minutes * 60 * 1000;
-    
-    if (time_remaining_ms <= warning_threshold_ms && s_runtime.warnings_sent < s_config.alarm_count) {
-        // Calculate which warning number
-        int warning_num = s_runtime.warnings_sent + 1;
-        int mins_remaining = (int)(time_remaining_ms / 60000);
-        
-        s_runtime.warnings_sent++;
-        config_save_runtime(&s_runtime);
-        
-        s_state = TIMER_STATE_WARNING;
-        LOG_TIMER(LOG_LEVEL_WARN, "Warning #%d: %d minutes remaining", warning_num, mins_remaining);
-        
-        if (s_warning_cb) {
-            s_warning_cb(warning_num, mins_remaining);
-        }
-    }
-}
+// ============================================================================
+// Durum guncelleme
+// ============================================================================
 
-static void do_trigger(void)
+static void update_state(void)
 {
-    s_state = TIMER_STATE_TRIGGERED;
-    s_runtime.triggered = true;
-    s_runtime.trigger_count++;
-    config_save_runtime(&s_runtime);
-    
-    LOG_TIMER(LOG_LEVEL_CRITICAL, "TIMER TRIGGERED!");
-    
-    if (s_trigger_cb) {
-        s_trigger_cb();
-    }
-}
-
-static void timer_check_callback(void *arg)
-{
-    // Skip if disabled or already triggered
-    if (s_state == TIMER_STATE_DISABLED || s_runtime.triggered) {
-        return;
-    }
-    
-    // Reload config (in case changed)
-    config_load_timer(&s_config);
-    
     if (!s_config.enabled) {
         s_state = TIMER_STATE_DISABLED;
         return;
     }
-    
-    // Check vacation mode
-    check_vacation_mode();
-    if (s_state == TIMER_STATE_VACATION) {
-        return;
-    }
-    
-    // Check time window
-    if (!is_in_time_window()) {
-        if (s_state != TIMER_STATE_PAUSED) {
-            s_state = TIMER_STATE_PAUSED;
-            ESP_LOGD(TAG, "Timer paused (outside time window)");
+
+    int64_t now = get_current_ms();
+    int64_t deadline = s_runtime.next_deadline;
+    int64_t warning_ms = (int64_t)s_config.warning_minutes * 60 * 1000;
+    int64_t warning_time = deadline - warning_ms;
+
+    if (s_runtime.triggered) {
+        s_state = TIMER_STATE_TRIGGERED;
+
+    } else if (now >= deadline) {
+        // Deadline gecti - tetikle
+        s_state = TIMER_STATE_TRIGGERED;
+        s_runtime.triggered = true;
+        s_runtime.trigger_count++;
+
+        ESP_LOGW(TAG, "ALARM! Deadline gecti.");
+
+        // Relay aksiyonu
+        execute_relay_action(s_config.relay_action);
+
+        // Alarm maili
+        mail_send_to_all_groups(MAIL_TYPE_ALARM);
+
+        if (s_trigger_cb) {
+            s_trigger_cb();
         }
-        return;
-    } else if (s_state == TIMER_STATE_PAUSED) {
-        s_state = TIMER_STATE_RUNNING;
-        ESP_LOGD(TAG, "Timer resumed (in time window)");
-    }
-    
-    // Calculate remaining time
-    int64_t now = get_now_ms();
-    int64_t remaining = s_runtime.next_deadline - now;
-    
-    if (remaining <= 0) {
-        // Timer expired - trigger!
-        do_trigger();
-        return;
-    }
-    
-    // Check for warnings
-    check_warnings(remaining);
-    
-    // Still running
-    if (s_state != TIMER_STATE_WARNING) {
-        s_state = TIMER_STATE_RUNNING;
+
+        // Runtime kaydet
+        config_save_runtime(&s_runtime);
+
+    } else if (now >= warning_time) {
+        // Uyari suresine girildi
+        if (s_state != TIMER_STATE_WARNING) {
+            s_state = TIMER_STATE_WARNING;
+            s_warning_count++;
+
+            uint32_t remaining_min = (uint32_t)((deadline - now) / (60 * 1000));
+            ESP_LOGW(TAG, "Uyari! %lu dakika kaldi.", remaining_min);
+
+            // Uyari maili
+            mail_send_to_all_groups(MAIL_TYPE_WARNING);
+
+            if (s_warning_cb) {
+                s_warning_cb(remaining_min);
+            }
+        }
+    } else {
+        s_state = TIMER_STATE_ACTIVE;
     }
 }
 
-/* ============================================
- * INITIALIZATION
- * ============================================ */
+// ============================================================================
+// Timer tick (1 saniye)
+// ============================================================================
+
+static void tick_callback(TimerHandle_t xTimer)
+{
+    (void)xTimer;
+    timer_tick();
+}
+
+void timer_tick(void)
+{
+    if (s_state == TIMER_STATE_DISABLED || s_state == TIMER_STATE_PAUSED) {
+        return;
+    }
+
+    // Sadece aktif saatlerde deadline kontrol et
+    if (timer_is_in_active_hours()) {
+        update_state();
+    }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
 
 esp_err_t timer_scheduler_init(void)
 {
-    ESP_LOGI(TAG, "Initializing timer scheduler...");
-    
-    // Load config and runtime
-    config_load_timer(&s_config);
-    config_load_runtime(&s_runtime);
-    
-    // Check if previously triggered
-    if (s_runtime.triggered) {
-        s_state = TIMER_STATE_TRIGGERED;
-        ESP_LOGW(TAG, "Timer was in triggered state");
-    } else if (s_config.enabled) {
-        s_state = TIMER_STATE_RUNNING;
-        
-        // Validate deadline
-        int64_t now = get_now_ms();
-        if (s_runtime.next_deadline <= 0 || s_runtime.next_deadline < now - 3600000) {
-            // No deadline or very old, recalculate
-            calculate_next_deadline();
+    // Config yukle
+    if (config_load_timer(&s_config) != ESP_OK) {
+        ESP_LOGW(TAG, "Timer config yuklenemedi, varsayilanlar");
+        timer_config_t def = TIMER_CONFIG_DEFAULT();
+        memcpy(&s_config, &def, sizeof(s_config));
+    }
+
+    // Runtime yukle
+    if (config_load_runtime(&s_runtime) != ESP_OK) {
+        ESP_LOGW(TAG, "Runtime yuklenemedi, sifirlaniyor");
+        timer_runtime_t def = TIMER_RUNTIME_DEFAULT();
+        memcpy(&s_runtime, &def, sizeof(s_runtime));
+
+        if (s_config.enabled) {
+            s_runtime.next_deadline = get_current_ms() +
+                ((int64_t)s_config.interval_hours * 3600 * 1000);
         }
-    } else {
-        s_state = TIMER_STATE_DISABLED;
     }
-    
-    // Create periodic timer
-    esp_timer_create_args_t timer_args = {
-        .callback = timer_check_callback,
-        .name = "timer_check"
-    };
-    
-    esp_err_t ret = esp_timer_create(&timer_args, &s_check_timer);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create timer: %s", esp_err_to_name(ret));
-        return ret;
+
+    // Ilk durum
+    s_state = s_config.enabled ? TIMER_STATE_ACTIVE : TIMER_STATE_DISABLED;
+
+    // FreeRTOS timer (1 saniye)
+    s_tick_timer = xTimerCreate("tmr_tick", pdMS_TO_TICKS(1000), pdTRUE,
+                                NULL, tick_callback);
+    if (!s_tick_timer) {
+        ESP_LOGE(TAG, "Timer olusturulamadi");
+        return ESP_FAIL;
     }
-    
-    ret = esp_timer_start_periodic(s_check_timer, CHECK_INTERVAL_MS * 1000);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start timer: %s", esp_err_to_name(ret));
-        return ret;
+
+    if (xTimerStart(s_tick_timer, 0) != pdPASS) {
+        ESP_LOGE(TAG, "Timer baslatilamadi");
+        return ESP_FAIL;
     }
-    
-    ESP_LOGI(TAG, "Timer scheduler initialized, state=%s", 
-             timer_scheduler_state_name(s_state));
-    
+
+    ESP_LOGI(TAG, "OK - %s, %lu saat, uyari %lu dk, %s-%s",
+             s_config.enabled ? "AKTIF" : "PASIF",
+             s_config.interval_hours,
+             s_config.warning_minutes,
+             s_config.check_start,
+             s_config.check_end);
+
     return ESP_OK;
 }
 
-void timer_scheduler_deinit(void)
+esp_err_t timer_scheduler_deinit(void)
 {
-    if (s_check_timer) {
-        esp_timer_stop(s_check_timer);
-        esp_timer_delete(s_check_timer);
-        s_check_timer = NULL;
+    if (s_tick_timer) {
+        xTimerStop(s_tick_timer, 0);
+        xTimerDelete(s_tick_timer, 0);
+        s_tick_timer = NULL;
     }
-}
-
-void timer_scheduler_set_trigger_cb(timer_trigger_cb_t cb)
-{
-    s_trigger_cb = cb;
-}
-
-void timer_scheduler_set_warning_cb(timer_warning_cb_t cb)
-{
-    s_warning_cb = cb;
-}
-
-/* ============================================
- * CONTROL
- * ============================================ */
-
-esp_err_t timer_scheduler_enable(void)
-{
-    config_load_timer(&s_config);
-    s_config.enabled = true;
-    config_save_timer(&s_config);
-    
-    s_runtime.triggered = false;
-    calculate_next_deadline();
-    
-    s_state = TIMER_STATE_RUNNING;
-    LOG_TIMER(LOG_LEVEL_INFO, "Timer enabled");
-    
-    return ESP_OK;
-}
-
-esp_err_t timer_scheduler_disable(void)
-{
-    config_load_timer(&s_config);
-    s_config.enabled = false;
-    config_save_timer(&s_config);
-    
     s_state = TIMER_STATE_DISABLED;
-    LOG_TIMER(LOG_LEVEL_INFO, "Timer disabled");
-    
+    ESP_LOGI(TAG, "Timer durduruldu");
     return ESP_OK;
 }
 
-esp_err_t timer_scheduler_reset(void)
+esp_err_t timer_reset(void)
 {
-    if (s_state == TIMER_STATE_DISABLED) {
-        ESP_LOGW(TAG, "Cannot reset - timer disabled");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    if (s_runtime.triggered) {
-        ESP_LOGW(TAG, "Timer already triggered, use acknowledge first");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    s_runtime.reset_count++;
-    calculate_next_deadline();
-    s_state = TIMER_STATE_RUNNING;
-    
-    LOG_TIMER(LOG_LEVEL_INFO, "Timer reset (count: %lu)", s_runtime.reset_count);
-    
-    return ESP_OK;
-}
+    ESP_LOGI(TAG, "Timer sifirlaniyor...");
 
-esp_err_t timer_scheduler_acknowledge(void)
-{
-    if (!s_runtime.triggered) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
+    int64_t now = get_current_ms();
+    s_runtime.next_deadline = now + ((int64_t)s_config.interval_hours * 3600 * 1000);
+    s_runtime.last_reset = now;
     s_runtime.triggered = false;
-    calculate_next_deadline();
-    s_state = TIMER_STATE_RUNNING;
-    
-    LOG_TIMER(LOG_LEVEL_INFO, "Trigger acknowledged, timer restarted");
-    
-    return ESP_OK;
-}
+    s_runtime.reset_count++;
 
-/* ============================================
- * VACATION MODE
- * ============================================ */
-
-esp_err_t timer_scheduler_vacation_start(int days)
-{
-    if (days <= 0 || days > 365) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    config_load_timer(&s_config);
-    s_config.vacation_enabled = true;
-    s_config.vacation_days = days;
-    s_config.vacation_start = get_now_ms();
-    config_save_timer(&s_config);
-    
-    s_state = TIMER_STATE_VACATION;
-    LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode started for %d days", days);
-    
-    return ESP_OK;
-}
-
-esp_err_t timer_scheduler_vacation_end(void)
-{
-    config_load_timer(&s_config);
-    s_config.vacation_enabled = false;
-    config_save_timer(&s_config);
-    
     if (s_config.enabled) {
-        s_state = TIMER_STATE_RUNNING;
-        calculate_next_deadline();
-    } else {
-        s_state = TIMER_STATE_DISABLED;
+        s_state = TIMER_STATE_ACTIVE;
     }
-    
-    LOG_TIMER(LOG_LEVEL_INFO, "Vacation mode ended");
-    
+
+    // Releyi kapat (tetiklenmisse)
+    relay_off();
+
+    // Runtime kaydet
+    config_save_runtime(&s_runtime);
+
+    if (s_reset_cb) {
+        s_reset_cb();
+    }
+
+    ESP_LOGI(TAG, "Sifirlandi. Sonraki: +%lu saat", s_config.interval_hours);
     return ESP_OK;
 }
 
-bool timer_scheduler_is_vacation(void)
+esp_err_t timer_set_enabled(bool enabled)
 {
-    return s_state == TIMER_STATE_VACATION;
-}
+    s_config.enabled = enabled;
 
-/* ============================================
- * CONFIG RELOAD (called after web API save)
- * ============================================ */
-
-void timer_scheduler_reload_config(void)
-{
-    timer_config_t old_config = s_config;
-    config_load_timer(&s_config);
-    
-    // If timer was disabled and now enabled
-    if (!old_config.enabled && s_config.enabled) {
-        s_state = TIMER_STATE_RUNNING;
-        s_runtime.triggered = false;
-        calculate_next_deadline();
-        LOG_TIMER(LOG_LEVEL_INFO, "Timer enabled via config reload");
-        return;
-    }
-    
-    // If timer was enabled and now disabled
-    if (old_config.enabled && !s_config.enabled) {
-        s_state = TIMER_STATE_DISABLED;
-        LOG_TIMER(LOG_LEVEL_INFO, "Timer disabled via config reload");
-        return;
-    }
-    
-    // If interval changed while timer is running
-    if (s_config.enabled && old_config.interval_minutes != s_config.interval_minutes) {
-        if (s_state != TIMER_STATE_TRIGGERED) {
-            calculate_next_deadline();
-            if (s_state == TIMER_STATE_DISABLED) {
-                s_state = TIMER_STATE_RUNNING;
-            }
-            LOG_TIMER(LOG_LEVEL_INFO, "Timer interval changed to %lu min, deadline recalculated",
-                       (unsigned long)s_config.interval_minutes);
-        }
-    }
-}
-
-/* ============================================
- * STATUS
- * ============================================ */
-
-void timer_scheduler_get_status(timer_status_t *status)
-{
-    if (!status) return;
-    
-    status->state = s_state;
-    status->next_deadline = s_runtime.next_deadline;
-    status->warnings_sent = s_runtime.warnings_sent;
-    status->reset_count = s_runtime.reset_count;
-    status->trigger_count = s_runtime.trigger_count;
-    status->in_time_window = is_in_time_window();
-    
-    int64_t now = get_now_ms();
-    status->time_remaining_ms = s_runtime.next_deadline - now;
-    if (status->time_remaining_ms < 0) {
-        status->time_remaining_ms = 0;
-    }
-}
-
-timer_state_t timer_scheduler_get_state(void)
-{
-    return s_state;
-}
-
-bool timer_scheduler_is_triggered(void)
-{
-    return s_runtime.triggered;
-}
-
-int64_t timer_scheduler_time_remaining_ms(void)
-{
-    int64_t now = get_now_ms();
-    int64_t remaining = s_runtime.next_deadline - now;
-    return (remaining > 0) ? remaining : 0;
-}
-
-void timer_scheduler_time_remaining_str(char *buffer, size_t size)
-{
-    if (!buffer || size == 0) return;
-    
-    int64_t remaining_ms = timer_scheduler_time_remaining_ms();
-    int64_t remaining_sec = remaining_ms / 1000;
-    
-    int hours = remaining_sec / 3600;
-    int mins = (remaining_sec % 3600) / 60;
-    
-    if (s_state == TIMER_STATE_DISABLED) {
-        snprintf(buffer, size, "Disabled");
-    } else if (s_state == TIMER_STATE_TRIGGERED) {
-        snprintf(buffer, size, "TRIGGERED");
-    } else if (s_state == TIMER_STATE_VACATION) {
-        snprintf(buffer, size, "Vacation");
-    } else if (hours > 0) {
-        snprintf(buffer, size, "%dh %dm", hours, mins);
-    } else if (mins > 0) {
-        snprintf(buffer, size, "%dm", mins);
+    if (enabled) {
+        timer_reset();
     } else {
-        snprintf(buffer, size, "< 1m");
+        s_state = TIMER_STATE_DISABLED;
+        relay_off();
     }
+
+    return config_save_timer(&s_config);
 }
 
-const char* timer_scheduler_state_name(timer_state_t state)
+esp_err_t timer_pause(void)
 {
-    switch (state) {
-        case TIMER_STATE_DISABLED:  return "DISABLED";
-        case TIMER_STATE_RUNNING:   return "RUNNING";
-        case TIMER_STATE_WARNING:   return "WARNING";
-        case TIMER_STATE_TRIGGERED: return "TRIGGERED";
-        case TIMER_STATE_PAUSED:    return "PAUSED";
-        case TIMER_STATE_VACATION:  return "VACATION";
-        default:                    return "UNKNOWN";
+    if (s_state == TIMER_STATE_DISABLED) {
+        return ESP_ERR_INVALID_STATE;
     }
+    s_state = TIMER_STATE_PAUSED;
+    ESP_LOGI(TAG, "Timer duraklatildi");
+    return ESP_OK;
+}
+
+esp_err_t timer_resume(void)
+{
+    if (s_state != TIMER_STATE_PAUSED) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_state = TIMER_STATE_ACTIVE;
+    ESP_LOGI(TAG, "Timer devam ediyor");
+    return ESP_OK;
+}
+
+esp_err_t timer_get_status(timer_status_t *status)
+{
+    if (!status) return ESP_ERR_INVALID_ARG;
+
+    int64_t now = get_current_ms();
+    int64_t deadline = s_runtime.next_deadline;
+
+    status->state = s_state;
+    status->remaining_seconds = (deadline > now) ? (uint32_t)((deadline - now) / 1000) : 0;
+    status->warning_seconds = s_config.warning_minutes * 60;
+    status->last_reset_time = s_runtime.last_reset;
+    status->next_deadline = deadline;
+    status->reset_count = s_runtime.reset_count;
+    status->warning_count = s_warning_count;
+    status->trigger_count = s_runtime.trigger_count;
+    status->in_active_hours = timer_is_in_active_hours();
+
+    return ESP_OK;
+}
+
+// ============================================================================
+// Callback'ler
+// ============================================================================
+
+void timer_set_warning_callback(timer_warning_cb_t cb) { s_warning_cb = cb; }
+void timer_set_trigger_callback(timer_trigger_cb_t cb) { s_trigger_cb = cb; }
+void timer_set_reset_callback(timer_reset_cb_t cb)     { s_reset_cb = cb; }
+
+// ============================================================================
+// Debug
+// ============================================================================
+
+void timer_print_stats(void)
+{
+    timer_status_t st;
+    timer_get_status(&st);
+
+    const char *names[] = {"PASIF", "AKTIF", "UYARI", "TETIKLENDI", "DURAKLATILDI"};
+
+    ESP_LOGI(TAG, "┌──────────────────────────────────────");
+    ESP_LOGI(TAG, "│ Durum:     %s", names[st.state]);
+    ESP_LOGI(TAG, "│ Kalan:     %lu sn", st.remaining_seconds);
+    ESP_LOGI(TAG, "│ Aktif:     %s", st.in_active_hours ? "EVET" : "HAYIR");
+    ESP_LOGI(TAG, "│ Reset:     %lu kez", st.reset_count);
+    ESP_LOGI(TAG, "│ Uyari:     %lu kez", st.warning_count);
+    ESP_LOGI(TAG, "│ Tetik:     %lu kez", st.trigger_count);
+    ESP_LOGI(TAG, "│ Relay:     %s", relay_get_energy_output() ? "ACIK" : "KAPALI");
+    ESP_LOGI(TAG, "└──────────────────────────────────────");
 }

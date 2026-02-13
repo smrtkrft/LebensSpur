@@ -1,67 +1,54 @@
 /**
- * @file device_id.h
- * @brief Device ID management for LebensSpur ESP32-C6
- * 
- * Generates unique device ID from ESP32-C6 chip ID in format: LS-XXXXXXXXXX
+ * Device ID - ESP32-C6 Benzersiz Cihaz Kimliği
+ *
+ * MAC adresinden base36 formatında benzersiz ID üretir.
+ * Format: LS-XXXXXXXXXX (3 prefix + 10 karakter base36)
+ *
+ * Bağımlılık: Yok (sadece ESP-IDF)
+ * Katman: 0 (Donanım)
  */
 
 #ifndef DEVICE_ID_H
 #define DEVICE_ID_H
 
+#include "esp_err.h"
 #include <stdint.h>
-#include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Device ID prefix */
-#define DEVICE_ID_PREFIX "LS-"
-
-/** Maximum device ID length (LS- + 12 chars + null) */
-#define DEVICE_ID_MAX_LEN 16
+#define DEVICE_ID_LENGTH    14      // "LS-" + 10 chars + null
+#define DEVICE_ID_PREFIX    "LS-"
 
 /**
- * @brief Initialize device ID module
- * 
- * Reads ESP32-C6 chip ID and generates device ID.
- * Must be called once at startup.
- * 
- * @return ESP_OK on success, error code otherwise
+ * Device ID sistemini başlat - MAC adresini okur ve ID üretir
  */
-int device_id_init(void);
+esp_err_t device_id_init(void);
 
 /**
- * @brief Get the device ID string
- * 
- * Returns pointer to device ID in format "LS-XXXXXXXXXX"
- * where XXXXXXXXXX is derived from chip's unique ID.
- * 
- * @return Pointer to null-terminated device ID string
+ * Cihaz ID stringini al (statik buffer, kopyalamaya gerek yok)
+ * Init çağrılmadıysa "LS-UNKNOWN" döner
  */
-const char* device_id_get(void);
+const char *device_id_get(void);
 
 /**
- * @brief Get raw chip ID (MAC address based)
- * 
- * @param[out] chip_id Buffer to store 6-byte chip ID
- * @return ESP_OK on success
+ * Cihaz ID'sini verilen buffer'a kopyala
+ * @param buffer Hedef (en az DEVICE_ID_LENGTH byte)
+ * @param len    Buffer boyutu
  */
-int device_id_get_chip_id(uint8_t chip_id[6]);
+esp_err_t device_id_get_str(char *buffer, size_t len);
 
 /**
- * @brief Get device ID as uppercase hex string (without prefix)
- * 
- * @return Pointer to hex string (12 characters)
+ * Ham MAC adresini al (6 byte)
  */
-const char* device_id_get_hex(void);
+esp_err_t device_id_get_mac(uint8_t *mac);
 
 /**
- * @brief Check if device ID is valid/initialized
- * 
- * @return true if initialized, false otherwise
+ * Debug bilgilerini konsola yazdır
  */
-bool device_id_is_valid(void);
+void device_id_print_info(void);
 
 #ifdef __cplusplus
 }

@@ -1,11 +1,11 @@
 /**
- * @file ext_flash.h
- * @brief External Flash Manager - W25Q256 (32MB)
- * 
- * Manages external SPI flash for storing:
- * - Settings & backups (/cfg)     - 1MB
- * - Web GUI files & logs (/gui)   - 4MB
- * - User data & attachments (/data) - 27MB
+ * External Flash Manager - W25Q256 (32MB)
+ *
+ * SPI2 üzerinden harici W25Q256 flash kontrolü.
+ * Pin bağlantısı: CS=GPIO21, MISO=GPIO0, MOSI=GPIO22, SCLK=GPIO16
+ *
+ * Bağımlılık: Yok (sadece ESP-IDF SPI driver)
+ * Katman: 0 (Donanım)
  */
 
 #ifndef EXT_FLASH_H
@@ -20,81 +20,69 @@
 extern "C" {
 #endif
 
-/** External Flash SPI Pin Definitions (XIAO ESP32-C6 PCB) */
-#define EXT_FLASH_CS_PIN    21   // D3 = GPIO21
-#define EXT_FLASH_MISO_PIN  0    // D0 = GPIO0
-#define EXT_FLASH_MOSI_PIN  22   // D4 = GPIO22
-#define EXT_FLASH_SCLK_PIN  16   // D6 = GPIO16
+// Pin tanımları (PCB bağlantısı - Seeed XIAO ESP32-C6)
+#define EXT_FLASH_CS_PIN    21  // D3
+#define EXT_FLASH_MISO_PIN  0   // D0
+#define EXT_FLASH_MOSI_PIN  22  // D4
+#define EXT_FLASH_SCLK_PIN  16  // D6
 
-/** Flash Properties */
-#define EXT_FLASH_SIZE_MB   32
-#define EXT_FLASH_SIZE_BYTES (EXT_FLASH_SIZE_MB * 1024 * 1024)
+// Flash özellikleri
+#define EXT_FLASH_SIZE_MB       32
+#define EXT_FLASH_SIZE_BYTES    (EXT_FLASH_SIZE_MB * 1024 * 1024)
+#define EXT_FLASH_SECTOR_SIZE   4096
 
 /**
- * @brief Initialize external flash
- * @return ESP_OK on success
+ * Harici flash'ı başlat (SPI bus + flash device init)
  */
 esp_err_t ext_flash_init(void);
 
 /**
- * @brief Get flash handle for direct operations
- * @return Flash handle or NULL if not initialized
+ * Harici flash'ı kapat ve SPI bus'ı serbest bırak
  */
-esp_flash_t* ext_flash_get_handle(void);
+esp_err_t ext_flash_deinit(void);
 
 /**
- * @brief Get flash size in bytes
- * @return Flash size or 0 if not initialized
+ * esp_flash handle'ı al (filesystem mount için gerekli)
+ */
+esp_flash_t *ext_flash_get_handle(void);
+
+/**
+ * Algılanan flash boyutu (bytes)
  */
 uint32_t ext_flash_get_size(void);
 
 /**
- * @brief Get flash JEDEC ID
- * @return Flash ID or 0 if not initialized
+ * Flash JEDEC ID'si (üretici + tip + kapasite)
  */
 uint32_t ext_flash_get_id(void);
 
 /**
- * @brief Erase entire flash chip
- * @warning This takes a long time (~1-2 minutes for 32MB)
- * @return ESP_OK on success
- */
-esp_err_t ext_flash_erase_chip(void);
-
-/**
- * @brief Erase a 4KB sector
- * @param address Sector-aligned address
- * @return ESP_OK on success
- */
-esp_err_t ext_flash_erase_sector(uint32_t address);
-
-/**
- * @brief Read data from flash
- * @param address Source address
- * @param buffer Destination buffer
- * @param size Number of bytes to read
- * @return ESP_OK on success
- */
-esp_err_t ext_flash_read(uint32_t address, void *buffer, uint32_t size);
-
-/**
- * @brief Write data to flash
- * @note Address must be erased before writing
- * @param address Destination address
- * @param buffer Source buffer
- * @param size Number of bytes to write
- * @return ESP_OK on success
- */
-esp_err_t ext_flash_write(uint32_t address, const void *buffer, uint32_t size);
-
-/**
- * @brief Check if flash is initialized and ready
- * @return true if ready
+ * Flash hazır mı?
  */
 bool ext_flash_is_ready(void);
 
 /**
- * @brief Print flash information to log
+ * Tüm flash'ı sil (dikkat: uzun sürer!)
+ */
+esp_err_t ext_flash_erase_chip(void);
+
+/**
+ * Belirli bir bölgeyi sil (4KB sektör hizalı)
+ */
+esp_err_t ext_flash_erase_region(uint32_t address, uint32_t size);
+
+/**
+ * Flash'tan oku
+ */
+esp_err_t ext_flash_read(uint32_t address, void *buffer, uint32_t size);
+
+/**
+ * Flash'a yaz (önceden silinmiş olmalı)
+ */
+esp_err_t ext_flash_write(uint32_t address, const void *buffer, uint32_t size);
+
+/**
+ * Debug bilgilerini yazdır
  */
 void ext_flash_print_info(void);
 

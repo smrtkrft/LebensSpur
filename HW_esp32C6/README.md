@@ -73,10 +73,11 @@ HW_esp32C6/
 | `/api/setup/*` | GET/POST | First-time setup |
 
 ### Storage
-- **External Flash**: 32MB LittleFS (3 partitions)
-  - `/cfg` (1MB) - Settings, export/import backups
-  - `/gui` (4MB) - Web UI files, logs
-  - `/data` (27MB) - User data, mail content, attachments
+- **External Flash**: 32MB LittleFS
+  - `/ext/web` - Web files (downloaded from GUI repo)
+  - `/ext/logs` - Log files (max 1MB)
+  - `/ext/config` - Configuration
+  - `/ext/data` - User data
 
 ### OTA Update
 - Downloads firmware from GitHub releases

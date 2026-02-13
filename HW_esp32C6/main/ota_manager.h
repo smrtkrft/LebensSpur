@@ -1,133 +1,99 @@
 /**
- * @file ota_manager.h
- * @brief OTA (Over-The-Air) Update Manager
+ * OTA Manager - Over-The-Air Firmware Guncelleme
+ *
+ * URL (HTTPS) veya harici flash dosyasindan OTA destegi.
+ * esp_https_ota ile URL OTA, esp_ota_ops ile dosya OTA.
+ * Rollback ve firmware onaylama mekanizmasi.
+ *
+ * Bagimlilik: file_manager (Katman 1), wifi_manager (Katman 3)
+ * Katman: 3 (Iletisim)
  */
 
 #ifndef OTA_MANAGER_H
 #define OTA_MANAGER_H
 
+#include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================
- * OTA STATUS
- * ============================================ */
+// OTA durumlari
 typedef enum {
-    OTA_STATE_IDLE = 0,
+    OTA_STATE_IDLE,
     OTA_STATE_DOWNLOADING,
-    OTA_STATE_WRITING,
     OTA_STATE_VERIFYING,
-    OTA_STATE_SUCCESS,
-    OTA_STATE_FAILED
+    OTA_STATE_UPDATING,
+    OTA_STATE_COMPLETE,
+    OTA_STATE_ERROR
 } ota_state_t;
 
-typedef struct {
-    ota_state_t state;
-    int progress_percent;       // 0-100
-    size_t bytes_received;
-    size_t total_bytes;
-    char error_message[64];
-} ota_status_t;
-
-/* ============================================
- * CALLBACKS
- * ============================================ */
+// OTA ilerleme callback
+typedef void (*ota_progress_cb_t)(uint32_t current, uint32_t total);
 
 /**
- * @brief Progress callback
- * @param progress Percent complete (0-100)
- */
-typedef void (*ota_progress_cb_t)(int progress);
-
-/* ============================================
- * INITIALIZATION
- * ============================================ */
-
-/**
- * @brief Initialize OTA manager
+ * OTA sistemini baslat (partition kontrolu, version okuma)
  */
 esp_err_t ota_manager_init(void);
 
 /**
- * @brief Set progress callback
+ * URL'den OTA guncelleme baslat (blocking)
+ * @param url Firmware URL'si (https://...)
  */
-void ota_manager_set_progress_cb(ota_progress_cb_t cb);
-
-/* ============================================
- * OTA OPERATIONS
- * ============================================ */
+esp_err_t ota_manager_start_from_url(const char *url);
 
 /**
- * @brief Start OTA from URL
- * @param url Firmware URL (.bin file)
- * @return ESP_OK if started
+ * Harici flash'tan OTA guncelleme (blocking)
+ * @param filepath Firmware dosya yolu (orn: /ext/firmware.bin)
  */
-esp_err_t ota_start_from_url(const char *url);
+esp_err_t ota_manager_start_from_file(const char *filepath);
 
 /**
- * @brief Start OTA from uploaded data
- * @param data Firmware data
- * @param size Data size
- * @return ESP_OK on success
+ * OTA durumunu al
  */
-esp_err_t ota_start_from_data(const uint8_t *data, size_t size);
+ota_state_t ota_manager_get_state(void);
 
 /**
- * @brief Abort ongoing OTA
+ * OTA ilerleme yuzdesini al (0-100)
  */
-void ota_abort(void);
-
-/* ============================================
- * STATUS
- * ============================================ */
+uint8_t ota_manager_get_progress(void);
 
 /**
- * @brief Get current OTA status
+ * OTA iptal et (sadece state sifirlar)
  */
-void ota_get_status(ota_status_t *status);
+esp_err_t ota_manager_abort(void);
 
 /**
- * @brief Check if OTA is in progress
+ * Guncellemeden sonra yeniden baslat
  */
-bool ota_is_in_progress(void);
-
-/* ============================================
- * FIRMWARE INFO
- * ============================================ */
+void ota_manager_restart(void);
 
 /**
- * @brief Get current firmware version
- * @param buffer Output buffer
- * @param size Buffer size
+ * Ilerleme callback'i ayarla
  */
-void ota_get_version(char *buffer, size_t size);
+void ota_manager_set_progress_callback(ota_progress_cb_t callback);
 
 /**
- * @brief Get current partition info
- * @param buffer Output buffer
- * @param size Buffer size
+ * Mevcut firmware version stringi
  */
-void ota_get_partition_info(char *buffer, size_t size);
+const char *ota_manager_get_current_version(void);
 
 /**
- * @brief Restart device to apply update
+ * Bir onceki partition'a geri don (reboot yapar)
  */
-void ota_restart(void);
+esp_err_t ota_manager_rollback(void);
 
 /**
- * @brief Rollback to previous firmware
+ * Mevcut firmware'i onayla (rollback'i devre disi birak)
  */
-esp_err_t ota_rollback(void);
+esp_err_t ota_manager_mark_valid(void);
 
 /**
- * @brief Mark current firmware as valid
+ * Debug bilgileri
  */
-esp_err_t ota_mark_valid(void);
+void ota_manager_print_info(void);
 
 #ifdef __cplusplus
 }
