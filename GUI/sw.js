@@ -53,7 +53,7 @@ self.addEventListener('sync', (event) => {
                 if (res.ok) {
                     self.registration.showNotification('LebensSpur', {
                         body: 'Timer reset successful',
-                        icon: '/pic/logo.png'
+                        icon: '/logo.png'
                     });
                 }
             })
@@ -73,8 +73,8 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
         self.registration.showNotification(data.title, {
             body: data.body,
-            icon: '/pic/logo.png',
-            badge: '/pic/logo.png',
+            icon: '/logo.png',
+            badge: '/logo.png',
             vibrate: [200, 100, 200],
             tag: data.tag || 'default',
             requireInteraction: data.critical || false,

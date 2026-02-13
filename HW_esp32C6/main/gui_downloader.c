@@ -37,27 +37,42 @@ static const char *GITHUB_IPS[] = {
 };
 #define GITHUB_IP_COUNT 4
 
-// Indirilecek dosyalar
-static const char *GUI_FILES[] = {
-    "index.html",
-    "app.js",
-    "style.css",
-    "i18n.js",
-    "manifest.json",
-    "sw.js",
-    "logo.png",
-    "i18n/en.json",
-    "i18n/tr.json",
-    NULL
+// Indirilecek dosyalar: GitHub kaynak yolu -> yerel kayit adi
+typedef struct {
+    const char *github;     // GitHub repo icindeki yol (orn: "js/app.js")
+    const char *local;      // Yerel kayit adi (orn: "app.js")
+} gui_file_entry_t;
+
+static const gui_file_entry_t GUI_FILES[] = {
+    { "index.html",         "index.html" },
+    { "js/app.js",          "app.js" },
+    { "style.css",          "style.css" },
+    { "js/i18n.js",         "i18n.js" },
+    { "manifest.json",      "manifest.json" },
+    { "sw.js",              "sw.js" },
+    { "pic/logo.png",       "logo.png" },
+    { "pic/darklogo.png",   "darklogo.png" },
+    { "i18n/en.json",       "i18n/en.json" },
+    { "i18n/tr.json",       "i18n/tr.json" },
+    { NULL, NULL }
 };
 
-// Kritik dosyalar (bunlar olmadan GUI calismaz)
+// Kritik dosyalar - yerel isimler (bunlar olmadan GUI calismaz)
 static const char *CRITICAL_FILES[] = {
     "index.html",
     "app.js",
     "style.css",
     NULL
 };
+
+// Yerel isimle kritik mi kontrolu
+static bool is_critical(const char *local_name)
+{
+    for (int i = 0; CRITICAL_FILES[i]; i++) {
+        if (strcmp(CRITICAL_FILES[i], local_name) == 0) return true;
+    }
+    return false;
+}
 
 // HTTP buffer boyutu
 #define HTTP_BUFFER_SIZE    (32 * 1024)
@@ -117,16 +132,8 @@ static void status_update_bytes(uint32_t added, uint8_t file_idx)
 static int count_files(void)
 {
     int n = 0;
-    while (GUI_FILES[n]) n++;
+    while (GUI_FILES[n].github) n++;
     return n;
-}
-
-static bool is_critical(const char *filename)
-{
-    for (int i = 0; CRITICAL_FILES[i]; i++) {
-        if (strcmp(CRITICAL_FILES[i], filename) == 0) return true;
-    }
-    return false;
 }
 
 // HTTP event handler - buffer'a veri yazar
@@ -158,28 +165,30 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 }
 
 // Tek dosya indir (retry destekli, CDN IP rotasyonu)
-static esp_err_t download_file(const char *filename, int file_idx, int total,
-                               char *buffer)
+// github_name: GitHub repo icindeki yol (orn: "js/app.js")
+// local_name:  Yerel kayit adi (orn: "app.js")
+static esp_err_t download_file(const char *github_name, const char *local_name,
+                               int file_idx, int total, char *buffer)
 {
-    // URL path olustur
+    // URL path olustur (GitHub kaynak yolunu kullan)
     char url_path[256];
     snprintf(url_path, sizeof(url_path), "/%s/%s/%s/%s",
-             s_repo, s_branch, s_path, filename);
+             s_repo, s_branch, s_path, github_name);
 
-    // Yerel dosya yolu
+    // Yerel dosya yolu (duzlestirilmis yerel ismi kullan)
     char local_path[128];
-    snprintf(local_path, sizeof(local_path), "%s/%s", FILE_MGR_WEB_PATH, filename);
+    snprintf(local_path, sizeof(local_path), "%s/%s", FILE_MGR_WEB_PATH, local_name);
 
     // Alt klasor varsa olustur (ornegin "i18n/en.json")
-    const char *slash = strrchr(filename, '/');
+    const char *slash = strrchr(local_name, '/');
     if (slash) {
         char dir[128];
-        int dir_len = (int)(slash - filename);
-        snprintf(dir, sizeof(dir), "%s/%.*s", FILE_MGR_WEB_PATH, dir_len, filename);
+        int dir_len = (int)(slash - local_name);
+        snprintf(dir, sizeof(dir), "%s/%.*s", FILE_MGR_WEB_PATH, dir_len, local_name);
         file_manager_mkdir(dir);
     }
 
-    ESP_LOGI(TAG, "Indiriliyor: %s", filename);
+    ESP_LOGI(TAG, "Indiriliyor: %s -> %s", github_name, local_name);
 
     esp_err_t err = ESP_FAIL;
 
@@ -311,18 +320,19 @@ static void download_task(void *arg)
     status_set(GUI_DL_STATE_DOWNLOADING, 10, "Indiriliyor...");
 
     // Her dosyayi indir
-    for (int i = 0; GUI_FILES[i] && !s_cancel; i++) {
+    for (int i = 0; GUI_FILES[i].github && !s_cancel; i++) {
         char msg[64];
         snprintf(msg, sizeof(msg), "Indiriliyor (%d/%d)...", i + 1, total);
         int progress = 10 + ((i * 80) / total);
         status_set(GUI_DL_STATE_DOWNLOADING, progress, msg);
 
-        esp_err_t err = download_file(GUI_FILES[i], i, total, buffer);
+        esp_err_t err = download_file(GUI_FILES[i].github, GUI_FILES[i].local,
+                                      i, total, buffer);
         if (err == ESP_OK) {
             success++;
         } else {
-            ESP_LOGW(TAG, "Indirme basarisiz: %s", GUI_FILES[i]);
-            if (is_critical(GUI_FILES[i])) {
+            ESP_LOGW(TAG, "Indirme basarisiz: %s", GUI_FILES[i].github);
+            if (is_critical(GUI_FILES[i].local)) {
                 status_error("Kritik GUI dosyasi indirilemedi");
                 free(buffer);
                 goto cleanup;
