@@ -145,6 +145,11 @@ bool session_has_password(void)
     return s_initialized && s_auth.password[0] != '\0';
 }
 
+bool session_is_auth_required(void)
+{
+    return s_initialized && s_auth.password_enabled && s_auth.password[0] != '\0';
+}
+
 esp_err_t session_create(char *token_out)
 {
     if (!token_out) return ESP_ERR_INVALID_ARG;

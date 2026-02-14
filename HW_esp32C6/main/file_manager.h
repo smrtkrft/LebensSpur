@@ -9,7 +9,7 @@
  * - Büyük partition desteği
  *
  * Mount noktası: /ext
- * Partition boyutu: 16MB (32MB flash'ın yarısı)
+ * Partition boyutu: 32MB (tam flash)
  *
  * Bağımlılık: ext_flash (Katman 0), joltwallet/littlefs component
  * Katman: 1 (Altyapı)
@@ -28,9 +28,8 @@
 extern "C" {
 #endif
 
-// Mount noktası ve alt dizinler
+// Mount noktasi ve alt dizinler
 #define FILE_MGR_BASE_PATH      "/ext"
-#define FILE_MGR_WEB_PATH       "/ext/web"
 #define FILE_MGR_LOG_PATH       "/ext/logs"
 #define FILE_MGR_CONFIG_PATH    "/ext/config"
 #define FILE_MGR_DATA_PATH      "/ext/data"
@@ -38,7 +37,7 @@ extern "C" {
 // Limitler
 #define FILE_MGR_MAX_PATH_LEN   280
 #define FILE_MGR_MAX_OPEN_FILES 10
-#define FILE_MGR_PARTITION_SIZE (16 * 1024 * 1024)  // 16MB
+#define FILE_MGR_PARTITION_SIZE (16 * 1024 * 1024)  // 16MB (SPI 3-byte adresleme limiti)
 
 // Dosya bilgisi
 typedef struct {

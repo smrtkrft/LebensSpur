@@ -219,13 +219,15 @@ typedef struct {
 // AUTH AYARLARI
 // ============================================
 typedef struct {
-    char password[64];              // Sadece şifre (username yok)
+    char password[64];              // Sadece sifre (username yok)
     uint32_t session_timeout_min;   // Oturum timeout (dakika)
+    bool password_enabled;          // Sifre aktif mi (false = dogrudan erisim)
 } auth_config_t;
 
 #define AUTH_CONFIG_DEFAULT() { \
     .password = "",             \
-    .session_timeout_min = 60   \
+    .session_timeout_min = 60,  \
+    .password_enabled = false   \
 }
 
 // ============================================

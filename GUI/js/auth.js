@@ -6,25 +6,23 @@
 // Auth Check on Page Load
 // ─────────────────────────────────────────────────────────────────────────────
 function checkAuthOnLoad() {
-    // Token yoksa login sayfasi goster
-    if (!state.authToken) {
-        showPage('login');
-        return;
+    // Sifre gerekli mi kontrol et (token olsun olmasin)
+    // /api/timer/status: sifre devre disi ise 200 doner, aktif ise 401 doner
+    const headers = {};
+    if (state.authToken) {
+        headers['Authorization'] = 'Bearer ' + state.authToken;
     }
 
-    // Token var, sunucudan dogrula
-    fetch('/api/timer/status', {
-        headers: { 'Authorization': 'Bearer ' + state.authToken }
-    })
+    fetch('/api/timer/status', { headers })
     .then(res => {
         if (res.status === 401) {
-            // Token gecersiz, login sayfasi goster
+            // Sifre gerekli ve token yok/gecersiz
             state.isAuthenticated = false;
             state.authToken = null;
             localStorage.removeItem('ls_token');
             showPage('login');
         } else {
-            // Token gecerli, app sayfasini goster
+            // Erisim var (token gecerli VEYA sifre devre disi)
             state.isAuthenticated = true;
             showPage('app');
             startAutoLogoutTimer();
@@ -40,6 +38,7 @@ function checkAuthOnLoad() {
             setTimeout(() => {
                 loadWifiConfig();
                 loadSmtpConfig();
+                loadGuiSlotStatus();
             }, 400);
         }
     })
@@ -101,6 +100,7 @@ function handleLogin(e) {
             setTimeout(() => {
                 fetchLogs();
                 fetchDeviceInfo();
+                loadGuiSlotStatus();
             }, 900);
         } else if (data.lockoutSeconds) {
             const mins = Math.ceil(data.lockoutSeconds / 60);

@@ -7,6 +7,7 @@
  */
 
 #include "gui_downloader.h"
+#include "gui_slot.h"
 #include "file_manager.h"
 #include "wifi_manager.h"
 #include "esp_log.h"
@@ -188,16 +189,17 @@ static esp_err_t download_file(const char *github_name, const char *local_name,
     snprintf(url_path, sizeof(url_path), "/%s/%s/%s/%s",
              s_repo, s_branch, s_path, github_name);
 
-    // Yerel dosya yolu (duzlestirilmis yerel ismi kullan)
+    // Yerel dosya yolu — inaktif slot'a yaz
+    const char *slot_path = gui_slot_get_inactive_path();
     char local_path[128];
-    snprintf(local_path, sizeof(local_path), "%s/%s", FILE_MGR_WEB_PATH, local_name);
+    snprintf(local_path, sizeof(local_path), "%s/%s", slot_path, local_name);
 
     // Alt klasor varsa olustur (ornegin "i18n/en.json")
     const char *slash = strrchr(local_name, '/');
     if (slash) {
         char dir[128];
         int dir_len = (int)(slash - local_name);
-        snprintf(dir, sizeof(dir), "%s/%.*s", FILE_MGR_WEB_PATH, dir_len, local_name);
+        snprintf(dir, sizeof(dir), "%s/%.*s", slot_path, dir_len, local_name);
         file_manager_mkdir(dir);
     }
 
@@ -323,10 +325,17 @@ static void download_task(void *arg)
         goto cleanup;
     }
 
-    // Web dizinlerini olustur
+    // Inaktif slot dizinlerini olustur
+    const char *target = gui_slot_get_inactive_path();
     status_set(GUI_DL_STATE_CONNECTING, 7, "Dizinler olusturuluyor...");
-    file_manager_mkdir(FILE_MGR_WEB_PATH);
-    file_manager_mkdir(FILE_MGR_WEB_PATH "/i18n");
+    file_manager_mkdir(target);
+    char sub[64];
+    snprintf(sub, sizeof(sub), "%s/js", target);
+    file_manager_mkdir(sub);
+    snprintf(sub, sizeof(sub), "%s/pic", target);
+    file_manager_mkdir(sub);
+    snprintf(sub, sizeof(sub), "%s/i18n", target);
+    file_manager_mkdir(sub);
 
     // Toplam dosya sayisini ayarla
     if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -369,11 +378,16 @@ static void download_task(void *arg)
         goto cleanup;
     }
 
-    // Version dosyasi olustur
-    status_set(GUI_DL_STATE_INSTALLING, 95, "Tamamlaniyor...");
-    file_manager_write_string(FILE_MGR_WEB_PATH "/version.txt", "github-latest");
+    // Version dosyasi olustur ve slot degistir
+    status_set(GUI_DL_STATE_INSTALLING, 95, "Slot degistiriliyor...");
+    char ver_path[64];
+    snprintf(ver_path, sizeof(ver_path), "%s/version.txt", target);
+    file_manager_write_string(ver_path, "github-latest");
 
-    ESP_LOGI(TAG, "GUI indirme tamamlandi: %d/%d dosya", success, total);
+    // Inaktif slot'u aktif yap
+    gui_slot_switch("github-latest");
+
+    ESP_LOGI(TAG, "GUI indirme tamamlandi: %d/%d dosya, slot degistirildi", success, total);
     status_set(GUI_DL_STATE_COMPLETE, 100, "Tamamlandi");
 
 cleanup:
@@ -455,10 +469,7 @@ void gui_downloader_cancel(void)
 
 bool gui_downloader_files_exist(void)
 {
-    return file_manager_exists(FILE_MGR_WEB_PATH "/index.html") &&
-           file_manager_exists(FILE_MGR_WEB_PATH "/state.js") &&
-           file_manager_exists(FILE_MGR_WEB_PATH "/app.js") &&
-           file_manager_exists(FILE_MGR_WEB_PATH "/style.css");
+    return gui_slot_has_gui();
 }
 
 const char *gui_downloader_get_default_repo(void)

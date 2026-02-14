@@ -1706,6 +1706,37 @@
                                 </div>
                             </div>
 
+                            <!-- GUI Slot Durumu -->
+                            <div class="setting-section" id="guiSlotSection">
+                                <h4 class="section-title">GUI Slot Durumu</h4>
+                                <div class="ota-status-card">
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Aktif Slot</span>
+                                        <span class="ota-status-value" id="guiActiveSlot">-</span>
+                                    </div>
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Aktif Versiyon</span>
+                                        <span class="ota-status-value" id="guiActiveVersion">-</span>
+                                    </div>
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Yedek Versiyon</span>
+                                        <span class="ota-status-value" id="guiBackupVersion">-</span>
+                                    </div>
+                                    <div class="ota-status-header">
+                                        <span class="ota-status-label">Boot Sayacı</span>
+                                        <span class="ota-status-value" id="guiBootCount">-</span>
+                                    </div>
+                                </div>
+                                <div class="action-buttons" style="margin-top: var(--space-3);">
+                                    <button class="btn btn-ghost btn-block" id="guiRollbackBtn" disabled>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                            <path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"></path>
+                                        </svg>
+                                        Yedek Versiyona Geri Dön
+                                    </button>
+                                </div>
+                            </div>
+
                             <div class="setting-section">
                                 <h4 class="section-title">Güncelleme Kaynağı</h4>
                                 <p class="section-desc">Güncellemeleri nereden alacağınızı seçin</p>
