@@ -75,3 +75,32 @@ esp_err_t h_api_logout(httpd_req_t *req)
 
     return web_server_send_json(req, "{\"success\":true}");
 }
+
+esp_err_t h_api_password_change(httpd_req_t *req)
+{
+    if (!check_auth(req)) return send_unauthorized(req);
+    ws_request_count++;
+
+    char body[512] = {0};
+    if (read_body(req, body, sizeof(body)) < 0) {
+        return web_server_send_error(req, 400, "Bad request");
+    }
+
+    cJSON *json = cJSON_Parse(body);
+    if (!json) return web_server_send_error(req, 400, "Invalid JSON");
+
+    cJSON *cur = cJSON_GetObjectItem(json, "currentPassword");
+    if (!cur) cur = cJSON_GetObjectItem(json, "current_password");
+    cJSON *nw = cJSON_GetObjectItem(json, "newPassword");
+    if (!nw) nw = cJSON_GetObjectItem(json, "new_password");
+    const char *cur_pw = cJSON_IsString(cur) ? cur->valuestring : "";
+    const char *new_pw = cJSON_IsString(nw) ? nw->valuestring : "";
+
+    esp_err_t ret = session_change_password(cur_pw, new_pw);
+    cJSON_Delete(json);
+
+    if (ret == ESP_OK) return web_server_send_json(req, "{\"success\":true}");
+    if (ret == ESP_ERR_INVALID_ARG) return web_server_send_error(req, 400, "Wrong current password");
+    if (ret == ESP_ERR_INVALID_SIZE) return web_server_send_error(req, 400, "Password too short");
+    return web_server_send_error(req, 500, "Password change failed");
+}

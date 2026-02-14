@@ -468,6 +468,8 @@ esp_err_t config_load_auth(auth_config_t *config)
 
     json_get_str(json, "password", config->password, sizeof(config->password));
     config->session_timeout_min = json_get_int(json, "sessionTimeout", def.session_timeout_min);
+    cJSON *pe = cJSON_GetObjectItem(json, "passwordEnabled");
+    if (cJSON_IsBool(pe)) config->password_enabled = cJSON_IsTrue(pe);
 
     cJSON_Delete(json);
     return ESP_OK;
@@ -482,6 +484,7 @@ esp_err_t config_save_auth(const auth_config_t *config)
 
     cJSON_AddStringToObject(json, "password", config->password);
     cJSON_AddNumberToObject(json, "sessionTimeout", config->session_timeout_min);
+    cJSON_AddBoolToObject(json, "passwordEnabled", config->password_enabled);
 
     esp_err_t ret = write_json_file(CONFIG_AUTH_FILE, json);
     cJSON_Delete(json);

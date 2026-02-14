@@ -5,5 +5,6 @@
 
 esp_err_t h_api_login(httpd_req_t *req);
 esp_err_t h_api_logout(httpd_req_t *req);
+esp_err_t h_api_password_change(httpd_req_t *req);
 
 #endif

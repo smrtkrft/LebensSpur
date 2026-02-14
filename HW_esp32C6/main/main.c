@@ -39,7 +39,7 @@
 
 // Katman 4 - Uygulama
 #include "timer_scheduler.h"
-#include "web_assets.h"
+#include "gui_slot.h"
 #include "web_server.h"
 
 static const char *TAG = "MAIN";
@@ -185,7 +185,7 @@ void app_main(void)
     wifi_manager_set_callback(wifi_event_handler);
     wifi_manager_init();
 
-    ESP_LOGI(TAG, "[12/14] Mail Sender / OTA / GUI Downloader");
+    ESP_LOGI(TAG, "[12/15] Mail Sender / OTA / GUI Downloader");
     mail_sender_init();
     ota_manager_init();
     gui_downloader_init();
@@ -193,10 +193,17 @@ void app_main(void)
     // ========================================
     // Katman 4 - Uygulama
     // ========================================
-    ESP_LOGI(TAG, "[13/14] Timer Scheduler");
+    ESP_LOGI(TAG, "[13/15] GUI Slot Manager");
+    gui_slot_init();
+    bool rollback = gui_slot_check_health();
+    if (rollback) {
+        ESP_LOGW(TAG, "GUI otomatik rollback yapildi!");
+    }
+
+    ESP_LOGI(TAG, "[14/15] Timer Scheduler");
     timer_scheduler_init();
 
-    ESP_LOGI(TAG, "[14/14] Web Server");
+    ESP_LOGI(TAG, "[15/15] Web Server");
     web_server_start();
 
     // ========================================
@@ -206,8 +213,8 @@ void app_main(void)
     ESP_LOGI(TAG, "       Sistem Hazir!");
     ESP_LOGI(TAG, "============================================");
 
-    if (!config_is_setup_completed()) {
-        ESP_LOGW(TAG, "Ilk kurulum gerekiyor: http://192.168.4.1/setup.html");
+    if (!gui_slot_has_gui()) {
+        ESP_LOGW(TAG, "GUI dosyalari bulunamadi! GUI Installer ile yukleyin.");
     }
 
     // Tum modullerin bilgilerini yazdir

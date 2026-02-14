@@ -59,10 +59,16 @@ esp_err_t session_auth_init(void);
 bool session_check_password(const char *password);
 
 /**
- * Şifre ayarlanmış mı kontrol et
- * @return true: şifre mevcut (boş değil)
+ * Sifre ayarlanmis mi kontrol et
+ * @return true: sifre mevcut (bos degil)
  */
 bool session_has_password(void);
+
+/**
+ * Sifre korumasi aktif mi (password_enabled && password set)
+ * @return true: auth zorunlu, false: serbest erisim
+ */
+bool session_is_auth_required(void);
 
 /**
  * Yeni session oluştur, token döndür

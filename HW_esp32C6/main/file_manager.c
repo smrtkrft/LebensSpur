@@ -19,6 +19,7 @@
 static const char *TAG = "FILE_MGR";
 
 static bool s_mounted = false;
+static const esp_partition_t *s_partition = NULL;
 
 #define PARTITION_LABEL "ext_storage"
 
@@ -62,15 +63,19 @@ esp_err_t file_manager_init(void)
         return ESP_FAIL;
     }
 
+    s_partition = partition;
+
     ESP_LOGI(TAG, "Partition: %s, %lu bytes (%lu MB)",
              partition->label, partition->size, partition->size / (1024 * 1024));
 
-    // LittleFS mount
+    // LittleFS mount (partition pointer kullan, label lookup degil)
     esp_vfs_littlefs_conf_t conf = {
         .base_path = FILE_MGR_BASE_PATH,
-        .partition_label = PARTITION_LABEL,
+        .partition_label = NULL,
+        .partition = partition,
         .format_if_mount_failed = true,
         .dont_mount = false,
+        .grow_on_mount = true,
     };
 
     ret = esp_vfs_littlefs_register(&conf);
@@ -81,8 +86,17 @@ esp_err_t file_manager_init(void)
 
     s_mounted = true;
 
-    // Alt dizinleri oluştur (LittleFS gerçek dizin destekler)
-    file_manager_mkdir(FILE_MGR_WEB_PATH);
+    // Alt dizinleri olustur (LittleFS gercek dizin destekler)
+    // GUI slot dizinleri (GUI installer tarafindan olusturulur, burada garanti)
+    file_manager_mkdir("/ext/web_a");
+    file_manager_mkdir("/ext/web_a/js");
+    file_manager_mkdir("/ext/web_a/pic");
+    file_manager_mkdir("/ext/web_a/i18n");
+    file_manager_mkdir("/ext/web_b");
+    file_manager_mkdir("/ext/web_b/js");
+    file_manager_mkdir("/ext/web_b/pic");
+    file_manager_mkdir("/ext/web_b/i18n");
+    // Veri dizinleri
     file_manager_mkdir(FILE_MGR_LOG_PATH);
     file_manager_mkdir(FILE_MGR_CONFIG_PATH);
     file_manager_mkdir(FILE_MGR_DATA_PATH);

@@ -67,13 +67,77 @@ async function checkForUpdates() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GUI OTA Update
+// GUI Slot Status
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadGuiSlotStatus() {
+    try {
+        const res = await authFetch('/api/gui/status');
+        const data = await res.json();
+
+        const setTxt = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+
+        setTxt('guiActiveSlot', (data.active || 'a').toUpperCase());
+        setTxt('guiActiveVersion', data.ver_active || '-');
+        setTxt('guiBackupVersion', data.ver_backup || '-');
+        setTxt('guiBootCount', data.boot_count != null ? data.boot_count + '/3' : '-');
+
+        // Rollback butonu: yedek versiyon varsa aktif
+        const rollbackBtn = document.getElementById('guiRollbackBtn');
+        if (rollbackBtn) {
+            const hasBackup = data.ver_backup && data.ver_backup !== '';
+            rollbackBtn.disabled = !hasBackup;
+        }
+
+        // GUI version for status card
+        if (data.ver_active) {
+            setTxt('currentGuiVersion', 'v' + data.ver_active);
+        }
+    } catch (err) {
+        // Silently fail
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUI Rollback
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleGuiRollback() {
+    const btn = document.getElementById('guiRollbackBtn');
+    const backupVer = document.getElementById('guiBackupVersion')?.textContent || '?';
+
+    if (!confirm(`Yedek versiyona (${backupVer}) geri dönülsün mü?\nSayfa yenilenecektir.`)) {
+        return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Geri dönülüyor...'; }
+
+    try {
+        const res = await authFetch('/api/gui/rollback', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.success) {
+            showToast('Rollback başarılı! Sayfa yenileniyor...', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Rollback başarısız', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = 'Yedek Versiyona Geri Dön'; }
+        }
+    } catch (err) {
+        showToast('Bağlantı hatası', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Yedek Versiyona Geri Dön'; }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUI OTA Update (downloads to inactive slot)
 // ─────────────────────────────────────────────────────────────────────────────
 function handleGuiUpdate() {
     const btn = document.getElementById('updateGuiBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Güncelleniyor...'; }
 
-    showToast('Web arayüzü güncelleniyor...', 'success');
+    showToast('Web arayüzü güncelleniyor (yedek slot\'a indiriliyor)...', 'success');
 
     authFetch('/api/gui/download', { method: 'POST' })
         .then(res => res.json())
@@ -83,15 +147,18 @@ function handleGuiUpdate() {
                     authFetch('/api/gui/download/status')
                         .then(r => r.json())
                         .then(st => {
-                            if (st.status === 'done' || st.status === 'idle') {
+                            // state: 0=idle, 4=complete, 5=error
+                            if (st.state === 4 || st.state === 0) {
                                 clearInterval(pollInterval);
                                 if (btn) { btn.disabled = false; btn.textContent = 'Web Arayüzünü Güncelle'; }
-                                if (st.downloaded > 0) {
-                                    showToast(`GUI güncellendi! ${st.downloaded} dosya indirildi.`, 'success');
+                                if (st.files > 0) {
+                                    showToast(`GUI güncellendi! ${st.files} dosya indirildi. Slot değiştirildi.`, 'success');
                                 } else {
                                     showToast('GUI güncelleme tamamlandı', 'success');
                                 }
-                            } else if (st.status === 'error') {
+                                // Slot bilgisini yenile
+                                loadGuiSlotStatus();
+                            } else if (st.state === 5) {
                                 clearInterval(pollInterval);
                                 if (btn) { btn.disabled = false; btn.textContent = 'Web Arayüzünü Güncelle'; }
                                 showToast('GUI güncelleme hatası: ' + (st.error || 'Bilinmeyen hata'), 'error');

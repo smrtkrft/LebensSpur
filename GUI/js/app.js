@@ -44,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
         initPWA();
         initLogs();
 
+        // GUI health ping — firmware'a GUI'nin basariyla yuklendigi bildir
+        // Bu boot_count'u sifirlar ve auto-rollback'i engeller
+        fetch('/api/gui/health', { method: 'POST' }).catch(() => {});
+
         // Sayfa yuklendiginde auth kontrol et
         checkAuthOnLoad();
 
@@ -186,6 +190,12 @@ function initEventListeners() {
     const updateGuiBtn = document.getElementById('updateGuiBtn');
     if (updateGuiBtn) {
         updateGuiBtn.addEventListener('click', handleGuiUpdate);
+    }
+
+    // GUI Rollback Button
+    const guiRollbackBtn = document.getElementById('guiRollbackBtn');
+    if (guiRollbackBtn) {
+        guiRollbackBtn.addEventListener('click', handleGuiRollback);
     }
 
     // Log Filter Selects

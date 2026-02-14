@@ -9,10 +9,9 @@
 #include "web_server.h"
 #include "web_server_internal.h"
 #include "file_manager.h"
-#include "web_assets.h"
+#include "gui_slot.h"
 #include "session_auth.h"
 #include "config_manager.h"
-#include "gui_downloader.h"
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include <string.h>
@@ -24,7 +23,6 @@
 #include "api_device.h"
 #include "api_relay.h"
 #include "api_wifi.h"
-#include "api_setup.h"
 #include "api_config.h"
 #include "api_ota.h"
 #include "api_logs.h"
@@ -40,6 +38,11 @@ uint32_t ws_request_count = 0;
 
 bool check_auth(httpd_req_t *req)
 {
+    // Sifre devre disi ise her zaman erisim ver
+    if (!session_is_auth_required()) {
+        return true;
+    }
+
     char token[SESSION_TOKEN_LEN + 1] = {0};
 
     // 1. Authorization: Bearer <token>
@@ -112,31 +115,21 @@ static esp_err_t h_index(httpd_req_t *req)
 {
     ws_request_count++;
 
-    if (!config_is_setup_completed()) {
-        httpd_resp_set_status(req, "302 Found");
-        httpd_resp_set_hdr(req, "Location", "/setup.html");
-        return httpd_resp_send(req, NULL, 0);
-    }
-
-    if (gui_downloader_files_exist()) {
+    // GUI aktif slot'tan servis et
+    if (gui_slot_has_gui()) {
         char fp[64];
-        snprintf(fp, sizeof(fp), "%s/index.html", FILE_MGR_WEB_PATH);
-        if (file_manager_exists(fp)) {
-            return web_server_send_file(req, fp);
-        }
+        snprintf(fp, sizeof(fp), "%s/index.html", gui_slot_get_active_path());
+        return web_server_send_file(req, fp);
     }
 
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "/setup.html");
-    return httpd_resp_send(req, NULL, 0);
-}
-
-static esp_err_t h_setup_page(httpd_req_t *req)
-{
-    ws_request_count++;
-    const char *html = web_assets_get_setup_html();
+    // GUI yok — basit hata sayfasi
     httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
+    return httpd_resp_send(req,
+        "<html><body style='padding:2rem;text-align:center;font-family:sans-serif'>"
+        "<h2>LebensSpur</h2>"
+        "<p>GUI dosyalari bulunamadi.</p>"
+        "<p>GUI Installer ile harici flash'a yukleyin.</p>"
+        "</body></html>", HTTPD_RESP_USE_STRLEN);
 }
 
 // ============================================================================
@@ -150,17 +143,9 @@ static esp_err_t h_404(httpd_req_t *req, httpd_err_code_t err)
 
     const char *uri = req->uri;
 
-    if (!config_is_setup_completed()) {
-        if (strncmp(uri, "/api/setup/", 11) != 0 &&
-            strcmp(uri, "/setup.html") != 0) {
-            httpd_resp_set_status(req, "302 Found");
-            httpd_resp_set_hdr(req, "Location", "/setup.html");
-            return httpd_resp_send(req, NULL, 0);
-        }
-    }
-
+    // Aktif slot'tan statik dosya servis et
     char filepath[576];
-    snprintf(filepath, sizeof(filepath), "%s%s", FILE_MGR_WEB_PATH, uri);
+    snprintf(filepath, sizeof(filepath), "%s%s", gui_slot_get_active_path(), uri);
 
     if (strstr(filepath, "..")) {
         return web_server_send_error(req, 403, "Forbidden");
@@ -210,7 +195,6 @@ esp_err_t web_server_start(void)
 
     // Sayfalar
     REG("/", HTTP_GET, h_index);
-    REG("/setup.html", HTTP_GET, h_setup_page);
 
     // Auth API
     REG("/api/login", HTTP_POST, h_api_login);
@@ -256,20 +240,20 @@ esp_err_t web_server_start(void)
     REG("/api/config/wifi", HTTP_POST, h_api_config_wifi_post);
     REG("/api/config/ap", HTTP_POST, h_api_config_ap);
 
-    // Setup API
-    REG("/api/setup/status", HTTP_GET, h_api_setup_status);
-    REG("/api/setup/wifi/scan", HTTP_GET, h_api_setup_wifi_scan);
-    REG("/api/setup/wifi/connect", HTTP_POST, h_api_setup_wifi_connect);
-    REG("/api/setup/password", HTTP_POST, h_api_setup_password);
-    REG("/api/setup/complete", HTTP_POST, h_api_setup_complete);
+    // Setup / Password API
     REG("/api/config/password", HTTP_POST, h_api_password_change);
-    REG("/api/gui/download", HTTP_POST, h_api_gui_download);
-    REG("/api/gui/download/status", HTTP_GET, h_api_gui_download_status);
 
     // OTA API
     REG("/api/ota/status", HTTP_GET, h_api_ota_status);
     REG("/api/ota/url", HTTP_POST, h_api_ota_url);
     REG("/api/ota/check", HTTP_GET, h_api_ota_check);
+
+    // GUI Slot API
+    REG("/api/gui/health", HTTP_POST, h_api_gui_health);
+    REG("/api/gui/status", HTTP_GET, h_api_gui_slot_status);
+    REG("/api/gui/rollback", HTTP_POST, h_api_gui_rollback);
+    REG("/api/gui/download", HTTP_POST, h_api_gui_download);
+    REG("/api/gui/download/status", HTTP_GET, h_api_gui_download_status);
 
     // Config API
     REG("/api/config/security", HTTP_GET, h_api_config_security_get);

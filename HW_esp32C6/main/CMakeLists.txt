@@ -11,7 +11,6 @@ idf_component_register(
         "api_device.c"
         "api_relay.c"
         "api_wifi.c"
-        "api_setup.c"
         "api_config.c"
         "api_ota.c"
         "api_logs.c"
@@ -19,7 +18,6 @@ idf_component_register(
         "file_manager.c"
         "ota_manager.c"
         "log_manager.c"
-        "web_assets.c"
         "config_manager.c"
         "session_auth.c"
         "timer_scheduler.c"
@@ -27,6 +25,6 @@ idf_component_register(
         "relay_manager.c"
         "button_manager.c"
         "gui_downloader.c"
+        "gui_slot.c"
     INCLUDE_DIRS "."
-    EMBED_TXTFILES "../setup.html"
 )
