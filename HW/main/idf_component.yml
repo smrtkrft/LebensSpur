@@ -1,5 +1,3 @@
-## IDF Component Manager - Bağımlılıklar
 dependencies:
-  # LittleFS dosya sistemi (harici flash için)
-  joltwallet/littlefs:
-    version: "^1.14"
+  espressif/mdns:
+    version: "*"
