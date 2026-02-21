@@ -13,6 +13,7 @@
  */
 
 #include "wifi_manager.h"
+#include "device_log.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -412,6 +413,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
                 // Hepsi basarisiz - periyodik tarama baslat
                 ESP_LOGE(TAG, "Tum denemeler basarisiz. %d sn sonra tekrar taranacak.",
                          RECONNECT_INTERVAL_MS / 1000);
+                device_log_add(LOG_TYPE_WIFI, "WiFi baglanti basarisiz (tum denemeler)");
                 s_retry_count = 0;
                 s_trying_backup = false;
                 start_reconnect_task();
@@ -426,6 +428,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         snprintf(s_ip_addr, sizeof(s_ip_addr), IPSTR, IP2STR(&e->ip_info.ip));
         ESP_LOGI(TAG, "BAGLANDI! IP:%s (%s WiFi: '%s')",
                  s_ip_addr, s_trying_backup ? "Backup" : "Primary", s_sta_ssid);
+        device_log_add(LOG_TYPE_WIFI, "WiFi baglandi: %s (%s, %s)",
+                       s_sta_ssid, s_ip_addr, s_trying_backup ? "backup" : "primary");
         s_is_connected = true;
         s_retry_count = 0;
         s_trying_backup = false;

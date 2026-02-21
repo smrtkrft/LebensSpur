@@ -1317,8 +1317,17 @@ function renderLogs() {
   }
 
   var h = '';
+  var lastBoot = -1;
   for (var j = 0; j < logData.length; j++) {
     var log = logData[j];
+
+    // Boot numarasi degistiyse ayirici goster
+    if (log.boot !== undefined && log.boot !== lastBoot) {
+      if (j > 0) h += '<div class="log-boot-divider"></div>';
+      h += '<div class="log-boot-header">' + t('logs.boot') + ' #' + log.boot + '</div>';
+      lastBoot = log.boot;
+    }
+
     var typeClass = 'log-' + log.type;
     var typeBadgeClass = 'type-' + log.type;
     var uptime = formatUptime(log.ts);
@@ -1401,34 +1410,18 @@ function openSystemSubpage(subpageId) {
 
   // Surum bilgilerini doldur
   if (subpageId === 'hwOtaSubpage') {
-    fetch('/api/system/detail')
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var el = document.getElementById('currentFirmwareVersion');
-        if (el) el.textContent = 'v' + d.fw_version;
-      })
-      .catch(function() {});
+    loadFwOtaInfo();
   } else if (subpageId === 'resetApiSubpage') {
     loadResetApiConfig();
   } else if (subpageId === 'guiOtaSubpage') {
-    fetch('/ext/config.json')
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var el = document.getElementById('currentGuiVersion');
-        if (el) el.textContent = 'v' + d.version;
-      })
-      .catch(function() {});
-    fetch('/api/system/info')
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var el = document.getElementById('extFlashStatus');
-        if (el) el.textContent = d.ext_flash ? t('ota.ext_flash_ready') : t('ota.ext_flash_unavailable');
-      })
-      .catch(function() {});
+    loadGuiOtaInfo();
   }
 }
 
 function closeSystemSubpage() {
+  if (fwOtaPollingTimer) { clearInterval(fwOtaPollingTimer); fwOtaPollingTimer = null; }
+  if (guiOtaPollingTimer) { clearInterval(guiOtaPollingTimer); guiOtaPollingTimer = null; }
+
   var mainContent = document.getElementById('systemMainContent');
   if (!mainContent) return;
 
@@ -1519,18 +1512,354 @@ for (var gr = 0; gr < guiOtaRadios.length; gr++) {
   });
 }
 
-// OTA kontrol butonlari (simdilik placeholder)
+// ============================================================
+// Firmware OTA - HW Guncelleme
+// ============================================================
+
+var fwOtaPollingTimer = null;
+
+function loadFwOtaInfo() {
+  fetch('/api/fw-ota/info')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var el = document.getElementById('currentFirmwareVersion');
+      if (el) el.textContent = 'v' + d.current_version;
+
+      var partEl = document.getElementById('runningPartition');
+      if (partEl) partEl.textContent = d.running_partition;
+
+      // Rollback bilgisi
+      var rbSection = document.getElementById('fwRollbackSection');
+      var rbInfo = document.getElementById('fwRollbackInfo');
+      if (d.can_rollback && d.rollback_version) {
+        if (rbSection) rbSection.className = 'setting-section';
+        if (rbInfo) rbInfo.textContent = t('ota.fw_rollback_info', {version: d.rollback_version});
+      } else {
+        if (rbSection) rbSection.className = 'setting-section hidden';
+      }
+    })
+    .catch(function() {});
+}
+
+function startFwOtaPolling() {
+  if (fwOtaPollingTimer) clearInterval(fwOtaPollingTimer);
+  fwOtaPollingTimer = setInterval(function() {
+    fetch('/api/fw-ota/status')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var progressSection = document.getElementById('fwOtaProgressSection');
+        var progressBar = document.getElementById('fwOtaProgressBar');
+        var progressText = document.getElementById('fwOtaProgressText');
+        var checkBtn = document.getElementById('checkFirmwareUpdateBtn');
+        var startSection = document.getElementById('fwStartSection');
+        var restartSection = document.getElementById('fwRestartSection');
+        var remoteRow = document.getElementById('fwRemoteVersionRow');
+        var remoteVer = document.getElementById('remoteFirmwareVersion');
+
+        switch (d.state) {
+          case 1: // CHECKING
+            if (checkBtn) checkBtn.disabled = true;
+            if (progressSection) progressSection.className = 'setting-section';
+            if (progressText) progressText.textContent = d.message;
+            if (progressBar) progressBar.style.width = '0%';
+            break;
+
+          case 2: // UPDATE_AVAILABLE
+            clearInterval(fwOtaPollingTimer);
+            fwOtaPollingTimer = null;
+            if (checkBtn) checkBtn.disabled = false;
+            if (progressSection) progressSection.className = 'setting-section hidden';
+            if (remoteRow) remoteRow.className = 'ota-status-header';
+            if (remoteVer) remoteVer.textContent = 'v' + d.remote_version;
+            if (startSection) startSection.className = 'setting-section';
+            break;
+
+          case 3: // NO_UPDATE
+            clearInterval(fwOtaPollingTimer);
+            fwOtaPollingTimer = null;
+            if (checkBtn) checkBtn.disabled = false;
+            if (progressSection) progressSection.className = 'setting-section hidden';
+            alert(t('ota.fw_already_latest'));
+            break;
+
+          case 4: // DOWNLOADING
+            if (progressSection) progressSection.className = 'setting-section';
+            if (progressBar) progressBar.style.width = d.progress_pct + '%';
+            if (progressText) progressText.textContent = d.message + ' (' + d.progress_pct + '%)';
+            if (startSection) startSection.className = 'setting-section hidden';
+            break;
+
+          case 5: // DONE
+            clearInterval(fwOtaPollingTimer);
+            fwOtaPollingTimer = null;
+            if (progressSection) progressSection.className = 'setting-section hidden';
+            if (restartSection) restartSection.className = 'setting-section';
+            if (startSection) startSection.className = 'setting-section hidden';
+            if (checkBtn) checkBtn.disabled = false;
+            alert(t('ota.fw_update_success'));
+            break;
+
+          case 6: // ERROR
+            clearInterval(fwOtaPollingTimer);
+            fwOtaPollingTimer = null;
+            if (checkBtn) checkBtn.disabled = false;
+            if (progressSection) progressSection.className = 'setting-section hidden';
+            if (startSection) startSection.className = 'setting-section hidden';
+            alert(t('ota.fw_update_error') + ': ' + d.message);
+            break;
+        }
+      })
+      .catch(function() {
+        clearInterval(fwOtaPollingTimer);
+        fwOtaPollingTimer = null;
+      });
+  }, 2000);
+}
+
+// Check butonu
 var checkFwBtn = document.getElementById('checkFirmwareUpdateBtn');
 if (checkFwBtn) {
   checkFwBtn.addEventListener('click', function() {
-    alert(t('alert.fw_update_not_ready'));
+    if (!confirm(t('ota.confirm_fw_check'))) return;
+
+    var source = 'official';
+    var hwRadio = document.querySelector('input[name="hwOtaSource"]:checked');
+    if (hwRadio) source = hwRadio.value;
+
+    var body = {source: source};
+    if (source === 'custom') {
+      var urlInput = document.getElementById('otaServerUrl');
+      var url = urlInput ? urlInput.value.trim() : '';
+      if (!url) {
+        alert(t('ota.custom_url_required'));
+        return;
+      }
+      body.url = url;
+    }
+
+    fetch('/api/fw-ota/check', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        startFwOtaPolling();
+      } else {
+        alert(d.message);
+      }
+    })
+    .catch(function() {
+      alert(t('ota.fw_update_error'));
+    });
   });
+}
+
+// Start butonu (update available sonrasi)
+var startFwBtn = document.getElementById('startFirmwareUpdateBtn');
+if (startFwBtn) {
+  startFwBtn.addEventListener('click', function() {
+    if (!confirm(t('ota.confirm_fw_update'))) return;
+
+    fetch('/api/fw-ota/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        startFwOtaPolling();
+      } else {
+        alert(d.message);
+      }
+    })
+    .catch(function() {
+      alert(t('ota.fw_update_error'));
+    });
+  });
+}
+
+// Restart butonu (OTA done sonrasi)
+var fwRestartBtn = document.getElementById('fwOtaRestartBtn');
+if (fwRestartBtn) {
+  fwRestartBtn.addEventListener('click', function() {
+    if (!confirm(t('ota.confirm_restart'))) return;
+    fetch('/api/device/restart', {method: 'POST'})
+      .then(function() {
+        setTimeout(function() { location.reload(); }, 5000);
+      })
+      .catch(function() {});
+  });
+}
+
+// Rollback butonu
+var fwRollbackBtn = document.getElementById('fwRollbackBtn');
+if (fwRollbackBtn) {
+  fwRollbackBtn.addEventListener('click', function() {
+    if (!confirm(t('ota.confirm_fw_rollback'))) return;
+
+    fetch('/api/fw-ota/rollback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        alert(t('ota.fw_rollback_success'));
+        if (confirm(t('ota.confirm_restart'))) {
+          fetch('/api/device/restart', {method: 'POST'})
+            .then(function() {
+              setTimeout(function() { location.reload(); }, 5000);
+            });
+        }
+      } else {
+        alert(d.message);
+      }
+    })
+    .catch(function() {
+      alert(t('ota.fw_update_error'));
+    });
+  });
+}
+
+// ============================================================
+// GUI OTA - A/B Slot Guncelleme
+// ============================================================
+
+var guiOtaPollingTimer = null;
+
+function loadGuiOtaInfo() {
+  fetch('/api/gui-ota/info')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var verEl = document.getElementById('currentGuiVersion');
+      if (verEl) verEl.textContent = d.active_version ? 'v' + d.active_version : '-';
+
+      var slotEl = document.getElementById('activeGuiSlot');
+      if (slotEl) slotEl.textContent = 'Slot ' + d.active_slot.toUpperCase();
+
+      var inactiveEl = document.getElementById('inactiveSlotVersion');
+      if (inactiveEl) inactiveEl.textContent = d.inactive_version ? 'v' + d.inactive_version : '-';
+
+      // Rollback butonu: inaktif slot'ta veri varsa goster
+      var rollbackSection = document.getElementById('rollbackSection');
+      if (rollbackSection) {
+        rollbackSection.className = d.inactive_has_data ? 'setting-section' : 'setting-section hidden';
+      }
+    })
+    .catch(function() {});
+}
+
+function startGuiOtaPolling() {
+  if (guiOtaPollingTimer) clearInterval(guiOtaPollingTimer);
+
+  var progressSection = document.getElementById('guiOtaProgressSection');
+  if (progressSection) progressSection.className = 'setting-section';
+
+  guiOtaPollingTimer = setInterval(function() {
+    fetch('/api/gui-ota/status')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var bar = document.getElementById('guiOtaProgressBar');
+        var txt = document.getElementById('guiOtaProgressText');
+        if (bar) bar.style.width = d.progress_pct + '%';
+        if (txt) txt.textContent = d.message;
+
+        // state: 0=IDLE, 1=CHECKING, 2=DOWNLOADING, 3=VERIFYING, 4=SWITCHING, 5=DONE, 6=ERROR, 7=NO_UPDATE
+        if (d.state === 5) {
+          // DONE
+          clearInterval(guiOtaPollingTimer);
+          guiOtaPollingTimer = null;
+          if (txt) txt.textContent = t('ota.gui_update_success');
+          setTimeout(function() { location.reload(); }, 2000);
+        } else if (d.state === 6) {
+          // ERROR
+          clearInterval(guiOtaPollingTimer);
+          guiOtaPollingTimer = null;
+          if (txt) txt.textContent = t('ota.gui_update_error') + ': ' + d.message;
+          var btn = document.getElementById('updateGuiBtn');
+          if (btn) btn.disabled = false;
+        } else if (d.state === 7) {
+          // NO_UPDATE
+          clearInterval(guiOtaPollingTimer);
+          guiOtaPollingTimer = null;
+          if (progressSection) progressSection.className = 'setting-section hidden';
+          alert(t('ota.gui_already_latest'));
+          var btn2 = document.getElementById('updateGuiBtn');
+          if (btn2) btn2.disabled = false;
+        }
+      })
+      .catch(function() {});
+  }, 2000);
 }
 
 var updateGuiBtn2 = document.getElementById('updateGuiBtn');
 if (updateGuiBtn2) {
   updateGuiBtn2.addEventListener('click', function() {
-    alert(t('alert.gui_update_not_ready'));
+    if (!confirm(t('ota.confirm_gui_update'))) return;
+    this.disabled = true;
+
+    // Kaynak parametrelerini topla
+    var source = 'official';
+    var radios = document.querySelectorAll('input[name="guiOtaSource"]');
+    for (var i = 0; i < radios.length; i++) {
+      if (radios[i].checked) source = radios[i].value;
+    }
+
+    var body = { source: source };
+    if (source === 'custom') {
+      var repoUrl = document.getElementById('guiRepoUrl');
+      var branch = document.getElementById('guiBranch');
+      if (repoUrl) body.repo_url = repoUrl.value;
+      if (branch) body.branch = branch.value;
+    }
+
+    fetch('/api/gui-ota/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        startGuiOtaPolling();
+      } else {
+        alert(d.message || t('ota.gui_update_error'));
+        updateGuiBtn2.disabled = false;
+      }
+    })
+    .catch(function() {
+      alert(t('alert.connection_error'));
+      updateGuiBtn2.disabled = false;
+    });
+  });
+}
+
+var rollbackGuiBtn = document.getElementById('rollbackGuiBtn');
+if (rollbackGuiBtn) {
+  rollbackGuiBtn.addEventListener('click', function() {
+    if (!confirm(t('ota.confirm_rollback'))) return;
+
+    fetch('/api/gui-ota/rollback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        alert(t('ota.rollback_success'));
+        setTimeout(function() { location.reload(); }, 1000);
+      } else {
+        alert(d.message || t('ota.gui_update_error'));
+      }
+    })
+    .catch(function() {
+      alert(t('alert.connection_error'));
+    });
   });
 }
 

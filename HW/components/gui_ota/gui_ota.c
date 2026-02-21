@@ -6,6 +6,7 @@
 
 #include "gui_ota.h"
 #include "ext_flash.h"
+#include "device_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_log.h"
@@ -354,6 +355,7 @@ static void gui_ota_task(void *arg)
     }
 
     ESP_LOGI(TAG, "Guncelleme mevcut: v%s -> v%s", current_version, remote_version);
+    device_log_add(LOG_TYPE_OTA, "GUI OTA baslatildi: v%s -> v%s", current_version, remote_version);
 
     // 4. Inaktif slot'u belirle ve temizle
     set_status(GUI_OTA_DOWNLOADING, "Hedef slot hazirlaniyor...");
@@ -389,6 +391,7 @@ static void gui_ota_task(void *arg)
         if (err != ESP_OK) {
             char err_msg[128];
             snprintf(err_msg, sizeof(err_msg), "%s indirilemedi", s_file_list[i]);
+            device_log_add(LOG_TYPE_OTA, "GUI OTA hata: %s", err_msg);
             set_status(GUI_OTA_ERROR, err_msg);
             goto done;
         }
@@ -424,6 +427,7 @@ static void gui_ota_task(void *arg)
     }
 
     ESP_LOGI(TAG, "GUI OTA tamamlandi! Yeni aktif slot: %c, v%s", new_slot, remote_version);
+    device_log_add(LOG_TYPE_OTA, "GUI OTA tamamlandi: v%s (slot %c)", remote_version, new_slot);
     set_status(GUI_OTA_DONE, "Guncelleme tamamlandi!");
     set_progress(file_count, file_count, 100);
 
@@ -508,6 +512,7 @@ esp_err_t gui_ota_rollback(void)
     esp_err_t err = ext_flash_set_active_slot(target);
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Rollback basarili: slot %c -> %c", current, target);
+        device_log_add(LOG_TYPE_OTA, "GUI rollback: slot %c -> %c", current, target);
     }
     return err;
 }

@@ -1387,6 +1387,34 @@ body {
   border-left-color: #f44336;
 }
 
+.log-item.log-ota {
+  border-left-color: #8b5cf6;
+}
+
+.log-item.log-restart {
+  border-left-color: #ec4899;
+}
+
+.log-item.log-hw {
+  border-left-color: #f97316;
+}
+
+.log-boot-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  margin-top: 4px;
+}
+
+.log-boot-divider {
+  height: 1px;
+  background: #333;
+  margin: 8px 0 4px;
+}
+
 .log-time {
   font-size: 11px;
   color: #888;
@@ -1409,6 +1437,9 @@ body {
 .log-type.type-timer { background: #451a03; color: #fcd34d; }
 .log-type.type-smtp { background: #042f2e; color: #67e8f9; }
 .log-type.type-error { background: #450a0a; color: #fca5a5; }
+.log-type.type-ota { background: #2e1065; color: #c4b5fd; }
+.log-type.type-restart { background: #500724; color: #f9a8d4; }
+.log-type.type-hw { background: #431407; color: #fdba74; }
 
 .log-text {
   font-size: 13px;
@@ -2707,6 +2738,23 @@ body.light-theme .log-item {
 
 body.light-theme .log-text {
   color: #1a1a1a;
+}
+
+body.light-theme .log-type.type-system { background: #e0e7ff; color: #3730a3; }
+body.light-theme .log-type.type-wifi { background: #dcfce7; color: #166534; }
+body.light-theme .log-type.type-timer { background: #fef3c7; color: #92400e; }
+body.light-theme .log-type.type-smtp { background: #cffafe; color: #155e75; }
+body.light-theme .log-type.type-error { background: #fee2e2; color: #991b1b; }
+body.light-theme .log-type.type-ota { background: #ede9fe; color: #5b21b6; }
+body.light-theme .log-type.type-restart { background: #fce7f3; color: #9d174d; }
+body.light-theme .log-type.type-hw { background: #ffedd5; color: #9a3412; }
+
+body.light-theme .log-boot-header {
+  color: #999;
+}
+
+body.light-theme .log-boot-divider {
+  background: #e0e0e0;
 }
 
 body.light-theme .log-time {
