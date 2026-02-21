@@ -1266,9 +1266,22 @@
               <span class='ota-status-value' id='currentFirmwareVersion'>-</span>
             </div>
             <div class='ota-status-header'>
-              <span class='ota-status-label' data-i18n='ota.last_check'>Last Check</span>
-              <span class='ota-status-value' id='lastHwOtaCheck' data-i18n='ota.never_checked'>Never checked</span>
+              <span class='ota-status-label' data-i18n='ota.running_partition'>Partition</span>
+              <span class='ota-status-value' id='runningPartition'>-</span>
             </div>
+            <div class='ota-status-header hidden' id='fwRemoteVersionRow'>
+              <span class='ota-status-label' data-i18n='ota.available_version'>Available Version</span>
+              <span class='ota-status-value' id='remoteFirmwareVersion'>-</span>
+            </div>
+          </div>
+        </div>
+        <div class='setting-section hidden' id='fwOtaProgressSection'>
+          <h4 class='section-title' data-i18n='ota.progress_title'>Update Progress</h4>
+          <div class='progress-container'>
+            <div class='progress-bar'>
+              <div class='progress-fill' id='fwOtaProgressBar' style='width:0%'></div>
+            </div>
+            <p class='progress-text' id='fwOtaProgressText'>-</p>
           </div>
         </div>
         <div class='setting-section'>
@@ -1301,7 +1314,7 @@
                 </div>
                 <div class='source-info'>
                   <span class='source-title' data-i18n='ota.custom'>Custom Source</span>
-                  <span class='source-desc' data-i18n='ota.custom_desc'>Update from your own GitHub repo</span>
+                  <span class='source-desc' data-i18n='ota.custom_desc'>Direct URL to firmware binary</span>
                 </div>
                 <span class='source-badge developer' data-i18n='ota.developer'>Developer</span>
               </div>
@@ -1324,8 +1337,8 @@
         <div class='setting-section hidden' id='hwOtaCustomSection'>
           <h4 class='section-title' data-i18n='ota.custom_config'>Custom Source Configuration</h4>
           <div class='input-group'>
-            <label class='input-label' data-i18n='ota.server_url'>OTA Server URL</label>
-            <input type='url' class='input' id='otaServerUrl' placeholder='https://github.com/user/repo/releases'>
+            <label class='input-label' data-i18n='ota.server_url'>Firmware Binary URL</label>
+            <input type='url' class='input' id='otaServerUrl' placeholder='https://example.com/firmware.bin'>
           </div>
         </div>
         <div class='setting-section'>
@@ -1335,6 +1348,32 @@
               <path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path>
             </svg>
             <span data-i18n='ota.check_btn'>Check for Updates</span>
+          </button>
+        </div>
+        <div class='setting-section hidden' id='fwStartSection'>
+          <button class='btn-sys btn-primary' id='startFirmwareUpdateBtn' style='width:100%'>
+            <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
+              <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'></path>
+              <polyline points='7 10 12 15 17 10'></polyline>
+              <line x1='12' y1='15' x2='12' y2='3'></line>
+            </svg>
+            <span data-i18n='ota.fw_update_btn'>Download &amp; Install</span>
+          </button>
+        </div>
+        <div class='setting-section hidden' id='fwRestartSection'>
+          <button class='btn-sys btn-accent' id='fwOtaRestartBtn' style='width:100%'>
+            <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
+              <polyline points='23 4 23 10 17 10'></polyline>
+              <path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path>
+            </svg>
+            <span data-i18n='ota.restart_btn'>Restart to Apply Update</span>
+          </button>
+        </div>
+        <div class='setting-section hidden' id='fwRollbackSection'>
+          <h4 class='section-title' data-i18n='ota.fw_rollback_title'>Rollback</h4>
+          <p class='section-desc' id='fwRollbackInfo'>-</p>
+          <button class='btn-sys' id='fwRollbackBtn' style='width:100%'>
+            <span data-i18n='ota.fw_rollback_btn'>Rollback Firmware</span>
           </button>
         </div>
       </div>
@@ -1351,11 +1390,27 @@
               <span class='ota-status-value' id='currentGuiVersion'>-</span>
             </div>
             <div class='ota-status-header'>
-              <span class='ota-status-label' data-i18n='ota.ext_flash'>External Flash</span>
-              <span class='ota-status-value' id='extFlashStatus'>-</span>
+              <span class='ota-status-label' data-i18n='ota.active_slot'>Active Slot</span>
+              <span class='ota-status-value' id='activeGuiSlot'>-</span>
+            </div>
+            <div class='ota-status-header'>
+              <span class='ota-status-label' data-i18n='ota.inactive_slot_version'>Inactive Slot Version</span>
+              <span class='ota-status-value' id='inactiveSlotVersion'>-</span>
             </div>
           </div>
         </div>
+
+        <!-- Progress Bar (gizli, OTA sirasinda gorunur) -->
+        <div class='setting-section hidden' id='guiOtaProgressSection'>
+          <h4 class='section-title' data-i18n='ota.progress_title'>Update Progress</h4>
+          <div class='progress-container'>
+            <div class='progress-bar'>
+              <div class='progress-fill' id='guiOtaProgressBar' style='width:0%'></div>
+            </div>
+            <p class='progress-text' id='guiOtaProgressText'>-</p>
+          </div>
+        </div>
+
         <div class='setting-section'>
           <h4 class='section-title' data-i18n='ota.source_title'>Update Source</h4>
           <p class='section-desc' data-i18n='ota.source_desc'>Choose where to get updates from</p>
@@ -1422,15 +1477,6 @@
           </div>
         </div>
         <div class='setting-section'>
-          <h4 class='section-title' data-i18n='ota.files_title'>Files to Update</h4>
-          <div class='checkbox-list'>
-            <label class='checkbox-item'><input type='checkbox' checked><span>index.html</span></label>
-            <label class='checkbox-item'><input type='checkbox' checked><span>style.css</span></label>
-            <label class='checkbox-item'><input type='checkbox' checked><span>app.js</span></label>
-            <label class='checkbox-item'><input type='checkbox' checked><span>config.json</span></label>
-          </div>
-        </div>
-        <div class='setting-section'>
           <button class='btn-sys btn-primary' id='updateGuiBtn' style='width:100%'>
             <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
               <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'></path>
@@ -1438,6 +1484,15 @@
               <line x1='12' y1='15' x2='12' y2='3'></line>
             </svg>
             <span data-i18n='ota.gui_update_btn'>Update Web Interface</span>
+          </button>
+        </div>
+        <div class='setting-section hidden' id='rollbackSection'>
+          <button class='btn-sys' id='rollbackGuiBtn' style='width:100%'>
+            <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
+              <path d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'/>
+              <path d='M3 3v5h5'/>
+            </svg>
+            <span data-i18n='ota.rollback_btn'>Rollback to Previous Version</span>
           </button>
         </div>
       </div>
@@ -1577,8 +1632,8 @@
       <!-- Loglar Subpage -->
       <div class='subpage hidden' id='logsSubpage'>
         <div class='setting-section'>
-          <h4 class='section-title' data-i18n='logs.title'>Error Logs</h4>
-          <p class='section-desc' data-i18n='logs.desc'>System error and warning records</p>
+          <h4 class='section-title' data-i18n='logs.title'>Device Logs</h4>
+          <p class='section-desc' data-i18n='logs.desc'>System events, restarts, updates and error records</p>
 
           <div class='log-list' id='logList'>
           </div>

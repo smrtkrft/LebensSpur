@@ -708,6 +708,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
 static esp_err_t api_device_restart_handler(httpd_req_t *req)
 {
     ESP_LOGW(TAG, "Yeniden baslatma istegi alindi (web)");
+    device_log_add(LOG_TYPE_RESTART, "Kullanici restart istegi (web)");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
     vTaskDelay(pdMS_TO_TICKS(500));
@@ -807,16 +808,18 @@ static esp_err_t api_relay_test_handler(httpd_req_t *req)
     return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
 }
 
-// GET /api/logs - Son log kayitlari
+// GET /api/logs - Son log kayitlari (kalici, max 100 kayit)
 static esp_err_t api_logs_handler(httpd_req_t *req)
 {
-    char *buf = malloc(4096);
+    // 100 kayit * ~250 byte = ~25KB, chunked gonderim gereksiz
+    #define LOG_BUF_SIZE (28 * 1024)
+    char *buf = malloc(LOG_BUF_SIZE);
     if (!buf) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
         return ESP_FAIL;
     }
 
-    device_log_to_json(buf, 4096, 0);
+    device_log_to_json(buf, LOG_BUF_SIZE, 0);
     httpd_resp_set_type(req, "application/json");
     esp_err_t ret = httpd_resp_send(req, buf, strlen(buf));
     free(buf);
@@ -2080,7 +2083,7 @@ esp_err_t web_server_start(void)
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 50;
     config.stack_size = 8192;
-    config.max_open_sockets = 13;   // varsayilan 7, SSE + dosya servisi icin arttirildi
+    config.max_open_sockets = 7;    // LWIP varsayilan max (lru_purge ile yeterli)
     config.lru_purge_enable = true;  // soket dolunca en eski idle baglantiyi kapat
 
     esp_err_t ret = httpd_start(&s_server, &config);

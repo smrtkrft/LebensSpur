@@ -354,6 +354,23 @@ void app_main(void)
         device_log_add(LOG_TYPE_ERROR, "Harici flash hatasi: %s", esp_err_to_name(ret));
     } else {
         ESP_LOGI(TAG, "Harici flash baslatildi (32MB)");
+        // Kalici loglari flash'tan yukle (ext_flash hazir)
+        device_log_persist_init();
+        // Boot/restart olayi logla
+        const char *rst_reason;
+        switch (esp_reset_reason()) {
+            case ESP_RST_POWERON:   rst_reason = "Power on"; break;
+            case ESP_RST_SW:        rst_reason = "Software restart"; break;
+            case ESP_RST_PANIC:     rst_reason = "Panic/crash"; break;
+            case ESP_RST_INT_WDT:   rst_reason = "Interrupt WDT"; break;
+            case ESP_RST_TASK_WDT:  rst_reason = "Task WDT"; break;
+            case ESP_RST_WDT:       rst_reason = "Watchdog"; break;
+            case ESP_RST_DEEPSLEEP: rst_reason = "Deep sleep"; break;
+            case ESP_RST_BROWNOUT:  rst_reason = "Brownout (dusuk voltaj)"; break;
+            default:                rst_reason = "Bilinmeyen"; break;
+        }
+        device_log_add(LOG_TYPE_RESTART, "Sistem basladi (boot #%lu) - Neden: %s",
+                       (unsigned long)device_log_get_boot_count(), rst_reason);
         // Varsayilan web dosyalarini olustur (yoksa)
         ext_flash_create_default_files();
     }
@@ -440,6 +457,8 @@ void app_main(void)
         device_log_add(LOG_TYPE_ERROR, "Web server hatasi: %s", esp_err_to_name(ret));
     } else {
         ESP_LOGI(TAG, "Web server baslatildi");
+        device_log_add(LOG_TYPE_SYSTEM, "Sistem hazir (slot:%c)",
+                       ext_flash_get_active_slot());
     }
 
     // OTA rollback korumasi: basarili boot'u onayla

@@ -78,7 +78,7 @@ esp_err_t system_info_get(system_info_t *info)
     }
 
     /* FW version */
-    strncpy(info->fw_version, "0.0.67", sizeof(info->fw_version)-1);
+    strncpy(info->fw_version, "0.0.69", sizeof(info->fw_version)-1);
 
     return ESP_OK;
 }

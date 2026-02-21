@@ -5,6 +5,7 @@
  */
 
 #include "fw_ota.h"
+#include "device_log.h"
 #include "esp_https_ota.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -314,12 +315,16 @@ static void fw_ota_download_task(void *arg)
         set_progress(100);
         set_status(FW_OTA_DONE, "Guncelleme tamamlandi! Yeniden baslatma gerekli.");
         update_rollback_info();
+        device_log_add(LOG_TYPE_OTA, "FW OTA tamamlandi: v%s -> v%s",
+                       s_status.current_version, s_status.remote_version);
     } else if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
         ESP_LOGE(TAG, "Firmware dogrulama hatasi");
         set_status(FW_OTA_ERROR, "Firmware dogrulama basarisiz");
+        device_log_add(LOG_TYPE_OTA, "FW OTA hata: dogrulama basarisiz");
     } else {
         ESP_LOGE(TAG, "OTA finish hatasi: %s", esp_err_to_name(err));
         set_status(FW_OTA_ERROR, "Firmware yazma hatasi");
+        device_log_add(LOG_TYPE_OTA, "FW OTA hata: %s", esp_err_to_name(err));
     }
 
 done:
@@ -457,6 +462,7 @@ esp_err_t fw_ota_rollback(void)
 
     ESP_LOGI(TAG, "Rollback ayarlandi: %s (v%s) -> restart gerekli",
              other->label, desc.version);
+    device_log_add(LOG_TYPE_OTA, "FW rollback: %s (v%s)", other->label, desc.version);
     return ESP_OK;
 }
 
