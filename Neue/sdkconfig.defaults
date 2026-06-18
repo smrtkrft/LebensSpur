@@ -1,0 +1,51 @@
+# LebensSpur — sdkconfig defaults.
+CONFIG_IDF_TARGET="esp32c6"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# USB Serial/JTAG carries the boot log and the CLI (sk_transport_usb).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_USB_SERIAL_JTAG_ENABLED=y
+CONFIG_ESP_CONSOLE_HISTORY_BUFFER_SIZE=2048
+
+# Bootloader rollback enabled - required by sk_ota.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Custom partition table - A/B OTA (1.9 MB each), no userdata partition.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# === Bluetooth / NimBLE host stack (sk_transport_ble) =================
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+# NimBLE host task stack — Curve25519/ECDH altinda 4096 yetmez, BF'de
+# de 8192'ye cikarilmis (BF sdkconfig'den miras).
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192
+# Peripheral + broadcaster (LS reklam yapar, central olarak baglanmaz).
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
+CONFIG_BT_NIMBLE_GATT_SERVER=y
+CONFIG_BT_NIMBLE_SECURITY_ENABLE=y
+CONFIG_BT_NIMBLE_SM_SC=y
+
+# ESP-IDF default event loop ("sys_evt") task stack - WiFi STA_CONNECTED
+# + GOT_IP fan-out altinda 2304 byte default'unda overflow yapar.
+# BF tarafindan 6144'e cikarilmis.
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=6144
+
+# TLS certificate bundle - sk_api + ls_smtp outbound HTTPS dogrulamasi icin.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# NVS without encryption - dev boards icin tamam; production'da acilir.
+CONFIG_NVS_ENCRYPTION=n
+
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+
+# Bootloader log level WARN - boot dizisindeki verbose "I (xx) boot:"
+# satirlarini sustur.
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+CONFIG_BOOTLOADER_LOG_LEVEL=2

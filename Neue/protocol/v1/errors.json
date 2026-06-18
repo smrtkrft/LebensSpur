@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LebensSpur v1 — LS-relevant error code catalog",
+  "description": "LS CLI komutlarının dönebileceği ERR_* kodları. Tam katalog sk_core/include/sk_errors.h'da yaşar; burada sadece LS yüzeyinden çıkanlar listelenir.",
+  "version": "1.0.0",
+  "device_prefix": "LS",
+  "errors": {
+    "ERR_INVALID_ARG":         "Argument is invalid (örn: timer.set value > 60)",
+    "ERR_MISSING_ARG":         "Required argument is missing (örn: mail.group.recipient.add --email yok)",
+    "ERR_NOT_FOUND":           "Hedef bulunamadı (örn: silinen mail group id)",
+    "ERR_BUSY":                "Cihaz/component meşgul (örn: relay zaten fire ediyor, mail group slots full)",
+    "ERR_INVALID_UNIT":        "Geçersiz birim (timer.set unit day/hour/minute dışında)",
+    "ERR_INVALID_VALUE":       "Değer range dışı (1..60 sınırı aşıldı)",
+
+    "ERR_NVS_READ":            "NVS okuma hatası",
+    "ERR_NVS_WRITE":           "NVS yazma hatası",
+    "ERR_NVS_FULL":            "NVS namespace dolu",
+
+    "ERR_SMTP_NO_CONFIG":      "SMTP henüz yapılandırılmamış (host/sender boş)",
+    "ERR_SMTP_AUTH":           "SMTP AUTH LOGIN reddedildi (sender/api_key yanlış)",
+    "ERR_SMTP_CONNECT":        "SMTP sunucusuna bağlanamadı veya protokol akışı bozuldu",
+    "ERR_SMTP_TLS":            "TLS handshake başarısız (sertifika veya sunucu çökmesi)",
+    "ERR_INVALID_EMAIL":       "Email adresi format olarak geçersiz (Faz 1.6 hardening ekleyecek)",
+
+    "ERR_WIFI_NOT_CONNECTED":  "WiFi STA bağlı değil (smtp gönderimi başarısız olabilir)",
+    "ERR_API_TIMEOUT":         "Outbound HTTP timeout",
+    "ERR_API_CONNECT":         "Outbound HTTP connect başarısız",
+    "ERR_API_TLS":             "Outbound HTTP TLS başarısız",
+    "ERR_API_BAD_STATUS":      "Outbound HTTP 2xx dışı status döndü",
+
+    "ERR_BLE_NO_BOND":         "Henüz eşleşmemiş; pairing gerekli",
+    "ERR_PAIRING_MODE_CLOSED": "Pairing penceresi kapalı; butona kısa bas",
+    "ERR_NOT_AUTHENTICATED":   "Komut auth gerektirir ama transport handshake'ten geçmemiş",
+    "ERR_NONCE_REPLAY":        "HMAC nonce daha önce kullanılmış",
+    "ERR_HMAC_INVALID":        "HMAC envelope verify başarısız",
+
+    "ERR_CONFIRM_TOKEN_REQUIRED": "Critical komut için confirm token şart (örn: factory_reset)",
+    "ERR_CONFIRM_TOKEN_INVALID":  "Confirm token geçersiz veya süresi geçti"
+  }
+}
