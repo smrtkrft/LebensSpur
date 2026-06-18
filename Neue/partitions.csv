@@ -1,0 +1,8 @@
+# LebensSpur partition table - 4MB flash, OTA enabled (A/B).
+# LS'in userdata gereksinimi yok (mail attachment Faz 1 disi); 1.9 MB ota slot.
+# Name,     Type, SubType,  Offset,    Size
+nvs,        data, nvs,      0x9000,    0x6000
+phy_init,   data, phy,      0xf000,    0x1000
+otadata,    data, ota,      0x10000,   0x2000
+ota_0,      app,  ota_0,    0x20000,   0x1F0000
+ota_1,      app,  ota_1,    0x210000,  0x1F0000

@@ -1,0 +1,606 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LebensSpur v1 - LS-specific CLI commands",
+  "description": "LS-ozgu CLI komut sozlesmesi. sk_core'un sagladigi zorunlu komutlar (device.*, ble.*, wifi.*, ota.*, logs.*, bond.*, auth.*, api.*, pairing.*) burada listelenmez - onlar tum SmartKraft cihazlarda ayni ve sk_core protocol'a aittir.",
+  "version": "1.2.0",
+  "device_prefix": "LS",
+  "ux_notes": {
+    "dual_mode": "Her komut iki modu da destekler. Human mode: pozisyonel + keyword cifti, '--flag' YASAKTIR. Machine mode: NDJSON {\"id\":N,\"cmd\":\"timer.set\",\"args\":{...}} - keyword adlari JSON anahtarlari ile birebir esler. Handler her iki modu sk_cli_arg / sk_cli_arg_after ile ortak okur (bkz. CLI_STYLE.md).",
+    "human_input_example": "LS-X> timer set minute 2 alarm 3",
+    "machine_input_example": "{\"id\":7,\"cmd\":\"timer.set\",\"args\":{\"unit\":\"minute\",\"value\":2,\"alarms\":3}}",
+    "args_field": "Asagidaki 'args' alanlari (pozisyonel sira + keyword opsiyonel) hem CLI dispatcher hem NDJSON shape icin gecerli. 'positional' liste sirayi, 'keyword' opsiyonel anahtar-ciftleri tanimlar; ikisi de JSON modunda ayni key adi ile gonderilir."
+  },
+  "commands": {
+
+    "timer.set": {
+      "summary": "Configure countdown duration and alarm count",
+      "usage": "timer set <birim> <deger> [alarm <N>]",
+      "args": {
+        "positional": [
+          { "name": "unit",  "type": "string",  "enum": ["minute","hour","day"], "required": false },
+          { "name": "value", "type": "integer", "min": 1, "max": 60, "required": false }
+        ],
+        "keyword": {
+          "alarm": { "type": "integer", "min": 0, "max": 10, "required": false }
+        }
+      },
+      "constraint": "Hem birim hem deger verilmeli; alarm opsiyoneldir (varsayilan korunur).",
+      "response_ok_data": {
+        "unit":   { "type": "string" },
+        "value":  { "type": "integer" },
+        "alarms": { "type": "integer" }
+      },
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "timer.get": {
+      "summary": "Show current timer configuration",
+      "usage": "timer get",
+      "args": {},
+      "response_ok_data": {
+        "unit":               { "type": "string" },
+        "value":              { "type": "integer" },
+        "alarms":             { "type": "integer" },
+        "total_duration_sec": { "type": "integer" }
+      }
+    },
+
+    "timer.start": {
+      "summary": "Start the countdown from full duration",
+      "usage": "timer start",
+      "args": {},
+      "response_ok_data": null
+    },
+
+    "timer.stop": {
+      "summary": "Stop the countdown (state -> inactive)",
+      "usage": "timer stop",
+      "args": {},
+      "response_ok_data": null
+    },
+
+    "timer.reset": {
+      "summary": "Reset countdown back to full duration",
+      "usage": "timer reset",
+      "args": {
+        "keyword": {
+          "by": { "type": "string", "enum": ["manual","api"], "required": false, "default": "manual" }
+        }
+      },
+      "response_ok_data": null
+    },
+
+    "timer.status": {
+      "summary": "Show current timer runtime state",
+      "usage": "timer status",
+      "args": {},
+      "response_ok_data": {
+        "state":                  { "type": "string", "enum": ["inactive","countdown","vacation","triggered"] },
+        "remaining_sec":          { "type": "integer" },
+        "deadline_epoch":         { "type": "integer" },
+        "vacation_end_epoch":     { "type": "integer" },
+        "vacation_remaining_sec": { "type": "integer" },
+        "alarms_fired_mask":      { "type": "integer", "description": "bitmask, bit i set ise i. alarm tetiklendi" }
+      }
+    },
+
+    "vacation.set": {
+      "summary": "Enter vacation mode (pauses countdown for N days)",
+      "usage": "vacation set <gun>",
+      "args": {
+        "positional": [
+          { "name": "days", "type": "integer", "min": 1, "max": 60, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "vacation.cancel": {
+      "summary": "Exit vacation mode and resume countdown",
+      "usage": "vacation cancel",
+      "args": {},
+      "response_ok_data": null
+    },
+
+    "relay.gpio": {
+      "summary": "Set relay output GPIO pin",
+      "usage": "relay gpio <N>",
+      "args": {
+        "positional": [
+          { "name": "gpio", "type": "integer", "min": 0, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "relay.invert": {
+      "summary": "Set relay polarity (idle/active level)",
+      "usage": "relay invert <on|off>",
+      "args": {
+        "positional": [
+          { "name": "invert", "type": "string", "enum": ["on","off","true","false","1","0"], "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "relay.delay": {
+      "summary": "Set start delay before relay activates",
+      "usage": "relay delay <sn>",
+      "args": {
+        "positional": [
+          { "name": "delay", "type": "integer", "min": 0, "max": 10, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "relay.duration": {
+      "summary": "Set total active duration",
+      "usage": "relay duration <sn>",
+      "args": {
+        "positional": [
+          { "name": "duration", "type": "integer", "min": 1, "max": 3600, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "relay.pulse": {
+      "summary": "Toggle pulse mode or set pulse half-cycle",
+      "usage": "relay pulse <on|off> | relay pulse <sn>",
+      "args": {
+        "positional": [
+          { "name": "pulse", "type": "string|integer", "description": "on/off pulse modunu actirir/kapatir; 1..60 sayi yarim periyot saniyesini yazar", "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "relay.get": {
+      "summary": "Show current relay configuration",
+      "usage": "relay get",
+      "args": {},
+      "response_ok_data": {
+        "gpio":               { "type": "integer" },
+        "invert":             { "type": "boolean" },
+        "delay_sec":          { "type": "integer" },
+        "duration_sec":       { "type": "integer" },
+        "pulse":              { "type": "boolean" },
+        "pulse_duration_sec": { "type": "integer" }
+      }
+    },
+
+    "relay.test": {
+      "summary": "Manually fire the relay using current config",
+      "usage": "relay test",
+      "args": {},
+      "response_ok_data": null,
+      "errors": ["ERR_INVALID_ARG","ERR_BUSY"]
+    },
+
+    "relay.fire": {
+      "summary": "Hidden alias of relay.test",
+      "usage": "relay fire",
+      "hidden": true,
+      "args": {},
+      "response_ok_data": null,
+      "errors": ["ERR_INVALID_ARG","ERR_BUSY"]
+    },
+
+    "relay.abort": {
+      "summary": "Abort an in-progress fire sequence",
+      "usage": "relay abort",
+      "args": {},
+      "response_ok_data": null,
+      "errors": ["ERR_BUSY"]
+    },
+
+    "relay.off": {
+      "summary": "Force relay to idle (also aborts in-progress fire). Kill-switch.",
+      "usage": "relay off",
+      "args": {},
+      "response_ok_data": null
+    },
+
+    "relay.status": {
+      "summary": "Show current relay runtime status",
+      "usage": "relay status",
+      "args": {},
+      "response_ok_data": {
+        "phase":           { "type": "string", "enum": ["idle","delaying","active","pulsing"] },
+        "gpio":            { "type": "integer" },
+        "gpio_level":      { "type": "integer", "description": "anlik cikis level (0/1, -1 = configured yok)" },
+        "active":          { "type": "boolean" },
+        "fire_started_us": { "type": "integer" }
+      }
+    },
+
+    "smtp.host": {
+      "summary": "Set SMTPS server hostname",
+      "usage": "smtp host <sunucu>",
+      "args": {
+        "positional": [
+          { "name": "host", "type": "string", "maxLength": 127, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "smtp.port": {
+      "summary": "Set SMTPS port (1..65535)",
+      "usage": "smtp port <N>",
+      "args": {
+        "positional": [
+          { "name": "port", "type": "integer", "min": 1, "max": 65535, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "smtp.sender": {
+      "summary": "Set sender email (also SMTP AUTH user)",
+      "usage": "smtp sender <email>",
+      "args": {
+        "positional": [
+          { "name": "sender", "type": "string", "maxLength": 127, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "smtp.key": {
+      "summary": "Set SMTP AUTH password / App Password / API key",
+      "usage": "smtp key <api_key>",
+      "args": {
+        "positional": [
+          { "name": "api_key", "type": "string", "maxLength": 191, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "smtp.get": {
+      "summary": "Show SMTP configuration (api_key masked)",
+      "usage": "smtp get",
+      "args": {},
+      "response_ok_data": {
+        "host":    { "type": "string" },
+        "port":    { "type": "integer" },
+        "sender":  { "type": "string" },
+        "api_key": { "type": "string", "description": "'(set, N chars)' veya bos" }
+      }
+    },
+
+    "smtp.save": {
+      "summary": "Save host+port+sender+key atomically (one NVS commit)",
+      "usage": "smtp save [host <h>] [port <N>] [sender <e>] [key <k>]",
+      "args": {
+        "keyword": {
+          "host":   { "type": "string",  "maxLength": 127, "required": false },
+          "port":   { "type": "integer", "min": 1, "max": 65535, "required": false },
+          "sender": { "type": "string",  "maxLength": 127, "required": false },
+          "key":    { "type": "string",  "maxLength": 191, "required": false }
+        }
+      },
+      "constraint": "En az bir alan verilmeli; verilmeyen alan korunur. Tümü tek NVS commit'inde yazılır (partial-state riski yok). SKAPP formu tek seferde push eder.",
+      "response_ok_data": {
+        "host":    { "type": "string" },
+        "port":    { "type": "integer" },
+        "sender":  { "type": "string" },
+        "api_key": { "type": "string", "description": "'(set, N chars)' veya bos" }
+      },
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_INVALID_EMAIL"]
+    },
+
+    "smtp.test": {
+      "summary": "Send a test mail to the configured sender",
+      "usage": "smtp test",
+      "args": {},
+      "response_ok_data": null,
+      "errors": ["ERR_SMTP_NO_CONFIG","ERR_SMTP_TLS","ERR_SMTP_AUTH","ERR_SMTP_CONNECT"]
+    },
+
+    "reminder.enable": {
+      "summary": "Enable/disable early-warning reminder mail (fires on timer.alarm)",
+      "usage": "reminder enable <on|off>",
+      "args": {
+        "positional": [
+          { "name": "enabled", "type": "string", "enum": ["on","off","true","false","1","0"], "required": true }
+        ]
+      },
+      "response_ok_data": {
+        "enabled": { "type": "boolean" }
+      },
+      "errors": ["ERR_MISSING_ARG"]
+    },
+
+    "reminder.subject": {
+      "summary": "Set the reminder mail subject (multi-word)",
+      "usage": "reminder subject <metin>",
+      "args": {
+        "positional": [
+          { "name": "subject", "type": "string", "maxLength": 127, "required": true }
+        ]
+      },
+      "constraint": "Çok kelimeli; human mode argümanları boşlukla birleştirir, machine mode 'subject' anahtarı.",
+      "response_ok_data": {
+        "subject": { "type": "string" }
+      },
+      "errors": ["ERR_MISSING_ARG"]
+    },
+
+    "reminder.body": {
+      "summary": "Set the reminder mail body (multi-word, plain text)",
+      "usage": "reminder body <metin>",
+      "args": {
+        "positional": [
+          { "name": "body", "type": "string", "maxLength": 511, "required": true }
+        ]
+      },
+      "response_ok_data": {
+        "body_len": { "type": "integer", "description": "kaydedilen body uzunluğu (tam metin için reminder get)" }
+      },
+      "errors": ["ERR_MISSING_ARG"]
+    },
+
+    "reminder.recipient.add": {
+      "summary": "Add a reminder recipient (max 10)",
+      "usage": "reminder recipient add <email>",
+      "args": {
+        "positional": [
+          { "name": "email", "type": "string", "maxLength": 95, "required": true }
+        ]
+      },
+      "constraint": "'@' içermeli; case-insensitive duplicate reddedilir; 10 alıcı sınırı.",
+      "response_ok_data": {
+        "email": { "type": "string" },
+        "count": { "type": "integer" }
+      },
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_BUSY"]
+    },
+
+    "reminder.recipient.remove": {
+      "summary": "Remove a reminder recipient",
+      "usage": "reminder recipient remove <email>",
+      "args": {
+        "positional": [
+          { "name": "email", "type": "string", "maxLength": 95, "required": true }
+        ]
+      },
+      "response_ok_data": {
+        "email": { "type": "string" },
+        "count": { "type": "integer" }
+      },
+      "errors": ["ERR_MISSING_ARG","ERR_NOT_FOUND"]
+    },
+
+    "reminder.get": {
+      "summary": "Show reminder configuration",
+      "usage": "reminder get",
+      "args": {},
+      "response_ok_data": {
+        "enabled":    { "type": "boolean" },
+        "subject":    { "type": "string" },
+        "body":       { "type": "string" },
+        "recipients": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "reminder.test": {
+      "summary": "Send the reminder mail once, now (ignores enabled flag)",
+      "usage": "reminder test",
+      "args": {},
+      "constraint": "SMTP yapılandırılmış ve en az 1 alıcı olmalı.",
+      "response_ok_data": {
+        "ok":         { "type": "boolean" },
+        "recipients": { "type": "integer" }
+      },
+      "errors": ["ERR_NOT_FOUND","ERR_SMTP_NO_CONFIG","ERR_SMTP_TLS","ERR_SMTP_AUTH","ERR_SMTP_CONNECT"]
+    },
+
+    "mail.group.add": {
+      "summary": "Create a new mail group (returns id)",
+      "usage": "mail group add <isim>",
+      "args": {
+        "positional": [
+          { "name": "name", "type": "string", "maxLength": 47, "required": false }
+        ]
+      },
+      "response_ok_data": {
+        "id": { "type": "integer", "min": 0, "max": 9 }
+      },
+      "errors": ["ERR_BUSY"]
+    },
+
+    "mail.group.delete": {
+      "summary": "Delete a mail group",
+      "usage": "mail group delete <id>",
+      "args": {
+        "positional": [
+          { "name": "id", "type": "integer", "min": 0, "max": 9, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.enable": {
+      "summary": "Enable/disable a mail group",
+      "usage": "mail group enable <id> <on|off>",
+      "args": {
+        "positional": [
+          { "name": "id",      "type": "integer", "min": 0, "max": 9, "required": true },
+          { "name": "enabled", "type": "string",  "enum": ["on","off","true","false","1","0"], "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.name": {
+      "summary": "Rename a mail group",
+      "usage": "mail group name <id> <yeni isim>",
+      "args": {
+        "positional": [
+          { "name": "id",   "type": "integer", "min": 0, "max": 9, "required": true },
+          { "name": "name", "type": "string",  "maxLength": 47, "required": true, "description": "Cok kelimeli; mode satirinin geri kalanini birlestirir" }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.subject": {
+      "summary": "Set mail group subject (multi-word)",
+      "usage": "mail group subject <id> <konu>",
+      "args": {
+        "positional": [
+          { "name": "id",      "type": "integer", "min": 0, "max": 9, "required": true },
+          { "name": "subject", "type": "string",  "maxLength": 127, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.body": {
+      "summary": "Set mail group body (multi-word)",
+      "usage": "mail group body <id> <metin>",
+      "args": {
+        "positional": [
+          { "name": "id",   "type": "integer", "min": 0, "max": 9, "required": true },
+          { "name": "body", "type": "string",  "maxLength": 511, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.list": {
+      "summary": "List all configured groups",
+      "usage": "mail group list",
+      "args": {},
+      "response_ok_data": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "id":         { "type": "integer" },
+            "name":       { "type": "string" },
+            "enabled":    { "type": "boolean" },
+            "recipients": { "type": "integer" }
+          }
+        }
+      }
+    },
+
+    "mail.group.get": {
+      "summary": "Show a single group's full detail",
+      "usage": "mail group get <id>",
+      "args": {
+        "positional": [
+          { "name": "id", "type": "integer", "min": 0, "max": 9, "required": true }
+        ]
+      },
+      "response_ok_data": {
+        "id":         { "type": "integer" },
+        "name":       { "type": "string" },
+        "enabled":    { "type": "boolean" },
+        "subject":    { "type": "string" },
+        "body":       { "type": "string" },
+        "recipients": { "type": "array", "items": { "type": "string" } }
+      },
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.recipient.add": {
+      "summary": "Add an email recipient to a group",
+      "usage": "mail group recipient add <id> <email>",
+      "args": {
+        "positional": [
+          { "name": "id",    "type": "integer", "required": true },
+          { "name": "email", "type": "string",  "maxLength": 95, "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_BUSY","ERR_NOT_FOUND"]
+    },
+
+    "mail.group.recipient.remove": {
+      "summary": "Remove an email recipient from a group",
+      "usage": "mail group recipient remove <id> <email>",
+      "args": {
+        "positional": [
+          { "name": "id",    "type": "integer", "required": true },
+          { "name": "email", "type": "string",  "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG","ERR_NOT_FOUND"]
+    },
+
+    "reset_api.enable": {
+      "summary": "Enable or disable the remote reset HTTP server",
+      "usage": "reset_api enable <on|off>",
+      "args": {
+        "positional": [
+          { "name": "enabled", "type": "string", "enum": ["on","off","true","false","1","0"], "required": true }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "reset_api.key": {
+      "summary": "Set the API key (ls_ + 12 lowercase hex)",
+      "usage": "reset_api key <ls_xxxxxxxxxxxx>",
+      "args": {
+        "positional": [
+          { "name": "key", "type": "string", "maxLength": 16, "required": true, "pattern": "^ls_[0-9a-f]{12}$" }
+        ]
+      },
+      "response_ok_data": null,
+      "errors": ["ERR_MISSING_ARG","ERR_INVALID_ARG"]
+    },
+
+    "reset_api.regen": {
+      "summary": "Generate a fresh random API key",
+      "usage": "reset_api regen",
+      "args": {},
+      "response_ok_data": null
+    },
+
+    "reset_api.get": {
+      "summary": "Show remote reset API config (key partially masked)",
+      "usage": "reset_api get",
+      "args": {},
+      "response_ok_data": {
+        "enabled":  { "type": "boolean" },
+        "key":      { "type": "string", "description": "********<son 4 char>" },
+        "port":     { "type": "integer" },
+        "endpoint": { "type": "string" }
+      }
+    },
+
+    "reset_api.status": {
+      "summary": "Show HTTP server runtime status",
+      "usage": "reset_api status",
+      "args": {},
+      "response_ok_data": {
+        "enabled": { "type": "boolean" },
+        "running": { "type": "boolean" },
+        "port":    { "type": "integer" }
+      }
+    }
+  }
+}

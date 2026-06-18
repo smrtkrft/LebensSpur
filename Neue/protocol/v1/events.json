@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LebensSpur v1 — LS-specific events on sk_event_bus",
+  "description": "LS firmware'inin sk_event_bus üzerinden yayınladığı event şemaları. SKAPP tarafı bu event'leri NDJSON envelope ile (sk_core'un standart aktarımı) dinler ve ekran güncellemeleri tetikler. sk_core kendi event'lerini (wifi.state, ble.connected, ota.*, vb.) ayrıca yayar; burada yalnız LS-özgü olanlar listelenir.",
+  "version": "1.1.0",
+  "device_prefix": "LS",
+  "events": {
+    "timer.state": {
+      "fired_on": "Her state geçişinde",
+      "payload": {
+        "state":         { "type": "string", "enum": ["inactive","countdown","vacation","triggered"] },
+        "remaining_sec": { "type": "integer" }
+      }
+    },
+    "timer.tick": {
+      "fired_on": "Countdown sırasında her saniye",
+      "payload": {
+        "remaining_sec": { "type": "integer" }
+      },
+      "note": "SKAPP UI bunu canlı geri sayıma bağlamalı; high-frequency olduğu için BLE notify üzerinden gönderim throttle edilebilir (sk_core kararı)."
+    },
+    "timer.alarm": {
+      "fired_on": "Her alarm eşiği geçildiğinde (sondan geriye 1 birim arayla)",
+      "payload": {
+        "index":         { "type": "integer", "description": "1..of arası" },
+        "of":            { "type": "integer", "description": "toplam alarm sayısı" },
+        "remaining_sec": { "type": "integer" }
+      },
+      "subscriber_examples": ["ls_reminder (reminder mail)", "sk_api (alarm-class webhooks / Telegram)"]
+    },
+    "timer.triggered": {
+      "fired_on": "Countdown deadline'a ulaştığında, bir kere",
+      "payload": {
+        "duration_sec": { "type": "integer", "description": "tetiklenen total duration" }
+      },
+      "subscriber_examples": ["ls_relay (otomatik FIRE)", "ls_mail_groups (grup mailleri)", "sk_api (final webhook)"]
+    },
+    "timer.reset": {
+      "fired_on": "Countdown sıfırlandığında (kullanıcı manuel veya API)",
+      "payload": {
+        "by": { "type": "string", "enum": ["manual","api"] }
+      }
+    },
+    "timer.reset.requested": {
+      "fired_on": "Reset talebi gelince (örn. ls_reset_api'den)",
+      "payload": {
+        "by": { "type": "string", "enum": ["manual","api"], "default": "api" }
+      },
+      "note": "ls_timer_engine bu event'i dinleyip CMD_RESET'e çevirir."
+    },
+    "timer.vacation": {
+      "fired_on": "Vacation moduna giriş veya çıkış",
+      "payload": {
+        "active":    { "type": "boolean" },
+        "end_epoch": { "type": "integer", "description": "active=true ise vacation bitiş epoch" }
+      }
+    },
+
+    "relay.fire.start": {
+      "fired_on": "Relay FIRE sekansı başladığında",
+      "payload": {
+        "reason": { "type": "string", "enum": ["timer","manual"] }
+      }
+    },
+    "relay.fire.end": {
+      "fired_on": "Relay FIRE sekansı tamamlandığında veya abort'la kesildiğinde",
+      "payload": {
+        "ok":      { "type": "boolean" },
+        "aborted": { "type": "boolean" }
+      }
+    },
+
+    "smtp.send.start": {
+      "fired_on": "Bir SMTP gönderim transaction'ı başlamadan önce",
+      "payload": {
+        "to":      { "type": "string", "description": "ilk recipient + '+N' suffix çoklu ise" },
+        "subject": { "type": "string" }
+      }
+    },
+    "smtp.send.end": {
+      "fired_on": "SMTP gönderim transaction'ı bittiğinde (başarı/hata)",
+      "payload": {
+        "ok":  { "type": "boolean" },
+        "err": { "type": "string", "description": "ok=false ise ERR_* kodu" }
+      }
+    },
+
+    "mail_groups.fire": {
+      "fired_on": "timer.triggered sonrası grup gönderimi tamamlandığında (özet)",
+      "payload": {
+        "fired": { "type": "integer", "description": "denenen grup sayısı" },
+        "ok":    { "type": "integer", "description": "başarılı gönderim" },
+        "err":   { "type": "string",  "description": "smtp_not_configured gibi global hata varsa" }
+      }
+    },
+
+    "reminder.fire": {
+      "fired_on": "timer.alarm sonrası reminder mail gönderimi denendiğinde (ls_reminder)",
+      "payload": {
+        "ok":    { "type": "boolean" },
+        "index": { "type": "integer", "description": "alarm index (1..of); payload'da yoksa 0" },
+        "of":    { "type": "integer", "description": "toplam alarm sayısı; payload'da yoksa 0" },
+        "err":   { "type": "string",  "description": "ok=false ise: not_configured | smtp_not_configured | ERR_* kodu" }
+      },
+      "note": "Erken uyarı reminder maili her timer.alarm eşiğinde otomatik gönderilir (cihaz-sahipli, SKAPP kapalıyken de). reminder.* komutları ile yapılandırılır."
+    }
+  }
+}
