@@ -130,8 +130,7 @@ typedef enum {
     // path token like Discord webhooks).
     SK_API_AUTH_NONE          = 0,
 
-    // `Authorization: Bearer <token>`. Default when `token` is set and no
-    // explicit auth chosen. Works for SendGrid, OpenAI, Anthropic, GitHub,
+    // `Authorization: Bearer <token>`. 
     // Stripe, etc.
     SK_API_AUTH_BEARER        = 1,
 
