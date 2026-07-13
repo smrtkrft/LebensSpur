@@ -60,6 +60,22 @@ extern "C" {
 #define SK_API_CT_MAX         63     // Content-Type override
 #define SK_API_PAYLOAD_MAX    768
 
+// Stored per-endpoint payload template (USER slots only). When non-empty,
+// the worker renders it at fire time against the runtime payload the
+// trigger passed to sk_api_send()/sk_api_chain_run() and sends the result
+// as the request body instead of the runtime payload itself.
+//
+// Token syntax: single-brace `{key}` where key = [a-z0-9_]+.
+//   {key}     → top-level scalar extracted from the runtime JSON by key
+//               (string values are inserted unquoted; numbers verbatim).
+//   {payload} → the entire runtime JSON verbatim.
+//   unknown   → token left literal (visible downstream, aids debugging).
+//
+// Deliberately distinct from the SKAPP config-time `{{param}}` syntax:
+// double-brace placeholders are resolved in the app BEFORE upload; the
+// single-brace tokens survive upload and resolve on-device per fire.
+#define SK_API_EP_PAYLOAD_MAX 512
+
 // peer_id length matches sk_auth.h:SK_AUTH_PEER_ID_LEN. Hard-coded here
 // so this header doesn't need to pull sk_auth.h into every translation
 // unit; mismatch would be caught by a static assert in sk_api.c.
@@ -170,6 +186,10 @@ typedef struct {
     sk_api_auth_t   auth;
     char            header_name [SK_API_HEADER_MAX + 1];   // for AUTH_CUSTOM_HEADER
     char            content_type[SK_API_CT_MAX     + 1];   // override default JSON
+    char            payload     [SK_API_EP_PAYLOAD_MAX + 1]; // stored body template
+                                                            //   ("" = send runtime
+                                                            //   payload verbatim);
+                                                            //   always "" for SYSTEM
     uint16_t        delay_after_sec;                        // seconds to wait after
                                                             //   firing this endpoint
                                                             //   before triggering the
@@ -197,6 +217,9 @@ typedef struct {
     sk_api_auth_t   auth;
     const char     *header_name;
     const char     *content_type;
+    const char     *payload;           // optional stored body template;
+                                       //   NULL/"" = use runtime payload
+                                       //   verbatim (see SK_API_EP_PAYLOAD_MAX)
     uint16_t        delay_after_sec;   // 0 = no wait, capped at MAX
     sk_api_trigclass_t trigclass;      // 0 = TRIGGER (default), ALARM, or BOTH
 } sk_api_endpoint_cfg_t;
