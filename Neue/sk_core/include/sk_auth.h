@@ -145,6 +145,11 @@ esp_err_t sk_auth_ecdh_derive(sk_auth_ecdh_ctx_t *ctx,
 //   4. Writes `{"ok":true,"data":{"our_pub":"..."}}` via writer
 //   5. Calls sk_auth_close_pairing_mode("ecdh_complete")
 //
+// When the passphrase gate is armed (`auth.passphrase.mode.set --pairing 1`)
+// step 3 stops at "derived, pending" and the peer must follow up with
+// `pairing.passphrase.verify` ON THE SAME LINK — that case returns
+// SK_AUTH_PAIRING_PENDING, see below.
+//
 // Transport-specific teardown (BLE terminate / socket close) is the
 // caller's job — this helper never blocks. Result tells the caller
 // whether pairing succeeded so they know whether to keep the link
@@ -155,6 +160,12 @@ typedef enum {
     SK_AUTH_PAIRING_OK,            // bond persisted, peer should reconnect
     SK_AUTH_PAIRING_ERR,           // parse/ECDH failure, peer told via JSON
     SK_AUTH_PAIRING_NOT_OPEN,      // pairing window closed; peer told
+    // Flow is mid-way and the peer OWES US another line on the SAME link:
+    // the passphrase gate replied `need_passphrase:true` (bond derived but
+    // NOT committed), or a wrong passphrase still has attempts left. The
+    // caller MUST keep the transport open — tearing it down here drops the
+    // RAM-only pending bond and makes passphrase-gated pairing impossible.
+    SK_AUTH_PAIRING_PENDING,
 } sk_auth_pairing_result_t;
 
 sk_auth_pairing_result_t sk_auth_pairing_dispatch_line(
@@ -174,6 +185,13 @@ typedef struct {
     uint8_t our_challenge[SK_AUTH_CHALLENGE_LEN];
     int64_t started_us;
     bool    peer_verified;
+    // The bond that actually signed this peer's response. Held PER
+    // CONNECTION: the device serves several peers at once (up to 4 TCP
+    // clients + 1 BLE), and the single global "active bond" cannot describe
+    // which key belongs to which link. Filled by verify_peer on match.
+    bool    bond_set;
+    uint8_t bond_slot;
+    uint8_t bond_key[SK_AUTH_TOKEN_LEN];
 } sk_auth_handshake_t;
 
 esp_err_t sk_auth_handshake_begin(sk_auth_handshake_t *hs);
@@ -183,9 +201,10 @@ esp_err_t sk_auth_handshake_begin(sk_auth_handshake_t *hs);
 esp_err_t sk_auth_handshake_verify_peer(sk_auth_handshake_t *hs,
                                         const uint8_t response[SK_AUTH_RESPONSE_LEN]);
 
-// Compute our response to the peer's challenge. Caller sends `out` on the
-// wire.
-esp_err_t sk_auth_handshake_answer(const uint8_t challenge[SK_AUTH_CHALLENGE_LEN],
+// Compute our response to the peer's challenge, signed with THIS session's
+// bond (hs->bond_key, filled by verify_peer). Caller sends `out` on the wire.
+esp_err_t sk_auth_handshake_answer(const sk_auth_handshake_t *hs,
+                                   const uint8_t challenge[SK_AUTH_CHALLENGE_LEN],
                                    uint8_t       out[SK_AUTH_RESPONSE_LEN]);
 
 // -- Per-message HMAC (after handshake) ------------------------------------
@@ -202,6 +221,30 @@ esp_err_t sk_auth_verify_message(const char    *canonical_body,
 esp_err_t sk_auth_sign_message(const char    *canonical_body,
                                size_t         canonical_body_len,
                                uint8_t        sig_out[SK_AUTH_HMAC_LEN]);
+
+// Per-connection replay window. The 64-nonce ring used to be one global
+// array, which broke as soon as two SKAPP installs were connected at the
+// same time: each peer's CliSigner restarts at nonce=1, so peer B's nonces
+// collided with peer A's and B's commands were rejected as replays — while
+// B's fresh handshake wiped A's window, re-opening A's captured envelopes.
+// One ring per session fixes both halves.
+#define SK_AUTH_NONCE_WINDOW 64
+typedef struct {
+    uint32_t nonces[SK_AUTH_NONCE_WINDOW];
+    uint8_t  head;
+} sk_auth_replay_t;
+
+void sk_auth_replay_ctx_reset(sk_auth_replay_t *replay);
+
+// Session-scoped verify: HMAC against THIS connection's bond key and replay
+// ring instead of the global "active bond". Both pointers are required.
+esp_err_t sk_auth_verify_message_with(const uint8_t     bond_key[SK_AUTH_TOKEN_LEN],
+                                      sk_auth_replay_t *replay,
+                                      const char       *canonical_body,
+                                      size_t            canonical_body_len,
+                                      uint32_t          nonce,
+                                      int64_t           ts_unix,
+                                      const uint8_t     sig[SK_AUTH_HMAC_LEN]);
 
 // Reset the per-token replay window. Called by sk_secure_session_reset
 // when a fresh auth handshake begins so a new SKAPP CliSigner (which

@@ -365,10 +365,27 @@ static sk_err_t cli_status(sk_cli_ctx_t *ctx)
     return SK_OK;
 }
 
+// GÜVENLİK (bkz. repo kökü GUVENLIK_BULGUSU_WEBHOOK_AUTH.md): anahtarı
+// ÜRETEN, DEĞİŞTİREN, GÖSTEREN veya uç noktayı AÇAN her komut
+// `requires_auth` taşır. USB CLI satırları imzasız dispatch edilir
+// (sk_cli.c: dispatch_common(..., authenticated=false)), yani bu bayrak
+// olmadan cihaza ~10 saniye fiziksel erişen biri kalıcı bir uzaktan
+// anahtar üretip LAN'dan geri sayımı süresiz bastırabiliyordu — ve
+// LebensSpur bir ölü-adam anahtarı ürünü olduğu için etki doğrudan ürünün
+// varlık sebebine iniyor. Diğer yıkıcı komutların (factory-reset, pairing)
+// cihaz üstünde buton karşılığı var; bunun YOK.
+//
+// `reset_api.status` bilinçli olarak açık: yalnızca enabled/bound
+// boolean'ları döner, sır sızdırmaz.
+//
+// Meşru kullanım eşleşmiş SKAPP oturumundan (bonded BLE/WiFi) sürer.
+// Mevcut entegrasyonlar bozulmaz: değişiklik yalnız anahtar üretimini/
+// gösterimini kapatır, `/api/reset?key=<mevcut>` çalışmaya devam eder.
 static const sk_cli_command_t s_cmds[] = {
     { .name    = "reset_api.enable",
       .summary = "Enable/disable remote reset HTTP server: reset_api enable <on|off>",
       .usage   = "reset_api enable <on|off>",
+      .requires_auth = true,
       .help_block =
           "Enable or disable the inbound HTTP reset endpoint.\n"
           "\n"
@@ -390,6 +407,7 @@ static const sk_cli_command_t s_cmds[] = {
     { .name    = "reset_api.key",
       .summary = "Set the API key (ls_ + 12 lowercase hex)",
       .usage   = "reset_api key <ls_xxxxxxxxxxxx>",
+      .requires_auth = true,
       .help_block =
           "Set the API key manually (format-validated).\n"
           "\n"
@@ -408,6 +426,7 @@ static const sk_cli_command_t s_cmds[] = {
     { .name    = "reset_api.regen",
       .summary = "Generate a fresh random API key",
       .usage   = "reset_api regen",
+      .requires_auth = true,
       .help_block =
           "Generate a fresh random API key.\n"
           "\n"
@@ -425,6 +444,9 @@ static const sk_cli_command_t s_cmds[] = {
     { .name    = "reset_api.get",
       .summary = "Show remote reset API config (key partially masked)",
       .usage   = "reset_api get",
+      // Human output masks the key but the copyable URL prints it in full,
+      // so this reads out the secret just as effectively as `regen` mints one.
+      .requires_auth = true,
       .help_block =
           "Show the reset API configuration plus a copyable URL.\n"
           "\n"

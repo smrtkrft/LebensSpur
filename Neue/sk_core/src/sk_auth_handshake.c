@@ -40,9 +40,14 @@ esp_err_t sk_auth_handshake_begin(sk_auth_handshake_t *hs)
     esp_fill_random(hs->our_challenge, sizeof(hs->our_challenge));
     hs->started_us    = esp_timer_get_time();
     hs->peer_verified = false;
-    // Begin with no active slot. Reset stale activation from a previous
-    // session so HMAC envelope ops fail closed until verify_peer succeeds.
-    sk_auth_active_bond_clear();
+    // Fail closed until verify_peer matches a slot — PER SESSION. This used
+    // to call the global sk_auth_active_bond_clear(), which meant a second
+    // peer merely *starting* a handshake disarmed the already-authenticated
+    // first peer (its next signed command then hashed against slot 0 or the
+    // other peer's key and came back ERR_HMAC_INVALID).
+    hs->bond_set  = false;
+    hs->bond_slot = SK_AUTH_BOND_SLOT_INVALID;
+    memset(hs->bond_key, 0, sizeof(hs->bond_key));
     return ESP_OK;
 }
 
@@ -82,6 +87,13 @@ esp_err_t sk_auth_handshake_verify_peer(sk_auth_handshake_t *hs,
         memset(expected, 0, sizeof(expected));
 
         if (diff == 0) {
+            // Per-session copy is what every later HMAC on THIS link uses.
+            memcpy(hs->bond_key, key, SK_AUTH_TOKEN_LEN);
+            hs->bond_set  = true;
+            hs->bond_slot = slot;
+            // Global activation stays for reporting (`bond.list.active_slot`)
+            // and the legacy single-session paths; it is no longer the
+            // authority for signing.
             sk_auth__activate_slot(slot);
             memset(key, 0, sizeof(key));
             hs->peer_verified = true;
@@ -96,17 +108,19 @@ esp_err_t sk_auth_handshake_verify_peer(sk_auth_handshake_t *hs,
     return ESP_FAIL;
 }
 
-esp_err_t sk_auth_handshake_answer(const uint8_t challenge[SK_AUTH_CHALLENGE_LEN],
+esp_err_t sk_auth_handshake_answer(const sk_auth_handshake_t *hs,
+                                   const uint8_t challenge[SK_AUTH_CHALLENGE_LEN],
                                    uint8_t       out[SK_AUTH_RESPONSE_LEN])
 {
-    if (!challenge || !out) return ESP_ERR_INVALID_ARG;
+    if (!hs || !challenge || !out) return ESP_ERR_INVALID_ARG;
 
-    // verify_peer must have run first and activated a slot. Without an
-    // active bond, we have no key to sign with — fail closed.
-    const uint8_t *active = sk_auth_active_bond_key();
-    if (!active) return ESP_ERR_INVALID_STATE;
+    // verify_peer must have run first and matched a slot for THIS session.
+    // Reading the global active bond here answered the peer with whichever
+    // key authenticated last — with two peers connected, each got the
+    // other's answer and both failed mutual auth.
+    if (!hs->bond_set) return ESP_ERR_INVALID_STATE;
 
-    int rc = hmac_prefix(active, SK_AUTH_TOKEN_LEN,
+    int rc = hmac_prefix(hs->bond_key, SK_AUTH_TOKEN_LEN,
                          challenge, SK_AUTH_CHALLENGE_LEN,
                          out);
     return rc == 0 ? ESP_OK : ESP_FAIL;

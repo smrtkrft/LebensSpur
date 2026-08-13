@@ -3,7 +3,12 @@
 **Tarih:** 2026-08-03
 **Bileşen:** LebensSpur firmware · `HW/components/ls_cli/ls_webhook_cmds.c`
 **Önem:** YÜKSEK (fiziksel erişim → kalıcı uzaktan yetki yükselmesi)
-**Durum:** AÇIK — düzeltme bekliyor (cihaz fazı, ilk iş)
+**Durum:** DÜZELTİLDİ (2026-08-13) — `Neue/ls_reset_api/src/ls_reset_api.c`
+**Not:** Bulgu eski ağaçtaki (`ALTE/HW`) `ls_webhook_cmds.c` üzerinden yazılmıştı;
+aynı kusur güncel `Neue` ağacında `reset_api.*` adlarıyla duruyordu ve orada
+kapatıldı. `reset_api.enable/key/regen/get` artık `requires_auth=true`;
+`reset_api.status` bilinçli olarak açık (yalnız enabled/bound boolean'ları,
+sır sızdırmaz). Derleme yeşil; §5 doğrulama adımları donanımda BEKLİYOR.
 **Bulan:** SKAPP USB CLI güvenlik denetimi (Faz 2)
 
 ---

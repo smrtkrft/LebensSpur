@@ -25,11 +25,24 @@
 
 static const char *TAG = "sk_tcp";
 
-static sk_transport_tcp_cfg_t s_cfg = {
-    .port = 8080, .max_clients = 2, .task_priority = 4, .task_stack = 6144,
-};
-
 #define CLIENT_MAX 4
+
+static sk_transport_tcp_cfg_t s_cfg = {
+    // task_stack: the client task runs the ENTIRE dispatch chain inline —
+    // ECDH X25519 pairing, HMAC-SHA256 handshake, JSON parse, command
+    // handler, JSON response build. 6144 overflowed in the field on the
+    // SynDimm C6 ("Stack protection fault" in sk_tcp_cli0, ~10 s reboot
+    // loop while SKAPP reconnects over TCP); LebensSpur runs the same chain
+    // on the same chip, so it carried the same latent crash. 10240 gives
+    // the deepest chain (pairing + signed dispatch) real headroom.
+    //
+    // max_clients defaults to the full slot count: the setting was ignored
+    // until now (accept ran to CLIENT_MAX), so lowering it here would be a
+    // silent behaviour change — a reconnecting SKAPP whose previous socket
+    // has not been reaped yet needs the spare slots.
+    .port = 8080, .max_clients = CLIENT_MAX, .task_priority = 4,
+    .task_stack = 10240,
+};
 // Per-client line buffer. Sized for the worst-case signed write request:
 //   body  = {"cmd":"userdata.write","id":N,"args":{"offset":N,"data_b64":"<base64>"}}
 //   wire  = {"body":"...","sig":"<32hex>","nonce":N,"ts":N}
@@ -46,6 +59,12 @@ typedef struct {
     sk_secure_session_t session;
     char                line[CLIENT_LINE_BUF];
     size_t              line_len;
+    // Set once a bonded-path client has been routed into the pairing
+    // dispatcher (re-pair recovery). Every subsequent line on this socket
+    // then goes to the pairing dispatcher too — the passphrase follow-up is
+    // `pairing.passphrase.verify`, which the ecdh substring gate below would
+    // not match, and feeding it to the secure session closes the socket.
+    bool                pairing_repair;
 } client_t;
 
 static client_t s_clients[CLIENT_MAX];
@@ -74,14 +93,28 @@ static void handle_line(client_t *c, const char *line)
     // the socket — the peer reconnects bonded with the new token.
     // Without this, TCP recovery is impossible whenever any bond exists
     // on the device and the peer ends up looping on auth.challenge.
-    if (sk_auth_pairing_state() == SK_AUTH_PAIRING_OPEN &&
-        !sk_secure_session_authed(&c->session) &&
-        strstr(line, "\"cmd\":\"pairing.ecdh.exchange\"") != NULL) {
-        ESP_LOGI(TAG, "bonded path → repair: peer sent pairing.ecdh.exchange");
-        (void)sk_auth_pairing_dispatch_line(line, strlen(line),
-                                            client_writer,
-                                            (void *)(intptr_t)c->sock);
-        // One-shot: peer reconnects bonded after the OK reply.
+    // Once in repair mode every line goes to the pairing dispatcher, window
+    // state included: the dispatcher answers a closed window with a proper
+    // ERR_PAIRING_NOT_OPEN. Falling back to the secure session here would
+    // feed it `pairing.passphrase.verify`, which it can only read as a
+    // broken handshake — the peer would get a silent socket close instead
+    // of a diagnosable error.
+    if (c->pairing_repair ||
+        (sk_auth_pairing_state() == SK_AUTH_PAIRING_OPEN &&
+         !sk_secure_session_authed(&c->session) &&
+         strstr(line, "\"cmd\":\"pairing.ecdh.exchange\"") != NULL)) {
+        ESP_LOGI(TAG, "bonded path → repair: pairing line routed to dispatcher");
+        c->pairing_repair = true;
+        sk_auth_pairing_result_t r =
+            sk_auth_pairing_dispatch_line(line, strlen(line),
+                                          client_writer,
+                                          (void *)(intptr_t)c->sock);
+        // PENDING = passphrase gate armed; the RAM-only pending bond needs
+        // the peer's `pairing.passphrase.verify` on THIS socket. Closing here
+        // (the old unconditional one-shot) dropped it and made passphrase-
+        // gated re-pairing impossible over WiFi.
+        if (r == SK_AUTH_PAIRING_PENDING) return;
+        // Otherwise one-shot: peer reconnects bonded after the OK reply.
         close(c->sock);
         c->sock = -1;
         return;
@@ -168,11 +201,13 @@ static void client_task(void *arg)
                         sk_auth_pairing_result_t r =
                             pairing_handle_one_line(c, c->line);
                         c->line_len = 0;
-                        // Pairing is one-shot regardless of outcome —
-                        // OK: peer reconnects bonded; ERR/NOT_OPEN: peer
-                        // saw the JSON error and we close. Drop the
-                        // socket either way.
-                        (void)r;
+                        // PENDING = passphrase gate armed: the bond is
+                        // derived but RAM-only until the peer proves the
+                        // passphrase on THIS socket. Keep reading.
+                        if (r == SK_AUTH_PAIRING_PENDING) continue;
+                        // Otherwise pairing is one-shot — OK: peer
+                        // reconnects bonded; ERR/NOT_OPEN: peer saw the JSON
+                        // error and we close. Drop the socket either way.
                         goto done;
                     }
                     handle_line(c, c->line);
@@ -190,13 +225,20 @@ done:
     if (c->sock >= 0) close(c->sock);
     c->sock = -1;
     c->line_len = 0;
+    c->pairing_repair = false;
     sk_secure_session_reset(&c->session);
     vTaskDelete(NULL);
 }
 
 static int alloc_client_slot(void)
 {
-    for (int i = 0; i < CLIENT_MAX; i++) {
+    // Honour the configured ceiling. It used to be parsed, stored and then
+    // ignored (the loop ran to CLIENT_MAX), so a caller asking for 2 clients
+    // silently got 4 — each one a task with `task_stack` bytes plus an 8 KB
+    // line buffer, i.e. the RAM budget the setting exists to bound.
+    int cap = (int)s_cfg.max_clients;
+    if (cap <= 0 || cap > CLIENT_MAX) cap = CLIENT_MAX;
+    for (int i = 0; i < cap; i++) {
         if (s_clients[i].sock < 0) return i;
     }
     return -1;
@@ -231,6 +273,7 @@ static void listen_task(void *arg)
         if (slot < 0) { close(cs); continue; }
         s_clients[slot].sock = cs;
         s_clients[slot].line_len = 0;
+        s_clients[slot].pairing_repair = false;
         // Auth state lives inside `session` and is reset by client_task
         // via sk_secure_session_reset() — no separate flag on client_t.
         char name[24]; snprintf(name, sizeof(name), "sk_tcp_cli%d", slot);

@@ -268,13 +268,29 @@ static void pairing_event_handler(const sk_event_t *evt, void *user)
 {
     (void)user;
 
-    // Pairing window closed via timeout AND no peer connected → owner missed
-    // the window, kill the radio so we stop advertising to nobody.
+    // Pairing window closed via timeout AND no peer connected.
+    //
+    // Eski davranış: BLE'yi tamamen durdurmak. Ama bu, BOND VARKEN bile
+    // BLE'yi öldürüyordu — eşleşmiş SKAPP reconnect denediğinde GAP connect
+    // 12sn'de timeout düşüyordu ("cihaz görünmüyor / bağlanmıyor" kök nedeni,
+    // SynDimm'de sahada teşhis edildi). Doğru davranış: bond varken adv açık
+    // kalsın (bonded reconnect için), sadece tamamen anonim cihazlarda adv
+    // kapansın. Bu kural idle_timer_cb ile tutarlı — orada zaten böyleydi,
+    // burası senkron alınmamıştı.
     if (evt->name && strcmp(evt->name, "pairing.mode.close") == 0 &&
         evt->payload_json &&
         strstr(evt->payload_json, "\"reason\":\"timeout\"") != NULL &&
         !skbt_gatt_is_connected()) {
-        ESP_LOGI(TAG, "pairing window expired with no connect — stopping BLE");
+        if (sk_auth_has_bond()) {
+            ESP_LOGI(TAG, "pairing window expired but bond present — "
+                          "refreshing adv (bonded reconnect path stays open)");
+            if (s_radio_active) {
+                ble_gap_adv_stop();
+            }
+            start_advertising();
+            return;
+        }
+        ESP_LOGI(TAG, "pairing window expired, no bond — stopping BLE");
         sk_transport_ble_stop();
         return;
     }

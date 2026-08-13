@@ -62,6 +62,10 @@ typedef struct {
     // USB transport never reaches this struct so it is bypassed by
     // construction; sk_transport_usb dispatches directly through sk_cli.
     bool passphrase_unlocked;
+
+    // Replay window for THIS connection. Global before — two peers sharing
+    // one ring rejected each other's nonces (both CliSigners start at 1).
+    sk_auth_replay_t replay;
 } sk_secure_session_t;
 
 // Outcome of sk_secure_session_feed_line().

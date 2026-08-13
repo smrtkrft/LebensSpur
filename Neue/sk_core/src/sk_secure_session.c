@@ -127,9 +127,10 @@ sk_session_feed_t sk_secure_session_feed_line(sk_secure_session_t *s,
         return SK_SESSION_FEED_AUTH_INVALID;
     }
 
-    // Step 2: compute our answer to peer's challenge.
+    // Step 2: compute our answer to peer's challenge, signed with the bond
+    // that matched on THIS link (not the globally-last-authenticated one).
     uint8_t our_answer[SK_AUTH_RESPONSE_LEN];
-    if (sk_auth_handshake_answer(peer_challenge, our_answer) != ESP_OK) {
+    if (sk_auth_handshake_answer(&s->hs, peer_challenge, our_answer) != ESP_OK) {
         s->state = SK_SESSION_FAILED;
         return SK_SESSION_FEED_AUTH_INVALID;
     }
@@ -145,10 +146,11 @@ sk_session_feed_t sk_secure_session_feed_line(sk_secure_session_t *s,
     s->state = SK_SESSION_AUTHENTICATED;
     // Fresh handshake = fresh replay window. SKAPP starts each new
     // CliSigner from nonce=1 (after autoDispose / invalidate the Riverpod
-    // session is recreated end-to-end), and without this reset the
-    // firmware-side global s_nonces would still hold previous-session
-    // values and reject every new request as a replay.
-    sk_auth_replay_reset();
+    // session is recreated end-to-end), so without a reset the ring would
+    // still hold previous-session values and reject every new request as a
+    // replay. The ring is per-session: resetting the GLOBAL one here also
+    // wiped every other connected peer's window.
+    sk_auth_replay_ctx_reset(&s->replay);
 
     // Content-access passphrase gate. Once C-R has matched a bond slot we
     // know the peer is legitimate at the BLE/TCP layer; the passphrase is
@@ -329,7 +331,16 @@ void sk_secure_session_dispatch_signed(sk_secure_session_t *s,
     uint32_t    nonce    = (uint32_t)nonce_node->valuedouble;
     int64_t     ts       = cJSON_IsNumber(ts_node) ? (int64_t)ts_node->valuedouble : 0;
 
-    if (sk_auth_verify_message(body, body_len, nonce, ts, sig) != ESP_OK) {
+    // Session-scoped verify when we have one (the normal BLE/TCP path): the
+    // key is the bond that authenticated THIS link and the replay ring is
+    // this link's own. Legacy callers passing s == NULL keep the global
+    // behaviour.
+    const esp_err_t vres =
+        (s && s->hs.bond_set)
+            ? sk_auth_verify_message_with(s->hs.bond_key, &s->replay,
+                                          body, body_len, nonce, ts, sig)
+            : sk_auth_verify_message(body, body_len, nonce, ts, sig);
+    if (vres != ESP_OK) {
         cJSON_Delete(env);
         emit_err(writer, user, NULL);
         return;
