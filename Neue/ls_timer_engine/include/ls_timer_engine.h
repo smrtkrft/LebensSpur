@@ -80,7 +80,9 @@ typedef enum {
 typedef struct {
     ls_timer_unit_t unit;          // day / hour / minute
     uint16_t        value;         // 1..60 (her unit için aynı sınır)
-    uint8_t         alarm_count;   // 0..10 alarm sayısı (sondan geriye 1 birim arayla)
+    uint8_t         alarm_count;   // alarm sayısı, sondan geriye 1 birim arayla.
+                                   // KURAL: alarm_count < value (24 saat → en fazla 23);
+                                   // mutlak tavan MAX_ALARMS = 31 (maske genişliği).
 } ls_timer_config_t;
 
 typedef struct {
@@ -89,7 +91,7 @@ typedef struct {
     int64_t          deadline_epoch;    // COUNTDOWN'da deadline (epoch sec), diğer durumlarda 0
     int64_t          vacation_end_epoch;// VACATION'da bitiş (epoch sec), diğer durumlarda 0
     uint32_t         vacation_remaining_sec;  // VACATION'a girilirken kalan countdown'u korur
-    uint16_t         alarms_fired_mask; // bit i set ise i. alarm tetiklenmiş
+    uint32_t         alarms_fired_mask; // bit i set ise i. alarm tetiklenmiş
 } ls_timer_status_t;
 
 // Init component: NVS'ten config + state yükle, CLI komutlarını kaydet,

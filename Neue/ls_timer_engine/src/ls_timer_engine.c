@@ -41,11 +41,18 @@ static const char *TAG = "ls_timer";
 #define NVS_KEY_DEADLINE         "deadline"
 #define NVS_KEY_VAC_END          "vac_end"
 #define NVS_KEY_VAC_REM          "vac_rem"
-#define NVS_KEY_ALARM_MASK       "amask"
+// u16 → u32 genişledi; ESKİ "amask" anahtarı okunmuyor. Yükseltmede
+// maske sıfırdan başlar (o turdaki alarmlar bir kez daha çalabilir),
+// bilinçli: yanlış tipte okuma sessiz çöp değer üretirdi.
+#define NVS_KEY_ALARM_MASK       "amask32"
 
 #define MIN_VALUE                1
 #define MAX_VALUE                60
-#define MAX_ALARMS               10
+// Alarm tavanı = maske genişliği. uint32_t maske 31 alarmı taşır; ürün
+// kuralı zaten alarm_count < value olduğu için (24 saat → en fazla 23)
+// pratik sınırı `value` belirler. 60 gün + 31 alarm kombinasyonunda
+// tavan burasıdır.
+#define MAX_ALARMS               31
 #define MAX_VACATION_DAYS        60
 
 // time(NULL) wall-time eşiği — bu değerin altındaki epoch'lar (örn. 0,
@@ -106,7 +113,7 @@ static ls_timer_state_t s_state             = LS_TIMER_INACTIVE;
 static int64_t          s_deadline_epoch    = 0;   // wall-clock deadline (reboot recovery + UI)
 static int64_t          s_vacation_end_epoch = 0;
 static uint32_t         s_vacation_remaining_sec = 0;
-static uint16_t         s_alarms_fired_mask = 0;
+static uint32_t         s_alarms_fired_mask = 0;
 // Uptime-based countdown — wall clock olmasa da çalışır. enter_countdown
 // sırasında set edilir, tick task burayı esas alır. Wall clock geçerli ise
 // s_deadline_epoch de paralel hesaplanır (UI ve NVS reboot recovery için).
@@ -211,7 +218,8 @@ static esp_err_t nvs_load(void)
     if (nvs_get_i64(h, NVS_KEY_VAC_END, &i64) == ESP_OK)  s_vacation_end_epoch = i64;
     uint32_t u32;
     if (nvs_get_u32(h, NVS_KEY_VAC_REM, &u32) == ESP_OK)  s_vacation_remaining_sec = u32;
-    if (nvs_get_u16(h, NVS_KEY_ALARM_MASK, &u16) == ESP_OK) s_alarms_fired_mask = u16;
+    (void)u16;
+    if (nvs_get_u32(h, NVS_KEY_ALARM_MASK, &u32) == ESP_OK) s_alarms_fired_mask = u32;
 
     nvs_close(h);
     return ESP_OK;
@@ -236,7 +244,7 @@ static void nvs_save_runtime(void)
     nvs_set_i64(h, NVS_KEY_DEADLINE, s_deadline_epoch);
     nvs_set_i64(h, NVS_KEY_VAC_END, s_vacation_end_epoch);
     nvs_set_u32(h, NVS_KEY_VAC_REM, s_vacation_remaining_sec);
-    nvs_set_u16(h, NVS_KEY_ALARM_MASK, s_alarms_fired_mask);
+    nvs_set_u32(h, NVS_KEY_ALARM_MASK, s_alarms_fired_mask);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -309,7 +317,12 @@ static void publish_vacation(bool active)
 // State transitions
 // ---------------------------------------------------------------------
 
-static void enter_countdown(uint32_t remaining_sec, const char *reset_by)
+// [reset_alarms] false ise tetiklenmiş alarm maskesi KORUNUR. Tatilden
+// dönüşte gerekli: tatil "kaldığı yerden devam" demek, yalnız kalan süre
+// için değil ALARM DURUMU için de geçerli. Sıfırlansaydı tatil öncesi
+// çalmış alarmlar dönüşte yeniden çalar (aynı hatırlatma maili tekrar).
+static void enter_countdown(uint32_t remaining_sec, const char *reset_by,
+                            bool reset_alarms)
 {
     s_state = LS_TIMER_COUNTDOWN;
     s_remaining_at_start = remaining_sec;
@@ -326,7 +339,7 @@ static void enter_countdown(uint32_t remaining_sec, const char *reset_by)
                  (unsigned)remaining_sec);
         s_deadline_epoch = 0;
     }
-    s_alarms_fired_mask = 0;
+    if (reset_alarms) s_alarms_fired_mask = 0;
     nvs_save_runtime();
     publish_state();
     if (reset_by) publish_reset(reset_by);
@@ -346,11 +359,13 @@ static void enter_inactive(void)
     publish_state();
 }
 
+// Tatil = ÇALIŞAN geri sayımı dondurmak. Kalan süre olduğu gibi saklanır,
+// tatil bitince oradan devam edilir (sıfırdan değil). Bu yüzden yalnız
+// COUNTDOWN'dan çağrılır — apply_evt kapıyı tutuyor.
 static void enter_vacation(uint32_t days)
 {
     int64_t now = now_epoch();
-    uint32_t rem = (s_state == LS_TIMER_COUNTDOWN) ? remaining_sec_now()
-                                                    : total_duration_sec(&s_cfg);
+    uint32_t rem = remaining_sec_now();
     s_vacation_remaining_sec = rem;
     // Uptime tabanlı end — wall clock olmasa da geri sayım çalışır.
     s_vacation_end_uptime_us = esp_timer_get_time() + (int64_t)days * 86400LL * 1000000LL;
@@ -380,7 +395,8 @@ static void exit_vacation_to_countdown(void)
         enter_inactive();
         return;
     }
-    enter_countdown(resume_rem, NULL);
+    // Tatil dönüşü: kalan süre KORUNUR, alarm durumu da korunur.
+    enter_countdown(resume_rem, NULL, /*reset_alarms=*/false);
 }
 
 static void enter_triggered(void)
@@ -410,14 +426,16 @@ static void check_alarms(uint32_t remaining)
 {
     uint8_t n = s_cfg.alarm_count;
     if (n == 0 || n > MAX_ALARMS) return;
-    // Alarm i'nin eşiği (i+1) birim. Eğer (i+1) > value ise toplam süreden
-    // büyük — countdown başlarken hemen tetiklenir. Bu spurious firing'i
-    // önlemek için value'dan büyük indexli alarmları atlıyoruz.
+    // Alarm i'nin eşiği (i+1) birim. (i+1) == value ise eşik TAM toplam
+    // süreye eşittir → geri sayım daha başlarken `remaining <= th` sağlanır
+    // ve alarm t=0'da çalar. Ürün kuralı: alarm sayısı value'dan KÜÇÜK
+    // olmalı (24 saat → en fazla 23 alarm), yani `>=` ile kesiyoruz.
+    // Eskiden `>` idi ve value=1'de alarm başlangıçta çalıyordu.
     uint16_t cap = s_cfg.value;
     bool dirty = false;
     for (int i = 0; i < n; ++i) {
-        if ((uint16_t)(i + 1) > cap) break;
-        uint16_t bit = (uint16_t)(1u << i);
+        if ((uint16_t)(i + 1) >= cap) break;
+        uint32_t bit = (uint32_t)1u << i;
         if (s_alarms_fired_mask & bit) continue;
         uint32_t th = alarm_threshold_sec(i);
         if (th == 0) continue;
@@ -549,7 +567,7 @@ static void apply_evt(const evt_t *e)
             ESP_LOGW(TAG, "start ignored: total_duration_sec=0 (cfg corrupted?)");
             break;
         }
-        enter_countdown(total, NULL);
+        enter_countdown(total, NULL, /*reset_alarms=*/true);
         break;
     }
     case EVT_CMD_STOP:
@@ -562,13 +580,20 @@ static void apply_evt(const evt_t *e)
                 ESP_LOGW(TAG, "reset ignored: total_duration_sec=0");
                 break;
             }
-            enter_countdown(total, reset_by_str(e->reset_by));
+            enter_countdown(total, reset_by_str(e->reset_by), /*reset_alarms=*/true);
         }
         break;
     }
     case EVT_CMD_VAC_SET:
-        if (s_state == LS_TIMER_COUNTDOWN || s_state == LS_TIMER_INACTIVE) {
+        // Yalnız çalışan geri sayım dondurulabilir. INACTIVE'da tatil
+        // başlatmak eskiden TAM SÜREYİ saklayıp tatil bitince sıfırdan
+        // geri sayım başlatıyordu — kullanıcının hiç başlatmadığı bir
+        // sayacı N gün sonra kendiliğinden kurmak demekti.
+        if (s_state == LS_TIMER_COUNTDOWN) {
             enter_vacation((uint32_t)e->i_arg1);
+        } else {
+            ESP_LOGW(TAG, "vacation ignored: timer not counting down (state=%s)",
+                     ls_timer_engine_state_str());
         }
         break;
     case EVT_CMD_VAC_CANCEL:
@@ -653,9 +678,27 @@ static sk_err_t cli_set(sk_cli_ctx_t *ctx)
     }
     if (alarms_l >= 0) {
         if (alarms_l > MAX_ALARMS) {
-            sk_cli_usage(ctx,
+            sk_cli_usagef(ctx,
                 "timer set <unit> <value> [alarm <N>]",
-                "alarm: 0..10", NULL);
+                NULL, NULL,
+                "alarm: 0..%d", MAX_ALARMS);
+            return SK_ERR_INVALID_ARG;
+        }
+        // ÜRÜN KURALI: alarmlar sondan geriye 1 birim arayla dizilir, yani
+        // N. alarm "N birim kala" çalar. N == value olsaydı alarm geri sayım
+        // daha başlarken çalardı — bu yüzden alarm sayısı value'dan KÜÇÜK
+        // olmalı (24 saat → en fazla 23 alarm).
+        //
+        // Etkin value: bu komutta yeni bir value geldiyse o, yoksa mevcut
+        // config. Eskiden bu bağ hiç kurulmuyordu; `timer set hour 3 alarm 10`
+        // kabul ediliyor ama fazla alarmlar sessizce hiç çalmıyordu.
+        int eff_value = (value_i >= 0) ? value_i : (int)s_cfg.value;
+        if (alarms_l >= eff_value) {
+            sk_cli_usagef(ctx,
+                "timer set <unit> <value> [alarm <N>]",
+                NULL, NULL,
+                "alarm must be < value (value=%d → max %d)",
+                eff_value, eff_value - 1);
             return SK_ERR_INVALID_ARG;
         }
         alarms_i = (int)alarms_l;
@@ -713,7 +756,7 @@ static sk_err_t cli_reset(sk_cli_ctx_t *ctx)
 }
 
 // Mask icinde set bit sayisini sayar (alarms_fired count).
-static unsigned alarms_fired_count(uint16_t mask)
+static unsigned alarms_fired_count(uint32_t mask)
 {
     unsigned c = 0;
     while (mask) { c += (mask & 1u); mask >>= 1; }
@@ -1129,27 +1172,48 @@ esp_err_t ls_timer_engine_init(void)
     // start re-arm etmeden işe yaramaz görünür.
     if (s_state == LS_TIMER_COUNTDOWN) {
         int64_t now = now_epoch();
-        bool wall_ok = time_is_valid(now) && s_deadline_epoch > 0 && s_deadline_epoch > now;
-        if (!wall_ok) {
-            ESP_LOGW(TAG, "boot: countdown state had no reconstructable deadline, resetting to inactive");
+        if (s_deadline_epoch <= 0) {
+            // Gerçekten kurtarılamaz: geri sayım duvar saati HİÇ ayarlanmamışken
+            // başlatılmış, diskte tek bir zaman referansı yok. INACTIVE'a düş.
+            ESP_LOGW(TAG, "boot: countdown had no persisted deadline, resetting to inactive");
             s_state = LS_TIMER_INACTIVE;
-            s_deadline_epoch = 0;
             s_alarms_fired_mask = 0;
-            // NVS senkronize et — yarım kalmış state diske dönmesin.
             nvs_handle_t h;
             if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
                 nvs_set_u8(h, NVS_KEY_STATE, (uint8_t)s_state);
                 nvs_set_i64(h, NVS_KEY_DEADLINE, 0);
-                nvs_set_u16(h, NVS_KEY_ALARM_MASK, 0);
+                nvs_set_u32(h, NVS_KEY_ALARM_MASK, 0);
                 nvs_commit(h);
                 nvs_close(h);
             }
-        } else {
-            // Wall clock geçerli — uptime tracking'i reboot'tan sonra
-            // yeniden başlat ki tick path uptime'ı kullanabilsin.
+        } else if (time_is_valid(now)) {
             int64_t rem = s_deadline_epoch - now;
-            s_deadline_uptime_us = esp_timer_get_time() + rem * 1000000LL;
-            ESP_LOGI(TAG, "boot: countdown resumed (%llds left)", (long long)rem);
+            if (rem > 0) {
+                // Uptime tracking'i yeniden başlat ki tick path uptime'ı kullansın.
+                s_deadline_uptime_us = esp_timer_get_time() + rem * 1000000LL;
+                ESP_LOGI(TAG, "boot: countdown resumed (%llds left)", (long long)rem);
+            } else {
+                // Süre cihaz kapalıyken doldu. State'i KORU: ilk tick'te
+                // handle_tick enter_triggered() çağırır (queue/task o an hazır).
+                ESP_LOGW(TAG, "boot: deadline expired while powered off — will trigger on first tick");
+            }
+        } else {
+            // ⚠️ NORMAL BOOT DURUMU — ve eski kodun sessizce SİLAHSIZLANDIRDIĞI yer.
+            //
+            // Cihazda SNTP yok ve RTC güç kesintisinde sıfırlanıyor; duvar saatinin
+            // TEK kaynağı SKAPP'in `time.set` push'u. Bu init, SKAPP daha bağlanmadan
+            // çalıştığı için time(NULL) her açılışta geçersizdir. Eski kod bu yüzden
+            // "rekonstrüksiyon yok" deyip state'i INACTIVE yapıyor ÜSTELİK diskteki
+            // deadline'ı da sıfırlıyordu → her elektrik kesintisi ölü-adam anahtarını
+            // kalıcı olarak devre dışı bırakıyor, kurtarma verisini de yok ediyordu.
+            //
+            // Doğrusu: DOKUNMA. State ve deadline diskte kalsın; handle_tick'in
+            // "reboot fallback" dalı, SKAPP saati push eder etmez ya geri sayımı
+            // sürdürür ya da (süre dolduysa) tetikler. Bekleme sırasında
+            // remaining_sec 0 raporlanır — geçici ve dürüst.
+            ESP_LOGW(TAG, "boot: wall clock not set yet — countdown PRESERVED, "
+                          "awaiting time.set from SKAPP (deadline=%lld)",
+                     (long long)s_deadline_epoch);
         }
     }
 
@@ -1158,11 +1222,11 @@ esp_err_t ls_timer_engine_init(void)
     // tutar — wall clock yoksa vacation güvenli şekilde sürdürülemez.
     if (s_state == LS_TIMER_VACATION) {
         int64_t now = now_epoch();
-        bool wall_ok = time_is_valid(now) && s_vacation_end_epoch > 0;
-        if (!wall_ok) {
-            ESP_LOGW(TAG, "boot: vacation state had no reconstructable end, resetting to inactive");
+        if (s_vacation_end_epoch <= 0) {
+            // Tatil duvar saati hiç ayarlanmamışken başlatılmış — diskte bitiş
+            // referansı yok, kurtarılamaz.
+            ESP_LOGW(TAG, "boot: vacation had no persisted end, resetting to inactive");
             s_state = LS_TIMER_INACTIVE;
-            s_vacation_end_epoch = 0;
             s_vacation_remaining_sec = 0;
             nvs_handle_t h;
             if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
@@ -1172,6 +1236,13 @@ esp_err_t ls_timer_engine_init(void)
                 nvs_commit(h);
                 nvs_close(h);
             }
+        } else if (!time_is_valid(now)) {
+            // Countdown ile aynı gerekçe: saat henüz yok, ama diskte bitiş
+            // epoch'u VAR. Silme — handle_tick'in vacation fallback dalı saat
+            // gelince ya tatili sürdürür ya da bitmişse countdown'a döner.
+            ESP_LOGW(TAG, "boot: wall clock not set yet — vacation PRESERVED, "
+                          "awaiting time.set (end=%lld)",
+                     (long long)s_vacation_end_epoch);
         } else if (now >= s_vacation_end_epoch) {
             // Vacation reboot sırasında bitmiş — countdown'a otomatik geç.
             ESP_LOGI(TAG, "boot: vacation already expired, resuming countdown");
@@ -1184,7 +1255,8 @@ esp_err_t ls_timer_engine_init(void)
                 s_state = LS_TIMER_COUNTDOWN;
                 s_deadline_epoch = now + (int64_t)resume_rem;
                 s_deadline_uptime_us = esp_timer_get_time() + (int64_t)resume_rem * 1000000LL;
-                s_alarms_fired_mask = 0;
+                // Maskeyi KORU: tatil "kaldığı yerden devam" demek; tatil
+                // öncesi çalmış alarmlar tekrar çalmamalı.
             } else {
                 s_state = LS_TIMER_INACTIVE;
             }
@@ -1195,7 +1267,7 @@ esp_err_t ls_timer_engine_init(void)
                 nvs_set_i64(h, NVS_KEY_VAC_END, 0);
                 nvs_set_u32(h, NVS_KEY_VAC_REM, 0);
                 nvs_set_i64(h, NVS_KEY_DEADLINE, s_deadline_epoch);
-                nvs_set_u16(h, NVS_KEY_ALARM_MASK, 0);
+                nvs_set_u32(h, NVS_KEY_ALARM_MASK, s_alarms_fired_mask);
                 nvs_commit(h);
                 nvs_close(h);
             }

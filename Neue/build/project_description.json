@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "lebensspur",
-    "project_version":    "v1.0.6-110-ga29c752-dirty",
+    "project_version":    "v1.0.6-113-gf20a19e-dirty",
     "project_path":       "/Users/seu/Code/SmartKraft/LebensSpur/Neue",
     "idf_path":           "/Users/seu/esp/esp-idf-v5.5.2",
     "build_dir":          "/Users/seu/Code/SmartKraft/LebensSpur/Neue/build",
