@@ -678,10 +678,9 @@ static sk_err_t cli_set(sk_cli_ctx_t *ctx)
     }
     if (alarms_l >= 0) {
         if (alarms_l > MAX_ALARMS) {
-            sk_cli_usagef(ctx,
-                "timer set <unit> <value> [alarm <N>]",
-                NULL, NULL,
-                "alarm: 0..%d", MAX_ALARMS);
+            char hint[48];
+            snprintf(hint, sizeof(hint), "alarm: 0..%d", MAX_ALARMS);
+            sk_cli_usage(ctx, "timer set <unit> <value> [alarm <N>]", hint, NULL);
             return SK_ERR_INVALID_ARG;
         }
         // ÜRÜN KURALI: alarmlar sondan geriye 1 birim arayla dizilir, yani
@@ -694,11 +693,11 @@ static sk_err_t cli_set(sk_cli_ctx_t *ctx)
         // kabul ediliyor ama fazla alarmlar sessizce hiç çalmıyordu.
         int eff_value = (value_i >= 0) ? value_i : (int)s_cfg.value;
         if (alarms_l >= eff_value) {
-            sk_cli_usagef(ctx,
-                "timer set <unit> <value> [alarm <N>]",
-                NULL, NULL,
-                "alarm must be < value (value=%d → max %d)",
-                eff_value, eff_value - 1);
+            char hint[96];
+            snprintf(hint, sizeof(hint),
+                     "alarm must be < value (value=%d, max alarm=%d)",
+                     eff_value, eff_value - 1);
+            sk_cli_usage(ctx, "timer set <unit> <value> [alarm <N>]", hint, NULL);
             return SK_ERR_INVALID_ARG;
         }
         alarms_i = (int)alarms_l;
