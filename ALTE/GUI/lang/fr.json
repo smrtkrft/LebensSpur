@@ -442,5 +442,14 @@
   "ev.TIMER_EXPIRED": "compte a rebours ecoule",
   "ev.BUTTON": "bouton presse",
   "ev.USER_RESTART": "redemarrage utilisateur",
-  "mail_group.remove": "Retirer"
+  "mail_group.remove": "Retirer",
+  "wifi_power.title": "Puissance WiFi",
+  "wifi_power.desc": "Limite de puissance d'emission. Moins de puissance reduit le pic de courant qui peut redemarrer l'appareil sur une alimentation faible.",
+  "wifi_power.max": "Puissance TX maximale",
+  "wifi_power.max_desc": "De 8 dBm (courte portee, courant minimal) a 20 dBm (portee complete)",
+  "wifi_power.adaptive": "Puissance adaptative",
+  "wifi_power.adaptive_desc": "Reduire automatiquement la puissance quand les appareils connectes sont proches (signal fort)",
+  "wifi_power.now": "Puissance TX actuelle",
+  "device.ap_clients": "Clients AP",
+  "device.tx_power": "Puissance TX"
 }

@@ -475,6 +475,59 @@
         </div>
       </div>
 
+      <!-- WiFi Guc Accordion -->
+      <div class='setting-section'>
+        <div class='accordion configured' id='wifiPowerAccordion'>
+          <div class='accordion-header'>
+            <h4 class='section-title'>
+              <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
+                <polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'></polygon>
+              </svg>
+              <span data-i18n='wifi_power.title'>WiFi Power</span>
+            </h4>
+            <svg class='accordion-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='20' height='20'>
+              <polyline points='6 9 12 15 18 9'></polyline>
+            </svg>
+          </div>
+          <div class='accordion-content'>
+            <p class='section-desc' data-i18n='wifi_power.desc'>Transmit power limit. Lower power reduces the current peak that can reset the device on a weak supply.</p>
+            <div class='setting-group'>
+              <div class='setting-header'>
+                <h3 data-i18n='wifi_power.max'>Maximum TX Power</h3>
+                <p class='setting-desc' data-i18n='wifi_power.max_desc'>8 dBm (short range, lowest current) to 20 dBm (full range)</p>
+              </div>
+            </div>
+            <div class='alarm-slider-container'>
+              <input type='range' id='txPowerMax' min='8' max='20' step='1' value='17' class='alarm-slider'>
+              <div class='alarm-value'>
+                <span id='txPowerMaxValue'>17</span>
+                <span class='alarm-unit'>dBm</span>
+              </div>
+            </div>
+            <div class='setting-group'>
+              <div class='setting-header'>
+                <h3 data-i18n='wifi_power.adaptive'>Adaptive Power</h3>
+                <p class='setting-desc' data-i18n='wifi_power.adaptive_desc'>Lower power automatically when connected devices are close (strong signal)</p>
+              </div>
+              <div class='setting-control'>
+                <label class='toggle'>
+                  <input type='checkbox' id='txPowerAdaptive' checked>
+                  <span class='toggle-slider'></span>
+                </label>
+              </div>
+            </div>
+            <div class='info-box'>
+              <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
+                <circle cx='12' cy='12' r='10'></circle>
+                <line x1='12' y1='16' x2='12' y2='12'></line>
+                <line x1='12' y1='8' x2='12.01' y2='8'></line>
+              </svg>
+              <span><span data-i18n='wifi_power.now'>Current TX power</span>: <strong id='txPowerNow'>-</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Public WiFi Accordion -->
       <div class='setting-section'>
         <div class='accordion' id='publicWifiAccordion'>
@@ -1616,6 +1669,8 @@
             <div class='system-row'><span class='system-label' data-i18n='device.mdns'>mDNS</span><span class='system-value' id='sysMdns'>-</span></div>
             <div class='system-row'><span class='system-label' data-i18n='device.ap_mode'>AP Mode</span><span class='system-value status-active' id='sysApStatus' data-i18n='device.active'>Active</span></div>
             <div class='system-row'><span class='system-label' data-i18n='device.ap_ip'>AP IP</span><span class='system-value' id='sysApIp'>192.168.4.1</span></div>
+            <div class='system-row'><span class='system-label' data-i18n='device.ap_clients'>AP Clients</span><span class='system-value' id='sysApClients'>-</span></div>
+            <div class='system-row'><span class='system-label' data-i18n='device.tx_power'>TX Power</span><span class='system-value' id='sysTxPower'>-</span></div>
           </div>
         </div>
 

@@ -442,5 +442,14 @@
   "ev.TIMER_EXPIRED": "Countdown abgelaufen",
   "ev.BUTTON": "Taste gedrueckt",
   "ev.USER_RESTART": "Benutzer-Neustart",
-  "mail_group.remove": "Entfernen"
+  "mail_group.remove": "Entfernen",
+  "wifi_power.title": "WLAN-Leistung",
+  "wifi_power.desc": "Sendeleistungsgrenze. Weniger Leistung senkt die Stromspitze, die das Geraet bei schwacher Versorgung zuruecksetzen kann.",
+  "wifi_power.max": "Maximale Sendeleistung",
+  "wifi_power.max_desc": "8 dBm (kurze Reichweite, geringster Strom) bis 20 dBm (volle Reichweite)",
+  "wifi_power.adaptive": "Adaptive Leistung",
+  "wifi_power.adaptive_desc": "Leistung automatisch senken, wenn verbundene Geraete nah sind (starkes Signal)",
+  "wifi_power.now": "Aktuelle Sendeleistung",
+  "device.ap_clients": "AP-Clients",
+  "device.tx_power": "Sendeleistung"
 }

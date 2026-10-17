@@ -442,5 +442,14 @@
   "ev.TIMER_EXPIRED": "geri sayim doldu",
   "ev.BUTTON": "butona basildi",
   "ev.USER_RESTART": "kullanici yeniden baslatma",
-  "mail_group.remove": "Kaldir"
+  "mail_group.remove": "Kaldir",
+  "wifi_power.title": "WiFi Guc",
+  "wifi_power.desc": "Verici gucu siniri. Dusuk guc, zayif beslemede cihazi resetleyebilen akim pikini azaltir.",
+  "wifi_power.max": "Maksimum TX Gucu",
+  "wifi_power.max_desc": "8 dBm (kisa menzil, en dusuk akim) ile 20 dBm (tam menzil) arasi",
+  "wifi_power.adaptive": "Uyarlanabilir Guc",
+  "wifi_power.adaptive_desc": "Bagli cihazlar yakinken (guclu sinyal) gucu otomatik dusur",
+  "wifi_power.now": "Anlik TX gucu",
+  "device.ap_clients": "AP Istemcileri",
+  "device.tx_power": "TX Gucu"
 }

@@ -264,6 +264,17 @@ if (apModeToggle) {
 }
 
 // ============================================================
+// WiFi TX gucu slider
+// ============================================================
+var txPowerSlider = document.getElementById('txPowerMax');
+if (txPowerSlider) {
+  txPowerSlider.addEventListener('input', function() {
+    var v = document.getElementById('txPowerMaxValue');
+    if (v) v.textContent = this.value;
+  });
+}
+
+// ============================================================
 // Sistem bilgisi yukle
 // ============================================================
 function loadInfo() {
@@ -382,6 +393,30 @@ function loadWifiConfig() {
       } else {
         if (backupAcc) backupAcc.className = 'accordion';
       }
+      // Statik IP alanlari (primary + backup) on-doldur
+      function fillStatic(stObj, toggleId, fieldsId, ipId, gwId, maskId, dnsId) {
+        var tg = document.getElementById(toggleId);
+        var fl = document.getElementById(fieldsId);
+        var has = stObj && stObj.ip;
+        if (tg) tg.checked = !!has;
+        if (fl) fl.className = has ? 'static-ip-fields' : 'static-ip-fields hidden';
+        if (!has) return;
+        var set = function(id, v) { var e = document.getElementById(id); if (e && !e.value) e.value = v || ''; };
+        set(ipId, stObj.ip); set(gwId, stObj.gateway); set(maskId, stObj.subnet); set(dnsId, stObj.dns);
+      }
+      fillStatic(cfg.static, 'wifiStaticIpEnabled', 'wifiStaticIpFields', 'sip', 'wifiGateway', 'wifiSubnet', 'wifiDns');
+      fillStatic(cfg.backup_static, 'wifiBackupStaticIpEnabled', 'wifiBackupStaticIpFields',
+                 'wifiBackupStaticIp', 'wifiBackupGateway', 'wifiBackupSubnet', 'wifiBackupDns');
+
+      // TX gucu
+      var txMax = document.getElementById('txPowerMax');
+      var txMaxVal = document.getElementById('txPowerMaxValue');
+      if (txMax && cfg.tx_max) { txMax.value = cfg.tx_max; if (txMaxVal) txMaxVal.textContent = cfg.tx_max; }
+      var txAd = document.getElementById('txPowerAdaptive');
+      if (txAd && cfg.tx_adaptive !== undefined) txAd.checked = !!cfg.tx_adaptive;
+      var txNow = document.getElementById('txPowerNow');
+      if (txNow) txNow.textContent = (cfg.tx_now !== undefined ? cfg.tx_now + ' dBm' : '-');
+
       // AP Mode durumu
       var apToggle = document.getElementById('apModeEnabled');
       var apAcc = document.getElementById('apModeAccordion');
@@ -1025,17 +1060,18 @@ function saveAllSettings() {
   }
 
   // WiFi baglan veya temizle (ssid bossa NVS silinir)
+  var val = function(id) { return ((document.getElementById(id) || {}).value || '').trim(); };
   var ssidEl = document.getElementById('ssid');
   if (ssidEl) {
     var staticEnabled = document.getElementById('wifiStaticIpEnabled');
-    var staticIp = '';
-    if (staticEnabled && staticEnabled.checked) {
-      staticIp = (document.getElementById('sip') || {}).value || '';
-    }
+    var staticOn = staticEnabled && staticEnabled.checked;
     var wifiData = {
       ssid: ssidEl.value || '',
       password: (document.getElementById('pass') || {}).value || '',
-      static_ip: staticIp
+      static_ip: staticOn ? val('sip') : '',
+      gateway: staticOn ? val('wifiGateway') : '',
+      subnet: staticOn ? val('wifiSubnet') : '',
+      dns: staticOn ? val('wifiDns') : ''
     };
     otherPromises.push(
       fetch('/api/wifi/connect', {
@@ -1050,14 +1086,14 @@ function saveAllSettings() {
   var backupSsidEl = document.getElementById('wifiBackupSsid');
   if (backupSsidEl) {
     var backupStaticEnabled = document.getElementById('wifiBackupStaticIpEnabled');
-    var backupStaticIp = '';
-    if (backupStaticEnabled && backupStaticEnabled.checked) {
-      backupStaticIp = (document.getElementById('wifiBackupStaticIp') || {}).value || '';
-    }
+    var bStaticOn = backupStaticEnabled && backupStaticEnabled.checked;
     var backupData = {
       ssid: backupSsidEl.value || '',
       password: (document.getElementById('wifiBackupPass') || {}).value || '',
-      static_ip: backupStaticIp
+      static_ip: bStaticOn ? val('wifiBackupStaticIp') : '',
+      gateway: bStaticOn ? val('wifiBackupGateway') : '',
+      subnet: bStaticOn ? val('wifiBackupSubnet') : '',
+      dns: bStaticOn ? val('wifiBackupDns') : ''
     };
     otherPromises.push(
       fetch('/api/wifi/backup/save', {
@@ -1076,6 +1112,19 @@ function saveAllSettings() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: apToggle.checked ? 'true' : 'false' })
+      }).catch(function() {})
+    );
+  }
+
+  // WiFi TX gucu
+  var txMaxEl = document.getElementById('txPowerMax');
+  var txAdEl = document.getElementById('txPowerAdaptive');
+  if (txMaxEl) {
+    otherPromises.push(
+      fetch('/api/wifi/txpower', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ max_dbm: txMaxEl.value, adaptive: (txAdEl && txAdEl.checked) ? 'true' : 'false' })
       }).catch(function() {})
     );
   }
@@ -1287,6 +1336,10 @@ function loadSystemDetail() {
       el = document.getElementById('sysRssi');
       if (el) el.textContent = d.rssi ? rssiLabel(d.rssi) : '-';
 
+      el = document.getElementById('sysApClients');
+      if (el && d.ap_clients !== undefined) el.textContent = d.ap_clients;
+      el = document.getElementById('sysTxPower');
+      if (el && d.tx_now !== undefined) el.textContent = d.tx_now + ' dBm (max ' + d.tx_max + ' dBm)';
       el = document.getElementById('sysUptime');
       if (el) el.textContent = formatUptime(d.uptime);
       el = document.getElementById('sysBootCount');

@@ -198,6 +198,7 @@ static esp_err_t send_active_slot_file_chunked(httpd_req_t *req, const char *pat
     }
 
     ESP_LOGI(TAG, "%s aktif slot'tan sunuluyor (%ld byte, chunked)", path, file_size);
+    sys_log_mark_event(SL_EV_GUI_SERVE, (int32_t)file_size);
 
     esp_err_t result = ESP_OK;
     int read_len;
@@ -296,14 +297,17 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
 
     char ssid[33] = {0};
     char password[65] = {0};
-    char static_ip[16] = {0};
+    wifi_static_cfg_t st = {0};
 
     parse_json_string(buf, "ssid", ssid, sizeof(ssid));
     parse_json_string(buf, "password", password, sizeof(password));
-    parse_json_string(buf, "static_ip", static_ip, sizeof(static_ip));
+    parse_json_string(buf, "static_ip", st.ip, sizeof(st.ip));
+    parse_json_string(buf, "gateway", st.gw, sizeof(st.gw));
+    parse_json_string(buf, "subnet", st.mask, sizeof(st.mask));
+    parse_json_string(buf, "dns", st.dns, sizeof(st.dns));
 
-    ESP_LOGI("WEB_SRV", "WiFi connect - SSID:'%s' pass_len:%d ip:'%s'",
-             ssid, (int)strlen(password), static_ip);
+    ESP_LOGI(TAG, "WiFi connect - SSID:'%s' pass_len:%d ip:'%s' gw:'%s'",
+             ssid, (int)strlen(password), st.ip, st.gw);
 
     if (strlen(ssid) == 0) {
         wifi_manager_clear_primary();
@@ -311,7 +315,7 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
         return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"WiFi ayarlari silindi\"}", HTTPD_RESP_USE_STRLEN);
     }
 
-    esp_err_t err = wifi_manager_connect_sta(ssid, password, static_ip);
+    esp_err_t err = wifi_manager_connect_sta(ssid, password, &st);
     char resp[128];
     if (err == ESP_OK) {
         snprintf(resp, sizeof(resp),
@@ -338,14 +342,17 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
 
     char ssid[33] = {0};
     char password[65] = {0};
-    char static_ip[16] = {0};
+    wifi_static_cfg_t st = {0};
 
     parse_json_string(buf, "ssid", ssid, sizeof(ssid));
     parse_json_string(buf, "password", password, sizeof(password));
-    parse_json_string(buf, "static_ip", static_ip, sizeof(static_ip));
+    parse_json_string(buf, "static_ip", st.ip, sizeof(st.ip));
+    parse_json_string(buf, "gateway", st.gw, sizeof(st.gw));
+    parse_json_string(buf, "subnet", st.mask, sizeof(st.mask));
+    parse_json_string(buf, "dns", st.dns, sizeof(st.dns));
 
-    ESP_LOGI("WEB_SRV", "Backup WiFi save - SSID:'%s' pass_len:%d ip:'%s'",
-             ssid, (int)strlen(password), static_ip);
+    ESP_LOGI(TAG, "Backup WiFi save - SSID:'%s' pass_len:%d ip:'%s'",
+             ssid, (int)strlen(password), st.ip);
 
     if (strlen(ssid) == 0) {
         wifi_manager_clear_backup();
@@ -353,7 +360,7 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
         return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"Yedek WiFi ayarlari silindi\"}", HTTPD_RESP_USE_STRLEN);
     }
 
-    esp_err_t err = wifi_manager_save_backup(ssid, password, static_ip);
+    esp_err_t err = wifi_manager_save_backup(ssid, password, &st);
     char resp[128];
     if (err == ESP_OK) {
         snprintf(resp, sizeof(resp),
@@ -370,22 +377,41 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
 // GET /api/wifi/config - WiFi ayarlarini getir (primary + backup)
 static esp_err_t api_wifi_config_handler(httpd_req_t *req)
 {
-    char resp[512];
+    const wifi_static_cfg_t *ps = wifi_manager_get_primary_static();
+    const wifi_static_cfg_t *bs = wifi_manager_get_backup_static();
+    char esc_ssid[70], esc_bssid[70];
+    json_escape(wifi_manager_get_sta_ssid(), esc_ssid, sizeof(esc_ssid));
+    json_escape(wifi_manager_get_backup_ssid(), esc_bssid, sizeof(esc_bssid));
+    char resp[768];
     snprintf(resp, sizeof(resp),
              "{"
              "\"connected\":%s,"
              "\"ip\":\"%s\","
              "\"sta_ssid\":\"%s\","
+             "\"static\":{\"ip\":\"%s\",\"gateway\":\"%s\",\"subnet\":\"%s\",\"dns\":\"%s\"},"
              "\"backup_ssid\":\"%s\","
+             "\"backup_static\":{\"ip\":\"%s\",\"gateway\":\"%s\",\"subnet\":\"%s\",\"dns\":\"%s\"},"
              "\"has_backup\":%s,"
-             "\"ap_enabled\":%s"
+             "\"ap_enabled\":%s,"
+             "\"ap_clients\":%d,"
+             "\"rssi\":%d,"
+             "\"tx_max\":%d,"
+             "\"tx_now\":%d,"
+             "\"tx_adaptive\":%s"
              "}",
              wifi_manager_is_connected() ? "true" : "false",
              wifi_manager_get_ip(),
-             wifi_manager_get_sta_ssid(),
-             wifi_manager_get_backup_ssid(),
+             esc_ssid,
+             ps->ip, ps->gw, ps->mask, ps->dns,
+             esc_bssid,
+             bs->ip, bs->gw, bs->mask, bs->dns,
              wifi_manager_has_backup_config() ? "true" : "false",
-             wifi_manager_is_ap_enabled() ? "true" : "false");
+             wifi_manager_is_ap_enabled() ? "true" : "false",
+             wifi_manager_get_ap_client_count(),
+             wifi_manager_get_sta_rssi(),
+             wifi_manager_get_tx_power_max(),
+             wifi_manager_get_tx_power_now(),
+             wifi_manager_get_tx_adaptive() ? "true" : "false");
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
@@ -421,6 +447,38 @@ static esp_err_t api_wifi_ap_set_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"%s\"}", esp_err_to_name(err));
     }
 
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, resp, strlen(resp));
+}
+
+// POST /api/wifi/txpower - TX gucu tavani ve uyarlanabilir mod {max_dbm, adaptive}
+static esp_err_t api_wifi_txpower_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+
+    char v[8] = {0};
+    int max_dbm = wifi_manager_get_tx_power_max();
+    if (parse_json_string(buf, "max_dbm", v, sizeof(v)) > 0) max_dbm = atoi(v);
+    bool adaptive = wifi_manager_get_tx_adaptive();
+    if (parse_json_string(buf, "adaptive", v, sizeof(v)) > 0) {
+        adaptive = (strcmp(v, "true") == 0 || strcmp(v, "1") == 0);
+    }
+
+    esp_err_t err = wifi_manager_set_tx_power(max_dbm, adaptive);
+    char resp[128];
+    if (err == ESP_OK) {
+        snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"tx_max\":%d,\"tx_now\":%d,\"tx_adaptive\":%s}",
+                 wifi_manager_get_tx_power_max(), wifi_manager_get_tx_power_now(),
+                 wifi_manager_get_tx_adaptive() ? "true" : "false");
+    } else {
+        snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Gecersiz deger (8-20 dBm)\"}");
+    }
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
 }
@@ -660,7 +718,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
         ext_flash_get_info(&user_total, &user_free);
     }
 
-    char resp[960];
+    char resp[1024];
     snprintf(resp, sizeof(resp),
              "{"
              "\"chip\":\"%s\","
@@ -685,7 +743,10 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              "\"short_boots\":%lu,"
              "\"last_cause\":\"%s\","
              "\"last_cat\":\"%s\","
-             "\"prev_uptime\":%lu"
+             "\"prev_uptime\":%lu,"
+             "\"tx_now\":%d,"
+             "\"tx_max\":%d,"
+             "\"ap_clients\":%d"
              "}",
              info.chip_model,
              (unsigned)info.cores,
@@ -708,7 +769,10 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              (unsigned long)sys_log_short_boots(),
              sys_log_last_cause(),
              sys_log_last_cause_cat(),
-             (unsigned long)sys_log_prev_uptime());
+             (unsigned long)sys_log_prev_uptime(),
+             wifi_manager_get_tx_power_now(),
+             wifi_manager_get_tx_power_max(),
+             wifi_manager_get_ap_client_count());
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
@@ -2154,6 +2218,11 @@ esp_err_t web_server_start(void)
         .uri = "/api/wifi/ap/set", .method = HTTP_POST, .handler = api_wifi_ap_set_handler
     };
     httpd_register_uri_handler(s_server, &api_wifi_ap);
+
+    const httpd_uri_t api_wifi_txp = {
+        .uri = "/api/wifi/txpower", .method = HTTP_POST, .handler = api_wifi_txpower_handler
+    };
+    httpd_register_uri_handler(s_server, &api_wifi_txp);
 
     // --- Timer API ---
     const httpd_uri_t api_timer_get = {

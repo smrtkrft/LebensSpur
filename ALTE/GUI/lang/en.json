@@ -442,5 +442,14 @@
   "ev.TIMER_EXPIRED": "countdown expired",
   "ev.BUTTON": "button pressed",
   "ev.USER_RESTART": "user restart",
-  "mail_group.remove": "Remove"
+  "mail_group.remove": "Remove",
+  "wifi_power.title": "WiFi Power",
+  "wifi_power.desc": "Transmit power limit. Lower power reduces the current peak that can reset the device on a weak supply.",
+  "wifi_power.max": "Maximum TX Power",
+  "wifi_power.max_desc": "8 dBm (short range, lowest current) to 20 dBm (full range)",
+  "wifi_power.adaptive": "Adaptive Power",
+  "wifi_power.adaptive_desc": "Lower power automatically when connected devices are close (strong signal)",
+  "wifi_power.now": "Current TX power",
+  "device.ap_clients": "AP Clients",
+  "device.tx_power": "TX Power"
 }

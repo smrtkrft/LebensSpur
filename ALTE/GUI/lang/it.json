@@ -442,5 +442,14 @@
   "ev.TIMER_EXPIRED": "conto alla rovescia scaduto",
   "ev.BUTTON": "pulsante premuto",
   "ev.USER_RESTART": "riavvio utente",
-  "mail_group.remove": "Rimuovi"
+  "mail_group.remove": "Rimuovi",
+  "wifi_power.title": "Potenza WiFi",
+  "wifi_power.desc": "Limite della potenza di trasmissione. Meno potenza riduce il picco di corrente che puo riavviare il dispositivo con un'alimentazione debole.",
+  "wifi_power.max": "Potenza TX massima",
+  "wifi_power.max_desc": "Da 8 dBm (corto raggio, corrente minima) a 20 dBm (portata completa)",
+  "wifi_power.adaptive": "Potenza adattiva",
+  "wifi_power.adaptive_desc": "Riduci automaticamente la potenza quando i dispositivi connessi sono vicini (segnale forte)",
+  "wifi_power.now": "Potenza TX attuale",
+  "device.ap_clients": "Client AP",
+  "device.tx_power": "Potenza TX"
 }
