@@ -13,6 +13,10 @@
 #include "system_info.h"
 #include "sys_log.h"
 #include "ls_util.h"
+#include "api_client.h"
+#include "esp_timer.h"
+#include "esp_mac.h"
+#include "mbedtls/sha256.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -106,6 +110,422 @@ static esp_err_t send_json(httpd_req_t *req, const char *body)
 {
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, body, HTTPD_RESP_USE_STRLEN);
+}
+static int read_body(httpd_req_t *req, char *buf, size_t size);
+
+// ============================================================
+// Kimlik Dogrulama (tarayici parolasi + cerez oturumu)
+//
+// - Parola NVS "ls_auth"/"hash" icinde tuzlu SHA-256 (tuz = cihaz MAC) olarak durur.
+// - Parola YOKSA her sey aciktir (GUI uyari gosterir).
+// - Parola VARSA /api/... uclari (auth uclari ve kendi anahtarli /api/reset haric)
+//   "ls_sess" oturum cerezi ister. Statik GUI dosyalari aciktir; GUI 401 alinca
+//   giris ekrani gosterir.
+// - Cerez SameSite=Strict + HttpOnly: baska sitelerden CSRF istekleri cerezsiz gider.
+// - Oturum, "otomatik cikis" dakikasi kadar hareketsiz kalinca duser.
+// - Giris korumasi acikken 5 hatali giris -> "kilit suresi" dakika kilit.
+// ============================================================
+#define AUTH_NVS_NS        "ls_auth"
+#define AUTH_MAX_SESSIONS  4
+#define AUTH_TOKEN_LEN     32                      /* hex karakter */
+#define AUTH_FAIL_MAX      5
+#define AUTH_TTL_DEFAULT_MIN   10
+#define AUTH_LOCK_DEFAULT_MIN  15
+
+typedef struct {
+    char token[AUTH_TOKEN_LEN + 1];
+    uint32_t last_seen_s;
+} auth_session_t;
+
+static bool s_auth_enabled = false;
+static char s_auth_hash[65] = {0};                 /* hex sha256 */
+static auth_session_t s_sessions[AUTH_MAX_SESSIONS];
+static int s_auth_fail = 0;
+static uint32_t s_auth_lock_until = 0;
+static uint16_t s_auth_ttl_min = AUTH_TTL_DEFAULT_MIN;
+static bool s_auth_protect = true;
+static uint8_t s_auth_lock_min = AUTH_LOCK_DEFAULT_MIN;
+
+static uint32_t auth_now_s(void) { return (uint32_t)(esp_timer_get_time() / 1000000ULL); }
+
+/* Zamanlama sizintisi olmadan karsilastirma */
+static bool ct_equal(const char *a, const char *b, size_t n)
+{
+    unsigned char d = 0;
+    for (size_t i = 0; i < n; i++) d |= (unsigned char)(a[i] ^ b[i]);
+    return d == 0;
+}
+
+static void auth_hash_password(const char *pass, char out_hex[65])
+{
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    char salted[160];
+    int n = snprintf(salted, sizeof(salted), "%02x%02x%02x%02x%02x%02x:%s",
+                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], pass);
+    uint8_t dig[32];
+    mbedtls_sha256((const unsigned char *)salted, (size_t)n, dig, 0);
+    for (int i = 0; i < 32; i++) sprintf(out_hex + i * 2, "%02x", dig[i]);
+    out_hex[64] = '\0';
+}
+
+static void auth_load(void)
+{
+    nvs_handle_t nvs;
+    s_auth_enabled = false;
+    if (nvs_open(AUTH_NVS_NS, NVS_READONLY, &nvs) == ESP_OK) {
+        size_t len = sizeof(s_auth_hash);
+        if (nvs_get_str(nvs, "hash", s_auth_hash, &len) == ESP_OK && strlen(s_auth_hash) == 64) {
+            s_auth_enabled = true;
+        }
+        uint16_t ttl = AUTH_TTL_DEFAULT_MIN;
+        if (nvs_get_u16(nvs, "ttl_min", &ttl) == ESP_OK && ttl >= 1 && ttl <= 1440) s_auth_ttl_min = ttl;
+        uint8_t pr = 1;
+        nvs_get_u8(nvs, "protect", &pr);
+        s_auth_protect = (pr != 0);
+        uint8_t lm = AUTH_LOCK_DEFAULT_MIN;
+        if (nvs_get_u8(nvs, "lock_min", &lm) == ESP_OK && lm >= 1 && lm <= 60) s_auth_lock_min = lm;
+        nvs_close(nvs);
+    }
+    memset(s_sessions, 0, sizeof(s_sessions));
+    ESP_LOGI(TAG, "Kimlik dogrulama: %s (oturum %u dk, koruma %s, kilit %u dk)",
+             s_auth_enabled ? "ACIK (parola ayarli)" : "KAPALI (parola yok)",
+             s_auth_ttl_min, s_auth_protect ? "acik" : "kapali", s_auth_lock_min);
+}
+
+static esp_err_t auth_store_password(const char *pass_or_null)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(AUTH_NVS_NS, NVS_READWRITE, &nvs);
+    if (err != ESP_OK) return err;
+    if (pass_or_null && *pass_or_null) {
+        auth_hash_password(pass_or_null, s_auth_hash);
+        err = nvs_set_str(nvs, "hash", s_auth_hash);
+        s_auth_enabled = (err == ESP_OK);
+    } else {
+        nvs_erase_key(nvs, "hash");
+        s_auth_enabled = false;
+        s_auth_hash[0] = '\0';
+    }
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    memset(s_sessions, 0, sizeof(s_sessions));      /* tum oturumlar dusur */
+    return err;
+}
+
+static esp_err_t auth_store_session_cfg(void)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(AUTH_NVS_NS, NVS_READWRITE, &nvs);
+    if (err != ESP_OK) return err;
+    nvs_set_u16(nvs, "ttl_min", s_auth_ttl_min);
+    nvs_set_u8(nvs, "protect", s_auth_protect ? 1 : 0);
+    nvs_set_u8(nvs, "lock_min", s_auth_lock_min);
+    err = nvs_commit(nvs);
+    nvs_close(nvs);
+    return err;
+}
+
+static void auth_new_token(char out[AUTH_TOKEN_LEN + 1])
+{
+    uint8_t rnd[AUTH_TOKEN_LEN / 2];
+    esp_fill_random(rnd, sizeof(rnd));
+    for (size_t i = 0; i < sizeof(rnd); i++) sprintf(out + i * 2, "%02x", rnd[i]);
+    out[AUTH_TOKEN_LEN] = '\0';
+}
+
+static auth_session_t *auth_session_create(void)
+{
+    uint32_t now = auth_now_s();
+    auth_session_t *victim = &s_sessions[0];
+    for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
+        if (s_sessions[i].token[0] == '\0') { victim = &s_sessions[i]; break; }
+        if (s_sessions[i].last_seen_s < victim->last_seen_s) victim = &s_sessions[i];
+    }
+    auth_new_token(victim->token);
+    victim->last_seen_s = now;
+    return victim;
+}
+
+/* Cookie basligindan ls_sess token'ini al. Baslik uzunlugu sinirsiz (ayni IP'de
+ * baska servislerin cerezleri olabilir): dinamik tampon; "ls_sess=" yalnizca
+ * baslangicta veya "; " sonrasinda eslesir. */
+static bool auth_cookie_token(httpd_req_t *req, char tok[AUTH_TOKEN_LEN + 1])
+{
+    tok[0] = '\0';
+    size_t len = httpd_req_get_hdr_value_len(req, "Cookie");
+    if (len == 0 || len > 4096) return false;
+    char *hdr = malloc(len + 1);
+    if (!hdr) return false;
+    bool found = false;
+    if (httpd_req_get_hdr_value_str(req, "Cookie", hdr, len + 1) == ESP_OK) {
+        const char *p = hdr;
+        while ((p = strstr(p, "ls_sess=")) != NULL) {
+            if (p == hdr || p[-1] == ' ' || p[-1] == ';') {
+                strncpy(tok, p + 8, AUTH_TOKEN_LEN);
+                tok[AUTH_TOKEN_LEN] = '\0';
+                found = true;
+                break;
+            }
+            p += 8;
+        }
+    }
+    free(hdr);
+    return found;
+}
+
+/* Istekte gecerli oturum var mi? Cerez "ls_sess" veya "X-Auth-Token" basligi */
+static bool auth_request_ok(httpd_req_t *req)
+{
+    char tok[AUTH_TOKEN_LEN + 1] = {0};
+    char hdr[64];
+    if (httpd_req_get_hdr_value_str(req, "X-Auth-Token", hdr, sizeof(hdr)) == ESP_OK) {
+        strncpy(tok, hdr, AUTH_TOKEN_LEN);
+    } else {
+        auth_cookie_token(req, tok);
+    }
+    if (strlen(tok) != AUTH_TOKEN_LEN) return false;
+
+    uint32_t now = auth_now_s();
+    uint32_t ttl_s = (uint32_t)s_auth_ttl_min * 60;
+    for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
+        auth_session_t *se = &s_sessions[i];
+        if (se->token[0] == '\0') continue;
+        if (now - se->last_seen_s > ttl_s) { se->token[0] = '\0'; continue; }  /* hareketsiz: dustu */
+        if (ct_equal(se->token, tok, AUTH_TOKEN_LEN)) {
+            se->last_seen_s = now;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void auth_set_cookie(httpd_req_t *req, const char *token)
+{
+    char cookie[160];
+    snprintf(cookie, sizeof(cookie), "ls_sess=%s; Path=/; Max-Age=%u; HttpOnly; SameSite=Strict",
+             token, (unsigned)s_auth_ttl_min * 60);
+    httpd_resp_set_hdr(req, "Set-Cookie", cookie);
+}
+
+// GET /api/auth/status
+static esp_err_t api_auth_status_handler(httpd_req_t *req)
+{
+    char resp[160];
+    snprintf(resp, sizeof(resp),
+             "{\"enabled\":%s,\"logged_in\":%s,\"ttl_min\":%u,\"protect\":%s,\"lock_min\":%u}",
+             s_auth_enabled ? "true" : "false",
+             (!s_auth_enabled || auth_request_ok(req)) ? "true" : "false",
+             s_auth_ttl_min, s_auth_protect ? "true" : "false", s_auth_lock_min);
+    return send_json(req, resp);
+}
+
+// POST /api/auth/login {password}
+static esp_err_t api_auth_login_handler(httpd_req_t *req)
+{
+    if (!s_auth_enabled) {
+        return send_json(req, "{\"status\":\"ok\",\"enabled\":false}");
+    }
+    uint32_t now = auth_now_s();
+    if (s_auth_protect && s_auth_lock_until > now) {
+        char resp[96];
+        snprintf(resp, sizeof(resp), "{\"status\":\"locked\",\"retry_s\":%lu}",
+                 (unsigned long)(s_auth_lock_until - now));
+        httpd_resp_set_status(req, "429 Too Many Requests");
+        return send_json(req, resp);
+    }
+    char body[256];
+    if (read_body(req, body, sizeof(body)) <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    char pass[96] = {0};
+    parse_json_string(body, "password", pass, sizeof(pass));
+    char hex[65];
+    auth_hash_password(pass, hex);
+    if (!ct_equal(hex, s_auth_hash, 64)) {
+        s_auth_fail++;
+        sys_log_write("WARN", "user", "Hatali giris denemesi (%d/%d)", s_auth_fail, AUTH_FAIL_MAX);
+        if (s_auth_protect && s_auth_fail >= AUTH_FAIL_MAX) {
+            s_auth_lock_until = now + (uint32_t)s_auth_lock_min * 60;
+            s_auth_fail = 0;
+            sys_log_write("WARN", "user", "Giris kilitlendi (%u dk)", s_auth_lock_min);
+        }
+        httpd_resp_set_status(req, "401 Unauthorized");
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Parola yanlis\"}");
+    }
+    s_auth_fail = 0;
+    auth_session_t *se = auth_session_create();
+    auth_set_cookie(req, se->token);
+    sys_log_write("INFO", "user", "Web girisi basarili");
+    char resp[128];
+    snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"token\":\"%s\"}", se->token);
+    return send_json(req, resp);
+}
+
+// POST /api/auth/logout
+static esp_err_t api_auth_logout_handler(httpd_req_t *req)
+{
+    char tok[AUTH_TOKEN_LEN + 1] = {0};
+    auth_cookie_token(req, tok);
+    for (int i = 0; i < AUTH_MAX_SESSIONS; i++) {
+        if (s_sessions[i].token[0] && ct_equal(s_sessions[i].token, tok, AUTH_TOKEN_LEN)) {
+            s_sessions[i].token[0] = '\0';
+        }
+    }
+    httpd_resp_set_hdr(req, "Set-Cookie", "ls_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+    return send_json(req, "{\"status\":\"ok\"}");
+}
+
+// POST /api/auth/set {current, new, ttl_min, protect, lock_min}
+// new bos -> parola kaldirilir. Parola ayarliysa current dogru olmali.
+static esp_err_t api_auth_set_handler(httpd_req_t *req)
+{
+    char body[384];
+    if (read_body(req, body, sizeof(body)) <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    char cur[96] = {0}, npw[96] = {0};
+    bool has_new = parse_json_string(body, "new", npw, sizeof(npw)) >= 0;
+    parse_json_string(body, "current", cur, sizeof(cur));
+
+    if (s_auth_enabled && !auth_request_ok(req)) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Oturum gerekli\"}");
+    }
+
+    /* Oturum ayarlari (opsiyonel alanlar) */
+    int v;
+    bool b;
+    bool cfg_changed = false;
+    if (ls_json_get_int(body, "ttl_min", &v) && v >= 1 && v <= 1440) { s_auth_ttl_min = (uint16_t)v; cfg_changed = true; }
+    if (ls_json_get_bool(body, "protect", &b)) { s_auth_protect = b; cfg_changed = true; }
+    if (ls_json_get_int(body, "lock_min", &v) && v >= 1 && v <= 60) { s_auth_lock_min = (uint8_t)v; cfg_changed = true; }
+    if (cfg_changed) auth_store_session_cfg();
+
+    if (has_new) {
+        if (s_auth_enabled) {
+            char hex[65];
+            auth_hash_password(cur, hex);
+            if (!ct_equal(hex, s_auth_hash, 64)) {
+                return send_json(req, "{\"status\":\"error\",\"message\":\"Mevcut parola yanlis\"}");
+            }
+        }
+        if (npw[0] && strlen(npw) < 4) {
+            return send_json(req, "{\"status\":\"error\",\"message\":\"Parola en az 4 karakter\"}");
+        }
+        esp_err_t err = auth_store_password(npw[0] ? npw : NULL);
+        if (err != ESP_OK) {
+            return send_json(req, "{\"status\":\"error\",\"message\":\"Kaydedilemedi\"}");
+        }
+        if (npw[0]) {
+            sys_log_write("INFO", "user", "Tarayici parolasi ayarlandi/degistirildi");
+            auth_session_t *se = auth_session_create();   /* ayarlayan oturumda kalsin */
+            auth_set_cookie(req, se->token);
+        } else {
+            sys_log_write("WARN", "user", "Tarayici parolasi kaldirildi");
+        }
+    }
+    char resp[128];
+    snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"enabled\":%s}", s_auth_enabled ? "true" : "false");
+    return send_json(req, resp);
+}
+
+// ============================================================
+// Webhook / MQTT API (api_client)
+// ============================================================
+
+// GET /api/api-config
+static esp_err_t api_apicfg_get_handler(httpd_req_t *req)
+{
+    api_config_t c;
+    api_client_get_config(&c);
+    const size_t cap = 4096;
+    char *resp = malloc(cap);
+    if (!resp) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
+        return ESP_FAIL;
+    }
+    char e_url[520], e_hdr[520], e_body[1040], e_mq[260], e_topic[260], e_user[130], e_pl[520];
+    json_escape(c.wh_url, e_url, sizeof(e_url));
+    json_escape(c.wh_headers, e_hdr, sizeof(e_hdr));
+    json_escape(c.wh_body, e_body, sizeof(e_body));
+    json_escape(c.mq_url, e_mq, sizeof(e_mq));
+    json_escape(c.mq_topic, e_topic, sizeof(e_topic));
+    json_escape(c.mq_user, e_user, sizeof(e_user));
+    json_escape(c.mq_payload, e_pl, sizeof(e_pl));
+    snprintf(resp, cap,
+             "{\"webhook\":{\"url\":\"%s\",\"method\":\"%s\",\"headers\":\"%s\",\"body\":\"%s\",\"configured\":%s},"
+             "\"mqtt\":{\"url\":\"%s\",\"topic\":\"%s\",\"user\":\"%s\",\"has_pass\":%s,\"payload\":\"%s\",\"configured\":%s}}",
+             e_url, c.wh_method, e_hdr, e_body, api_client_has_webhook() ? "true" : "false",
+             e_mq, e_topic, e_user, c.mq_pass[0] ? "true" : "false", e_pl,
+             api_client_has_mqtt() ? "true" : "false");
+    esp_err_t r = send_json(req, resp);
+    free(resp);
+    return r;
+}
+
+// POST /api/api-config  (mq_pass bos -> mevcut korunur)
+static esp_err_t api_apicfg_save_handler(httpd_req_t *req)
+{
+    char *body = malloc(2048);
+    if (!body) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
+        return ESP_FAIL;
+    }
+    if (read_body(req, body, 2048) <= 0) {
+        free(body);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
+        return ESP_FAIL;
+    }
+    api_config_t c, old;
+    memset(&c, 0, sizeof(c));
+    api_client_get_config(&old);
+    parse_json_string(body, "wh_url", c.wh_url, sizeof(c.wh_url));
+    parse_json_string(body, "wh_method", c.wh_method, sizeof(c.wh_method));
+    parse_json_string(body, "wh_headers", c.wh_headers, sizeof(c.wh_headers));
+    parse_json_string(body, "wh_body", c.wh_body, sizeof(c.wh_body));
+    parse_json_string(body, "mq_url", c.mq_url, sizeof(c.mq_url));
+    parse_json_string(body, "mq_topic", c.mq_topic, sizeof(c.mq_topic));
+    parse_json_string(body, "mq_user", c.mq_user, sizeof(c.mq_user));
+    parse_json_string(body, "mq_pass", c.mq_pass, sizeof(c.mq_pass));
+    parse_json_string(body, "mq_payload", c.mq_payload, sizeof(c.mq_payload));
+    free(body);
+    if (c.mq_pass[0] == '\0') strncpy(c.mq_pass, old.mq_pass, sizeof(c.mq_pass) - 1);
+    if (strcmp(c.wh_method, "GET") != 0 && strcmp(c.wh_method, "PUT") != 0) strcpy(c.wh_method, "POST");
+    if (c.wh_url[0] && strncmp(c.wh_url, "http://", 7) != 0 && strncmp(c.wh_url, "https://", 8) != 0) {
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Webhook URL http:// veya https:// ile baslamali\"}");
+    }
+    if (c.mq_url[0] && strncmp(c.mq_url, "mqtt://", 7) != 0 && strncmp(c.mq_url, "mqtts://", 8) != 0 &&
+        strncmp(c.mq_url, "ws://", 5) != 0 && strncmp(c.mq_url, "wss://", 6) != 0) {
+        return send_json(req, "{\"status\":\"error\",\"message\":\"MQTT URL mqtt:// ile baslamali\"}");
+    }
+    if (api_client_save_config(&c) != ESP_OK) {
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Kaydedilemedi\"}");
+    }
+    return send_json(req, "{\"status\":\"ok\"}");
+}
+
+// POST /api/api-config/test {target: webhook|mqtt}
+static esp_err_t api_apicfg_test_handler(httpd_req_t *req)
+{
+    char body[64];
+    read_body(req, body, sizeof(body));
+    char target[16] = {0};
+    parse_json_string(body, "target", target, sizeof(target));
+    esp_err_t err;
+    if (strcmp(target, "mqtt") == 0) {
+        if (!api_client_has_mqtt()) return send_json(req, "{\"status\":\"error\",\"message\":\"MQTT yapilandirilmamis\"}");
+        err = api_client_send_mqtt("test");
+    } else {
+        if (!api_client_has_webhook()) return send_json(req, "{\"status\":\"error\",\"message\":\"Webhook yapilandirilmamis\"}");
+        err = api_client_send_webhook("test");
+    }
+    char resp[160];
+    if (err == ESP_OK) snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"message\":\"Test gonderildi\"}");
+    else snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Gonderim hatasi (%s)\"}", esp_err_to_name(err));
+    return send_json(req, resp);
 }
 
 /* Istek govdesini oku (content_len sinirli, timeout tekrarli). Donus: uzunluk, hata: <=0 */
@@ -215,7 +635,8 @@ static esp_err_t api_system_info_handler(httpd_req_t *req)
              "\"slot_a_total\":%zu,"
              "\"slot_a_free\":%zu,"
              "\"user_data_total\":%zu,"
-             "\"user_data_free\":%zu"
+             "\"user_data_free\":%zu,"
+             "\"auth_enabled\":%s"
              "}",
              wifi_manager_get_device_name(),
              wifi_manager_get_ip(),
@@ -227,7 +648,8 @@ static esp_err_t api_system_info_handler(httpd_req_t *req)
              slot_a_total / 1024,
              slot_a_free / 1024,
              user_total / 1024,
-             user_free / 1024);
+             user_free / 1024,
+             s_auth_enabled ? "true" : "false");
 
     return send_json(req, resp);
 }
@@ -2072,58 +2494,78 @@ typedef struct {
     const char *uri;
     httpd_method_t method;
     esp_err_t (*handler)(httpd_req_t *);
+    bool auth;              /* parola ayarliysa oturum gerekir */
 } route_t;
+
+/* Tum rotalar bu dispatcher'dan gecer: auth gereken uc oturumsuz 401 doner */
+static esp_err_t route_dispatch(httpd_req_t *req)
+{
+    const route_t *r = (const route_t *)req->user_ctx;
+    if (r->auth && s_auth_enabled && !auth_request_ok(req)) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        return send_json(req, "{\"status\":\"error\",\"error\":\"auth_required\"}");
+    }
+    return r->handler(req);
+}
 
 /* Tum uclar tek tabloda; sira onemli: joker yol (ext) en sonda */
 static const route_t s_routes[] = {
-    { "/", HTTP_GET, root_handler },
-    { "/api/system/info", HTTP_GET, api_system_info_handler },
-    { "/api/wifi/connect", HTTP_POST, api_wifi_connect_handler },
-    { "/api/wifi/backup/save", HTTP_POST, api_wifi_backup_save_handler },
-    { "/api/wifi/config", HTTP_GET, api_wifi_config_handler },
-    { "/api/wifi/ap/set", HTTP_POST, api_wifi_ap_set_handler },
-    { "/api/wifi/txpower", HTTP_POST, api_wifi_txpower_handler },
-    { "/api/timer/get", HTTP_GET, api_timer_get_handler },
-    { "/api/timer/set", HTTP_POST, api_timer_set_handler },
-    { "/api/smtp/get", HTTP_GET, api_smtp_get_handler },
-    { "/api/smtp/save", HTTP_POST, api_smtp_save_handler },
-    { "/api/smtp/test", HTTP_POST, api_smtp_test_handler },
-    { "/api/system/detail", HTTP_GET, api_system_detail_handler },
-    { "/api/logs", HTTP_GET, api_logs_handler },
-    { "/api/logs/clear", HTTP_POST, api_logs_clear_handler },
-    { "/api/relay/get", HTTP_GET, api_relay_get_handler },
-    { "/api/relay/set", HTTP_POST, api_relay_set_handler },
-    { "/api/relay/test", HTTP_POST, api_relay_test_handler },
-    { "/api/device/restart", HTTP_POST, api_device_restart_handler },
-    { "/api/device/factory-reset", HTTP_POST, api_device_factory_reset_handler },
-    { "/api/early-mail/get", HTTP_GET, api_early_mail_get_handler },
-    { "/api/early-mail/save", HTTP_POST, api_early_mail_save_handler },
-    { "/api/trigger-mail/get", HTTP_GET, api_trigger_mail_get_handler },
-    { "/api/trigger-mail/save", HTTP_POST, api_trigger_mail_save_handler },
-    { "/api/trigger-mail/delete", HTTP_POST, api_trigger_mail_delete_handler },
-    { "/api/trigger-mail/upload", HTTP_POST, api_trigger_mail_upload_handler },
-    { "/api/trigger-mail/files", HTTP_GET, api_trigger_mail_files_handler },
-    { "/api/trigger-mail/file-delete", HTTP_POST, api_trigger_mail_file_delete_handler },
-    { "/api/actions/get", HTTP_GET, api_actions_get_handler },
-    { "/api/actions/save", HTTP_POST, api_actions_save_handler },
-    { "/api/telegram/get", HTTP_GET, api_telegram_get_handler },
-    { "/api/telegram/save", HTTP_POST, api_telegram_save_handler },
-    { "/api/telegram/test", HTTP_POST, api_telegram_test_handler },
-    { "/api/reset/config", HTTP_GET, api_reset_config_get_handler },
-    { "/api/reset/config", HTTP_POST, api_reset_config_save_handler },
-    { "/api/reset/generate", HTTP_POST, api_reset_generate_handler },
-    { "/api/reset", HTTP_GET, api_reset_handler },
-    { "/api/gui-ota/info", HTTP_GET, api_gui_ota_info_handler },
-    { "/api/gui-ota/start", HTTP_POST, api_gui_ota_start_handler },
-    { "/api/gui-ota/status", HTTP_GET, api_gui_ota_status_handler },
-    { "/api/gui-ota/rollback", HTTP_POST, api_gui_ota_rollback_handler },
-    { "/api/fw-ota/info", HTTP_GET, api_fw_ota_info_handler },
-    { "/api/fw-ota/check", HTTP_POST, api_fw_ota_check_handler },
-    { "/api/fw-ota/start", HTTP_POST, api_fw_ota_start_handler },
-    { "/api/fw-ota/status", HTTP_GET, api_fw_ota_status_handler },
-    { "/api/fw-ota/rollback", HTTP_POST, api_fw_ota_rollback_handler },
-    { "/api/events", HTTP_GET, api_events_handler },
-    { "/ext/*", HTTP_GET, ext_file_handler },
+    { "/", HTTP_GET, root_handler, false },
+    { "/api/system/info", HTTP_GET, api_system_info_handler, true },
+    { "/api/auth/status", HTTP_GET, api_auth_status_handler, false },
+    { "/api/auth/login", HTTP_POST, api_auth_login_handler, false },
+    { "/api/auth/logout", HTTP_POST, api_auth_logout_handler, true },
+    { "/api/auth/set", HTTP_POST, api_auth_set_handler, false },   /* handler kendisi dogrular */
+    { "/api/api-config", HTTP_GET, api_apicfg_get_handler, true },
+    { "/api/api-config", HTTP_POST, api_apicfg_save_handler, true },
+    { "/api/api-config/test", HTTP_POST, api_apicfg_test_handler, true },
+    { "/api/wifi/connect", HTTP_POST, api_wifi_connect_handler, true },
+    { "/api/wifi/backup/save", HTTP_POST, api_wifi_backup_save_handler, true },
+    { "/api/wifi/config", HTTP_GET, api_wifi_config_handler, true },
+    { "/api/wifi/ap/set", HTTP_POST, api_wifi_ap_set_handler, true },
+    { "/api/wifi/txpower", HTTP_POST, api_wifi_txpower_handler, true },
+    { "/api/timer/get", HTTP_GET, api_timer_get_handler, true },
+    { "/api/timer/set", HTTP_POST, api_timer_set_handler, true },
+    { "/api/smtp/get", HTTP_GET, api_smtp_get_handler, true },
+    { "/api/smtp/save", HTTP_POST, api_smtp_save_handler, true },
+    { "/api/smtp/test", HTTP_POST, api_smtp_test_handler, true },
+    { "/api/system/detail", HTTP_GET, api_system_detail_handler, true },
+    { "/api/logs", HTTP_GET, api_logs_handler, true },
+    { "/api/logs/clear", HTTP_POST, api_logs_clear_handler, true },
+    { "/api/relay/get", HTTP_GET, api_relay_get_handler, true },
+    { "/api/relay/set", HTTP_POST, api_relay_set_handler, true },
+    { "/api/relay/test", HTTP_POST, api_relay_test_handler, true },
+    { "/api/device/restart", HTTP_POST, api_device_restart_handler, true },
+    { "/api/device/factory-reset", HTTP_POST, api_device_factory_reset_handler, true },
+    { "/api/early-mail/get", HTTP_GET, api_early_mail_get_handler, true },
+    { "/api/early-mail/save", HTTP_POST, api_early_mail_save_handler, true },
+    { "/api/trigger-mail/get", HTTP_GET, api_trigger_mail_get_handler, true },
+    { "/api/trigger-mail/save", HTTP_POST, api_trigger_mail_save_handler, true },
+    { "/api/trigger-mail/delete", HTTP_POST, api_trigger_mail_delete_handler, true },
+    { "/api/trigger-mail/upload", HTTP_POST, api_trigger_mail_upload_handler, true },
+    { "/api/trigger-mail/files", HTTP_GET, api_trigger_mail_files_handler, true },
+    { "/api/trigger-mail/file-delete", HTTP_POST, api_trigger_mail_file_delete_handler, true },
+    { "/api/actions/get", HTTP_GET, api_actions_get_handler, true },
+    { "/api/actions/save", HTTP_POST, api_actions_save_handler, true },
+    { "/api/telegram/get", HTTP_GET, api_telegram_get_handler, true },
+    { "/api/telegram/save", HTTP_POST, api_telegram_save_handler, true },
+    { "/api/telegram/test", HTTP_POST, api_telegram_test_handler, true },
+    { "/api/reset/config", HTTP_GET, api_reset_config_get_handler, true },
+    { "/api/reset/config", HTTP_POST, api_reset_config_save_handler, true },
+    { "/api/reset/generate", HTTP_POST, api_reset_generate_handler, true },
+    { "/api/reset", HTTP_GET, api_reset_handler, false },
+    { "/api/gui-ota/info", HTTP_GET, api_gui_ota_info_handler, true },
+    { "/api/gui-ota/start", HTTP_POST, api_gui_ota_start_handler, true },
+    { "/api/gui-ota/status", HTTP_GET, api_gui_ota_status_handler, true },
+    { "/api/gui-ota/rollback", HTTP_POST, api_gui_ota_rollback_handler, true },
+    { "/api/fw-ota/info", HTTP_GET, api_fw_ota_info_handler, true },
+    { "/api/fw-ota/check", HTTP_POST, api_fw_ota_check_handler, true },
+    { "/api/fw-ota/start", HTTP_POST, api_fw_ota_start_handler, true },
+    { "/api/fw-ota/status", HTTP_GET, api_fw_ota_status_handler, true },
+    { "/api/fw-ota/rollback", HTTP_POST, api_fw_ota_rollback_handler, true },
+    { "/api/events", HTTP_GET, api_events_handler, true },
+    { "/ext/*", HTTP_GET, ext_file_handler, false },
 };
 
 // ============================================================
@@ -2150,10 +2592,12 @@ esp_err_t web_server_start(void)
         ESP_LOGE(TAG, "Server baslatilamadi: %s", esp_err_to_name(ret));
         return ret;
     }
+    auth_load();
 
     for (size_t i = 0; i < sizeof(s_routes) / sizeof(s_routes[0]); i++) {
         const httpd_uri_t u = {
-            .uri = s_routes[i].uri, .method = s_routes[i].method, .handler = s_routes[i].handler
+            .uri = s_routes[i].uri, .method = s_routes[i].method,
+            .handler = route_dispatch, .user_ctx = (void *)&s_routes[i]
         };
         esp_err_t r = httpd_register_uri_handler(s_server, &u);
         if (r != ESP_OK) {

@@ -10,6 +10,35 @@ function esc(str) {
 }
 
 // ============================================================
+// Kimlik dogrulama: 401 -> giris ekrani
+// ============================================================
+var loginVisible = false;
+function showLogin() {
+  var ov = document.getElementById('loginOverlay');
+  if (!ov || loginVisible) return;
+  loginVisible = true;
+  ov.className = 'login-overlay';
+  var inp = document.getElementById('loginPassword');
+  if (inp) { inp.value = ''; setTimeout(function() { inp.focus(); }, 50); }
+}
+function hideLogin() {
+  var ov = document.getElementById('loginOverlay');
+  if (ov) ov.className = 'login-overlay hidden';
+  loginVisible = false;
+}
+(function() {
+  var _fetch = window.fetch;
+  window.fetch = function(url, opts) {
+    return _fetch(url, opts).then(function(r) {
+      if (r.status === 401 && String(url).indexOf('/api/') === 0 && String(url).indexOf('/api/auth/login') !== 0) {
+        showLogin();
+      }
+      return r;
+    });
+  };
+})();
+
+// ============================================================
 // i18n - Cok dilli destek
 // ============================================================
 var currentLang = localStorage.getItem('ls_lang') || 'en';
@@ -124,7 +153,11 @@ if (footerSaveBtn) {
     if (actionSubpageActive) {
       if (currentActionView === 'telegramConfigView') saveTelegramConfig();
       else if (currentActionView === 'earlyMailConfigView') saveEarlyMailConfig();
+      else if (currentActionView === 'apiConfigView') saveApiConfig(true);
+      else if (currentActionView === 'relayConfigView') saveRelayConfig(true);
       else closeActionSubpage();
+    } else if (systemSubpageActive && currentSystemSubpage === 'securitySubpage') {
+      saveSecuritySettings();
     } else {
       saveAllSettings();
     }
@@ -277,10 +310,17 @@ if (txPowerSlider) {
 // ============================================================
 // Sistem bilgisi yukle
 // ============================================================
+var authChecked = false;
 function loadInfo() {
   fetch('/api/system/info')
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      // Parola ayarliysa ve oturum yoksa giris ekrani (401 yakalayici da var; bu ilk acilis icin)
+      if (d.auth_enabled && !authChecked) {
+        authChecked = true;
+        fetch('/api/auth/status').then(function(r) { return r.json(); })
+          .then(function(a) { if (a.enabled && !a.logged_in) showLogin(); }).catch(function() {});
+      }
       // AP Mod bilgileri (accordion icinde)
       var apSsid = document.getElementById('apSsid');
       if (apSsid) apSsid.value = d.ap_ssid;
@@ -1585,6 +1625,7 @@ if (langSelect) {
 // Sistem Sekmesi - Subpage Navigasyonu
 // ============================================================
 var systemSubpageActive = false;
+var currentSystemSubpage = '';
 
 function openSystemSubpage(subpageId) {
   var mainContent = document.getElementById('systemMainContent');
@@ -1600,6 +1641,7 @@ function openSystemSubpage(subpageId) {
 
   subpage.className = 'subpage';
   systemSubpageActive = true;
+  currentSystemSubpage = subpageId;
 
   var carousel = document.getElementById('settingsCarousel');
   if (carousel) carousel.style.display = 'none';
@@ -1613,6 +1655,8 @@ function openSystemSubpage(subpageId) {
     loadResetApiConfig();
   } else if (subpageId === 'guiOtaSubpage') {
     loadGuiOtaInfo();
+  } else if (subpageId === 'securitySubpage') {
+    loadSecurityConfig();
   }
 }
 
@@ -1630,6 +1674,7 @@ function closeSystemSubpage() {
 
   mainContent.className = '';
   systemSubpageActive = false;
+  currentSystemSubpage = '';
 
   var carousel = document.getElementById('settingsCarousel');
   if (carousel) carousel.style.display = '';
@@ -2153,7 +2198,7 @@ for (var asb = 0; asb < actionSettingsBtns.length; asb++) {
     if (config === 'relay') openActionSubpage('relayConfigView');
     else if (config === 'telegram') { openActionSubpage('telegramConfigView'); loadTelegramConfig(); }
     else if (config === 'early-mail') { openActionSubpage('earlyMailConfigView'); loadEarlyMailConfig(); }
-    else if (config === 'early-api' || config === 'trigger-api') openActionSubpage('apiConfigView');
+    else if (config === 'early-api' || config === 'trigger-api') { openActionSubpage('apiConfigView'); loadApiConfig(); }
     else if (config === 'trigger-mail') { openActionSubpage('triggerMailConfigView'); loadTriggerMailGroups(); }
   });
 }
@@ -2314,27 +2359,26 @@ function loadRelayConfig() {
     .catch(function() {});
 }
 
-// Relay kaydet
-var relayConfigSaveBtn = document.getElementById('relayConfigSaveBtn');
-if (relayConfigSaveBtn) {
-  relayConfigSaveBtn.addEventListener('click', function() {
-    buildRelaySaveData().then(function(data) {
-      return fetch('/api/relay/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-    })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.status === 'ok') {
-          closeActionSubpage();
-        }
-      })
-      .catch(function() {
+// Relay kaydet (footer Kaydet butonu, role alt sayfasinda)
+function saveRelayConfig(closeAfter) {
+  return buildRelaySaveData().then(function(data) {
+    return fetch('/api/relay/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        if (closeAfter) closeActionSubpage();
+      } else {
         alert(t('alert.relay_save_err'));
-      });
-  });
+      }
+    })
+    .catch(function() {
+      alert(t('alert.relay_save_err'));
+    });
 }
 
 // Relay test: once kaydet, sonra test et
@@ -2377,27 +2421,199 @@ if (testRelayBtn) {
   });
 }
 
-// Placeholder kaydet butonlari (henuz yapilandirilmamis aksiyonlar)
-var placeholderSaveBtns2 = ['apiConfigSaveBtn'];
-for (var psb = 0; psb < placeholderSaveBtns2.length; psb++) {
-  var pBtn = document.getElementById(placeholderSaveBtns2[psb]);
-  if (pBtn) {
-    pBtn.addEventListener('click', function() {
-      alert(t('alert.not_configured'));
-    });
-  }
+// ============================================================
+// Webhook / MQTT Yapilandirmasi (Alarm API + LS API kartlari)
+// ============================================================
+function loadApiConfig() {
+  fetch('/api/api-config')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var set = function(id, v) { var e = document.getElementById(id); if (e) e.value = v || ''; };
+      var w = d.webhook || {}, m = d.mqtt || {};
+      set('webhookUrl', w.url); set('webhookMethod', w.method || 'POST');
+      set('webhookHeaders', w.headers); set('webhookBody', w.body);
+      set('mqttBroker', m.url); set('mqttTopic', m.topic); set('mqttUser', m.user); set('mqttPayload', m.payload);
+      var mp = document.getElementById('mqttPass');
+      if (mp) { mp.value = ''; mp.placeholder = m.has_pass ? t('api.pass_configured') : t('api.pass_ph'); }
+      var ws = document.getElementById('webhookStatus'); if (ws) { ws.textContent = ''; ws.className = 'smtp-status'; }
+      var ms = document.getElementById('mqttStatus'); if (ms) { ms.textContent = ''; ms.className = 'smtp-status'; }
+    })
+    .catch(function() {});
 }
 
-// Placeholder test butonlari
-var placeholderTestBtns = ['testWebhookBtn', 'testMqttBtn'];
-for (var ptb = 0; ptb < placeholderTestBtns.length; ptb++) {
-  var tBtn = document.getElementById(placeholderTestBtns[ptb]);
-  if (tBtn) {
-    tBtn.addEventListener('click', function() {
-      alert(t('alert.not_configured'));
-    });
-  }
+function buildApiConfigData() {
+  var v = function(id) { return ((document.getElementById(id) || {}).value || '').trim(); };
+  return {
+    wh_url: v('webhookUrl'), wh_method: v('webhookMethod') || 'POST',
+    wh_headers: v('webhookHeaders'), wh_body: v('webhookBody'),
+    mq_url: v('mqttBroker'), mq_topic: v('mqttTopic'), mq_user: v('mqttUser'),
+    mq_pass: v('mqttPass'), mq_payload: v('mqttPayload')
+  };
 }
+
+function saveApiConfig(closeAfter) {
+  var data = buildApiConfigData();
+  if (data.wh_headers) {
+    try { JSON.parse(data.wh_headers); } catch (e) { alert(t('api.headers_invalid')); return Promise.resolve(false); }
+  }
+  return fetch('/api/api-config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        if (closeAfter) closeActionSubpage();
+        return true;
+      }
+      alert(d.message || t('alert.save_error'));
+      return false;
+    })
+    .catch(function() { alert(t('alert.connection_error')); return false; });
+}
+
+function testApiTarget(target, btn, statusId) {
+  var st = document.getElementById(statusId);
+  btn.disabled = true;
+  var orig = btn.textContent;
+  btn.textContent = t('status.saving');
+  if (st) { st.textContent = ''; st.className = 'smtp-status'; }
+  saveApiConfig(false).then(function(ok) {
+    if (!ok) return;
+    btn.textContent = t('status.sending');
+    return fetch('/api/api-config/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: target })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (st) {
+          st.textContent = d.message || (d.status === 'ok' ? t('alert.success') : t('alert.error'));
+          st.className = d.status === 'ok' ? 'smtp-status ok' : 'smtp-status error';
+        }
+      });
+  })
+    .catch(function() { if (st) { st.textContent = t('alert.connection_error'); st.className = 'smtp-status error'; } })
+    .finally(function() { btn.disabled = false; btn.textContent = orig; });
+}
+
+var testWebhookBtn = document.getElementById('testWebhookBtn');
+if (testWebhookBtn) testWebhookBtn.addEventListener('click', function() { testApiTarget('webhook', testWebhookBtn, 'webhookStatus'); });
+var testMqttBtn = document.getElementById('testMqttBtn');
+if (testMqttBtn) testMqttBtn.addEventListener('click', function() { testApiTarget('mqtt', testMqttBtn, 'mqttStatus'); });
+
+// ============================================================
+// Tarayici parolasi / oturum (Sistem > Guvenlik)
+// ============================================================
+var authEnabled = false;
+
+function loadSecurityConfig() {
+  fetch('/api/auth/status')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      authEnabled = !!d.enabled;
+      var txt = document.getElementById('securityStatusText');
+      if (txt) txt.textContent = authEnabled ? t('security.status_on') : t('security.status_off');
+      var box = document.getElementById('securityStatusBox');
+      if (box) box.className = authEnabled ? 'info-box' : 'info-box warning';
+      var e;
+      e = document.getElementById('autoLogoutTime'); if (e && d.ttl_min) e.value = d.ttl_min;
+      e = document.getElementById('loginProtection'); if (e) e.checked = !!d.protect;
+      e = document.getElementById('lockoutTime'); if (e && d.lock_min) e.value = d.lock_min;
+      e = document.getElementById('currentPassword'); if (e) { e.value = ''; e.disabled = !authEnabled; }
+      e = document.getElementById('newPassword'); if (e) e.value = '';
+      e = document.getElementById('confirmPassword'); if (e) e.value = '';
+      e = document.getElementById('logoutBtn'); if (e) e.style.display = authEnabled ? '' : 'none';
+    })
+    .catch(function() {});
+}
+
+function saveSecuritySettings() {
+  var v = function(id) { return parseInt((document.getElementById(id) || {}).value) || 0; };
+  var protect = document.getElementById('loginProtection');
+  var body = { ttl_min: v('autoLogoutTime'), lock_min: v('lockoutTime'), protect: protect && protect.checked ? 'true' : 'false' };
+  fetch('/api/auth/set', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === 'ok') closeSystemSubpage();
+      else alert(d.message || t('alert.save_error'));
+    })
+    .catch(function() { alert(t('alert.connection_error')); });
+}
+
+var changePasswordBtn = document.getElementById('changePasswordBtn');
+if (changePasswordBtn) {
+  changePasswordBtn.addEventListener('click', function() {
+    var cur = (document.getElementById('currentPassword') || {}).value || '';
+    var np = (document.getElementById('newPassword') || {}).value || '';
+    var cp = (document.getElementById('confirmPassword') || {}).value || '';
+    if (np !== cp) { alert(t('security.mismatch')); return; }
+    if (authEnabled && !cur) { alert(t('security.current_required')); return; }
+    if (!np && !confirm(t('security.remove_confirm'))) return;
+    if (np && np.length < 4) { alert(t('security.too_short')); return; }
+    fetch('/api/auth/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current: cur, new: np })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.status === 'ok') {
+          alert(np ? t('security.changed') : t('security.removed'));
+          loadSecurityConfig();
+        } else {
+          alert(d.message || t('alert.save_error'));
+        }
+      })
+      .catch(function() { alert(t('alert.connection_error')); });
+  });
+}
+
+var logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', function() {
+    fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function() { location.reload(); })
+      .catch(function() { location.reload(); });
+  });
+}
+
+// Giris ekrani
+var loginBtn = document.getElementById('loginBtn');
+function doLogin() {
+  var inp = document.getElementById('loginPassword');
+  var err = document.getElementById('loginError');
+  if (!inp) return;
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: inp.value })
+  })
+    .then(function(r) { return r.json().then(function(d) { d._http = r.status; return d; }); })
+    .then(function(d) {
+      if (d.status === 'ok') {
+        hideLogin();
+        location.reload();
+      } else {
+        if (err) {
+          err.textContent = d.status === 'locked' ? t('auth.locked', {s: d.retry_s}) : t('auth.wrong');
+          err.className = 'login-error';
+        }
+        inp.value = '';
+        inp.focus();
+      }
+    })
+    .catch(function() { if (err) { err.textContent = t('alert.connection_error'); err.className = 'login-error'; } });
+}
+if (loginBtn) loginBtn.addEventListener('click', doLogin);
+var loginPasswordInput = document.getElementById('loginPassword');
+if (loginPasswordInput) loginPasswordInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
 
 // ============================================================
 // Telegram Yapilandirmasi

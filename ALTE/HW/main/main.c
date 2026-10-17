@@ -28,6 +28,7 @@
 #include "telegram_client.h"
 #include "gui_ota.h"
 #include "fw_ota.h"
+#include "api_client.h"
 
 static const char *TAG = "MAIN";
 static char device_name[20] = {0};
@@ -200,6 +201,14 @@ static void alarm_telegram_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/* Alarm/tetikleme: webhook + MQTT (ayri task) */
+static void api_notify_task(void *arg)
+{
+    const char *status = (const char *)arg;
+    api_client_notify_all(status);
+    vTaskDelete(NULL);
+}
+
 static void on_alarm_triggered(int alarm_index)
 {
     ESP_LOGI(TAG, "Alarm tetiklendi: #%d", alarm_index);
@@ -210,6 +219,9 @@ static void on_alarm_triggered(int alarm_index)
                 (void *)(intptr_t)alarm_index, 5, NULL);
     xTaskCreate(alarm_telegram_task, "alarm_tg", 8192,
                 (void *)(intptr_t)alarm_index, 5, NULL);
+    if (nvs_get_flag("ls_actions", "early_api", 0)) {
+        xTaskCreate(api_notify_task, "alarm_api", 8192, (void *)"alarm", 5, NULL);
+    }
 }
 
 /* ========== Tetikleme (sure doldu) ========== */
@@ -344,6 +356,11 @@ static void on_timer_expired(void)
 
     /* Tetikleme mail gruplarina mail gonder */
     xTaskCreate(trigger_mail_task, "trig_mail", 10240, NULL, 5, NULL);
+
+    /* Webhook / MQTT */
+    if (nvs_get_flag("ls_actions", "trig_api", 0)) {
+        xTaskCreate(api_notify_task, "trig_api", 8192, (void *)"triggered", 5, NULL);
+    }
 }
 
 /* ========== Cihaz kimligi ========== */
@@ -462,6 +479,7 @@ void app_main(void)
     // SMTP / Telegram / OTA
     if (smtp_client_init() != ESP_OK)     ESP_LOGW(TAG, "SMTP client baslatilamadi");
     if (telegram_client_init() != ESP_OK) ESP_LOGW(TAG, "Telegram client baslatilamadi");
+    api_client_init();
     if (gui_ota_init() != ESP_OK)         ESP_LOGW(TAG, "GUI OTA baslatilamadi");
     if (fw_ota_init() != ESP_OK)          ESP_LOGW(TAG, "FW OTA baslatilamadi");
 

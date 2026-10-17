@@ -3075,3 +3075,29 @@ body.light-theme .input-label {
 body.light-theme .vacation-days-group {
   border-color: #e0e0e0;
 }
+
+/* ============================================================
+   Giris ekrani (tarayici parolasi)
+   ============================================================ */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.login-overlay.hidden { display: none; }
+.login-card {
+  width: 100%; max-width: 340px;
+  background: #141414; border: 1px solid #2a2a2a; border-radius: 12px;
+  padding: 24px; text-align: center;
+}
+.login-card h2 { font-size: 20px; margin-bottom: 6px; color: #e0e0e0; }
+.login-card .input { margin-top: 12px; width: 100%; }
+.login-error { margin-top: 10px; font-size: 13px; color: #f87171; }
+.login-error.hidden { display: none; }
+body.light-theme .login-overlay { background: rgba(255,255,255,0.9); }
+body.light-theme .login-card { background: #ffffff; border-color: #e5e7eb; }
+body.light-theme .login-card h2 { color: #111827; }
+
+.info-box.warning { border-color: #f59e0b; color: #fcd34d; }
+body.light-theme .info-box.warning { border-color: #d97706; color: #92400e; }
