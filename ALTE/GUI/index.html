@@ -4,7 +4,7 @@
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>LebensSpur</title>
-<link rel='stylesheet' href='/ext/style.css?v=0.0.55'>
+<link rel='stylesheet' href='/ext/style.css?v=0.0.70'>
 </head>
 <body>
 <div class='main'>
@@ -264,13 +264,13 @@
               <div class='setting-group'>
                 <div class='setting-header'><h3 data-i18n='wifi.ssid'>Network Name (SSID)</h3></div>
                 <div class='setting-control full'>
-                  <input type='text' class='input' id='ssid' placeholder='Network name' required>
+                  <input type='text' class='input' id='ssid' placeholder='Network name' data-i18n-ph='wifi.ssid_ph' required>
                 </div>
               </div>
               <div class='setting-group'>
                 <div class='setting-header'><h3 data-i18n='wifi.password'>Password</h3></div>
                 <div class='setting-control full'>
-                  <input type='password' class='input' id='pass' placeholder='WiFi password'>
+                  <input type='password' class='input' id='pass' placeholder='WiFi password' data-i18n-ph='wifi.pass_ph'>
                 </div>
               </div>
               <div class='setting-group'>
@@ -346,13 +346,13 @@
             <div class='setting-group'>
               <div class='setting-header'><h3 data-i18n='wifi.ssid'>Network Name (SSID)</h3></div>
               <div class='setting-control full'>
-                <input type='text' class='input' id='wifiBackupSsid' placeholder='Backup network name'>
+                <input type='text' class='input' id='wifiBackupSsid' placeholder='Backup network name' data-i18n-ph='wifi_backup.ssid_ph'>
               </div>
             </div>
             <div class='setting-group'>
               <div class='setting-header'><h3 data-i18n='wifi.password'>Password</h3></div>
               <div class='setting-control full'>
-                <input type='password' class='input' id='wifiBackupPass' placeholder='WiFi password'>
+                <input type='password' class='input' id='wifiBackupPass' placeholder='WiFi password' data-i18n-ph='wifi.pass_ph'>
               </div>
             </div>
             <div class='setting-group'>
@@ -555,7 +555,7 @@
                 </div>
                 <span class='action-card-name' data-i18n='action.telegram'>Telegram</span>
               </div>
-              <button class='action-card-settings' data-config='telegram' title='Yapilandir'>
+              <button class='action-card-settings' data-config='telegram' data-i18n-title='configure' title='Configure'>
                 <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                   <circle cx='12' cy='12' r='3'></circle>
                   <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'></path>
@@ -572,7 +572,7 @@
                 </div>
                 <span class='action-card-name' data-i18n='action.reminder_mail'>Reminder Mail</span>
               </div>
-              <button class='action-card-settings' data-config='early-mail' title='Yapilandir'>
+              <button class='action-card-settings' data-config='early-mail' data-i18n-title='configure' title='Configure'>
                 <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                   <circle cx='12' cy='12' r='3'></circle>
                   <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'></path>
@@ -589,7 +589,7 @@
                 </div>
                 <span class='action-card-name' data-i18n='action.alarm_api'>Alarm API</span>
               </div>
-              <button class='action-card-settings' data-config='early-api' title='Yapilandir'>
+              <button class='action-card-settings' data-config='early-api' data-i18n-title='configure' title='Configure'>
                 <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                   <circle cx='12' cy='12' r='3'></circle>
                   <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'></path>
@@ -618,7 +618,7 @@
                 </div>
                 <span class='action-card-name' data-i18n='action.mail_groups'>Mail Groups</span>
               </div>
-              <button class='action-card-settings' data-config='trigger-mail' title='Yapilandir'>
+              <button class='action-card-settings' data-config='trigger-mail' data-i18n-title='configure' title='Configure'>
                 <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                   <circle cx='12' cy='12' r='3'></circle>
                   <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'></path>
@@ -635,7 +635,7 @@
                 </div>
                 <span class='action-card-name' data-i18n='action.ls_api'>LS API</span>
               </div>
-              <button class='action-card-settings' data-config='trigger-api' title='Yapilandir'>
+              <button class='action-card-settings' data-config='trigger-api' data-i18n-title='configure' title='Configure'>
                 <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                   <circle cx='12' cy='12' r='3'></circle>
                   <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'></path>
@@ -652,7 +652,7 @@
                 </div>
                 <span class='action-card-name' data-i18n='action.relay'>Relay</span>
               </div>
-              <button class='action-card-settings' data-config='relay' title='Yapilandir'>
+              <button class='action-card-settings' data-config='relay' data-i18n-title='configure' title='Configure'>
                 <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                   <circle cx='12' cy='12' r='3'></circle>
                   <path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'></path>
@@ -756,7 +756,7 @@
               <line x1='1' y1='9' x2='4' y2='9'></line>
               <line x1='1' y1='14' x2='4' y2='14'></line>
             </svg>
-            <span><strong>Role:</strong> D8 (GPIO 19) &nbsp;|&nbsp; <strong>Buton:</strong> D10 (GPIO 18)</span>
+            <span data-i18n='relay.pin_info'>Relay: D8 (GPIO 19) | Button: D10 (GPIO 18)</span>
           </div>
           <div class='setting-group'>
             <div class='setting-header'>
@@ -878,7 +878,7 @@
               <p class='setting-desc' data-i18n='telegram.reminder_desc'>Message to send to Telegram when alarm is triggered</p>
             </div>
             <div class='setting-control full'>
-              <textarea class='input' id='telegramMessage' rows='2' placeholder='LebensSpur: Zamanlayiciniz yakinda sona erecek!'></textarea>
+              <textarea class='input' id='telegramMessage' rows='2' placeholder='LebensSpur: your timer is about to expire!' data-i18n-ph='telegram.msg_ph'></textarea>
             </div>
           </div>
           <div class='setting-group'>
@@ -915,7 +915,7 @@
               <p class='setting-desc' data-i18n='early_mail.body_desc'>Message sent to you when alarm is triggered</p>
             </div>
             <div class='setting-control full'>
-              <textarea class='input' id='earlyReminderMessage' rows='3' placeholder='Merhaba, LebensSpur zamanlayiciniz yakinda sona erecek. Lutfen sifirlamayi unutmayin.'></textarea>
+              <textarea class='input' id='earlyReminderMessage' rows='3' placeholder='Hello, your LebensSpur timer is about to expire. Please do not forget to reset it.' data-i18n-ph='early_mail.body_ph'></textarea>
             </div>
           </div>
         </div>
@@ -961,7 +961,7 @@
               <p class='setting-desc' data-i18n='mail_group.content_desc'>Message sent after trigger</p>
             </div>
             <div class='setting-control full'>
-              <textarea class='input' id='mailGroupContent' rows='4' placeholder='Merhaba, LebensSpur zamanlayicisi tetiklendi...'></textarea>
+              <textarea class='input' id='mailGroupContent' rows='4' placeholder='Hello, the LebensSpur timer has been triggered...' data-i18n-ph='mail_group.content_ph'></textarea>
             </div>
           </div>
           <div class='setting-group'>
@@ -1034,10 +1034,10 @@
               <select class='select' id='languageSelect'>
                 <option value='de'>Deutsch</option>
                 <option value='en'>English</option>
-                <option value='es'>Espanol</option>
-                <option value='fr'>Francais</option>
+                <option value='es'>Español</option>
+                <option value='fr'>Français</option>
                 <option value='it'>Italiano</option>
-                <option value='tr'>Turkce</option>
+                <option value='tr'>Türkçe</option>
               </select>
             </div>
           </div>
@@ -1257,13 +1257,13 @@
             <div class='setting-control full'>
               <div class='input-with-action'>
                 <input type='text' class='input' id='resetApiKey' value='ls_xxxxxxxxxxxx' readonly>
-                <button class='btn-sys btn-icon-sm' id='copyApiKeyBtn' title='Kopyala'>
+                <button class='btn-sys btn-icon-sm' id='copyApiKeyBtn' data-i18n-title='common.copy' title='Copy'>
                   <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                     <rect x='9' y='9' width='13' height='13' rx='2' ry='2'></rect>
                     <path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'></path>
                   </svg>
                 </button>
-                <button class='btn-sys btn-icon-sm' id='refreshApiKeyBtn' title='Yenile'>
+                <button class='btn-sys btn-icon-sm' id='refreshApiKeyBtn' data-i18n-title='common.new_key' title='Generate new key'>
                   <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='16' height='16'>
                     <polyline points='23 4 23 10 17 10'></polyline>
                     <path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path>
@@ -1584,25 +1584,20 @@
           </button>
         </div>
 
-        <!-- Gelistirme Notlari -->
+        <!-- Yol haritasi -->
         <div class='setting-section'>
-          <h4 class='section-title'>Gelistirme Notlari</h4>
+          <h4 class='section-title' data-i18n='notes.title'>Roadmap</h4>
           <div class='dev-note'>
-            <h5>Versiyon Eksikleri</h5>
-            <p>- Log ciktilari eksik.</p>
-            <p>- Public WiFi mantigi eksik.</p>
-            <p>- Alarm API ve Final API eksik.</p>
-            <p>- Tarayici sifre/guvenligi eksik.</p>
-            <p>- HW ve GUI OTA sistemleri eksik.</p>
-            <p>- Bunlar tamamlandiktan sonra genel test gerekli.</p>
+            <h5 data-i18n='notes.multi_device'>Multi-device management</h5>
+            <p data-i18n='notes.multi_device_desc'>Manage several LebensSpur devices from one panel.</p>
           </div>
           <div class='dev-note'>
-            <h5>Coklu Cihaz Yonetimi</h5>
-            <p>Birden fazla LebensSpur cihazini tek panelden yonetme.</p>
+            <h5 data-i18n='notes.api_templates'>API command templates</h5>
+            <p data-i18n='notes.api_templates_desc'>Ready-made webhook/MQTT templates for common services.</p>
           </div>
           <div class='dev-note'>
-            <h5>API Komut Sablonlari</h5>
-            <p>Hazir komut sablonlari olustur (orn: rm rf - kill laptop gibi).</p>
+            <h5 data-i18n='notes.public_wifi'>Public WiFi (captive portal)</h5>
+            <p data-i18n='notes.public_wifi_desc'>Connecting to open networks that require a login page.</p>
           </div>
         </div>
 
@@ -1741,6 +1736,6 @@
   </div>
 </div>
 
-<script src='/ext/app.js?v=0.0.40'></script>
+<script src='/ext/app.js?v=0.0.70'></script>
 </body>
 </html>

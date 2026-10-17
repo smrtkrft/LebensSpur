@@ -22,6 +22,8 @@ set(SDKCONFIG_DEFAULTS
 file(STRINGS "${SRC_DIR}/CMakeLists.txt" _ver_line REGEX "set\\(PROJECT_VER")
 string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" PROJECT_VER "${_ver_line}")
 message(STATUS "LebensSpur PROJECT_VER = ${PROJECT_VER} (kaynak: ALTE/HW/CMakeLists.txt)")
+# Kaynak CMakeLists degisince (surum artisi) yeniden yapilandir; yoksa eski surum gomulu kalir
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SRC_DIR}/CMakeLists.txt")
 
 # main ve components kaynaktan
 set(EXTRA_COMPONENT_DIRS "${SRC_DIR}/main" "${SRC_DIR}/components")

@@ -23,7 +23,7 @@
 static const char *TAG = "GUI_OTA";
 
 // Resmi kaynak
-#define DEFAULT_REPO_URL  "https://raw.githubusercontent.com/smrtkrft/LebensSpur/main/GUI/"
+#define DEFAULT_REPO_URL  "https://raw.githubusercontent.com/smrtkrft/LebensSpur/main/ALTE/GUI/"
 
 // Indirme ayarlari
 #define DOWNLOAD_CHUNK_SIZE  4096
@@ -111,7 +111,7 @@ static void build_url(char *url, size_t url_size, const char *file)
 {
     if (s_params.use_custom_source && strlen(s_params.repo_url) > 0) {
         // github.com -> raw.githubusercontent.com donusumu
-        // https://github.com/user/repo -> https://raw.githubusercontent.com/user/repo/branch/GUI/
+        // https://github.com/user/repo -> https://raw.githubusercontent.com/user/repo/branch/ALTE/GUI/
         char raw_url[200];
         if (strstr(s_params.repo_url, "raw.githubusercontent.com")) {
             // Zaten raw URL
@@ -124,7 +124,7 @@ static void build_url(char *url, size_t url_size, const char *file)
                 path_start += strlen("github.com/");
                 const char *branch = strlen(s_params.branch) > 0 ? s_params.branch : "main";
                 snprintf(raw_url, sizeof(raw_url),
-                         "https://raw.githubusercontent.com/%s/%s/GUI/",
+                         "https://raw.githubusercontent.com/%s/%s/ALTE/GUI/",
                          path_start, branch);
             } else {
                 strncpy(raw_url, s_params.repo_url, sizeof(raw_url) - 1);

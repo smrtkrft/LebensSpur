@@ -74,6 +74,13 @@ function applyLanguage(lang) {
         var pk = phs[j].getAttribute('data-i18n-ph');
         if (langData[pk]) phs[j].placeholder = langData[pk];
       }
+      // data-i18n-title -> title (ipucu)
+      var tts = document.querySelectorAll('[data-i18n-title]');
+      for (var q = 0; q < tts.length; q++) {
+        var tk = tts[q].getAttribute('data-i18n-title');
+        if (langData[tk]) tts[q].title = langData[tk];
+      }
+      document.documentElement.lang = lang;
       // Dinamik icerik guncelle
       updateFooterButtons();
       updateTimerStatus();

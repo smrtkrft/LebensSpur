@@ -42,7 +42,11 @@ The LebensSpur Protocol waits for you to postpone using the physical or virtual 
 - 🌐 **Full-Featured Web Interface:** Modern web panel for all settings and controls
 - 📱 **API Endpoint Support:** Mobile integration for virtual button
 - 🔄 **Automatic OTA Updates:** Seamless firmware updates via GitHub
-- 🌍 **Multi-language Support:** Turkish, English, and German interface
+- 🌍 **Multi-language Support:** Turkish, English, German, Spanish, French and Italian interface
+- 📜 **Persistent Event Log:** Classified shutdown cause (brownout, power loss, crash, user), check-ins, mails, triggers
+- 🔋 **WiFi Power Management:** Adjustable/adaptive TX power to avoid supply-related resets
+- 🔗 **Webhook / MQTT:** Notify external systems on early warning and trigger
+- 🔒 **Browser Password:** Session cookie, lockout after failed attempts
 - ⚠️ **Early Warning System:** Configurable number of warnings before protocol activation
 
 ### 🛠️ Hardware Requirements
@@ -98,14 +102,23 @@ http://[device-ip-address]
 
 #### Hardware
 - **Processor:** ESP32-C6 (RISC-V, 160 MHz)
-- **Flash Memory:** 4MB internal (Dual OTA) + 32MB external (LittleFS)
+- **Flash Memory:** 4MB internal (Dual OTA) + 16/32MB external (LittleFS, size detected at boot)
 - **WiFi:** 2.4 GHz 802.11 b/g/n
 - **Power Input:** 5V USB-C or 230V AC
 
 #### Software
 - **OTA Update:** GitHub repository-based automatic updates
-- **Firmware Version:** v1.0.0
+- **Firmware Version:** see `HW/CMakeLists.txt` (`PROJECT_VER`)
 - **Partition Scheme:** SmartKraft OTA (Dual APP) + External LittleFS (3 partitions)
+
+### 🛠️ Build
+
+Sources: `ALTE/HW` (ESP-IDF 5.5 firmware) and `ALTE/GUI` (web interface, embedded into the firmware and written to the external flash on first boot). All build output lives in `esp_bin/`; see [esp_bin/README.md](../esp_bin/README.md).
+
+```sh
+./esp_bin/build.sh                                 # build
+./esp_bin/build.sh -p /dev/cu.usbmodem1101 flash   # flash
+```
 
 ### 📝 License
 
@@ -169,7 +182,11 @@ Das LebensSpur-Protokoll wartet darauf, dass Sie innerhalb der festgelegten Zeit
 - 🌐 **Voll ausgestattete Web-Oberfläche:** Modernes Web-Panel für alle Einstellungen und Steuerungen
 - 📱 **API-Endpoint-Unterstützung:** Mobile Integration für virtuelle Taste
 - 🔄 **Automatische OTA-Updates:** Nahtlose Firmware-Updates über GitHub
-- 🌍 **Mehrsprachige Unterstützung:** Türkisch, Englisch und Deutsch Benutzeroberfläche
+- 🌍 **Mehrsprachige Unterstützung:** Türkisch, Englisch, Deutsch, Spanisch, Französisch und Italienisch
+- 📜 **Persistentes Ereignisprotokoll:** Klassifizierte Abschaltursache (Brownout, Stromausfall, Absturz, Benutzer), Check-ins, Mails, Auslösungen
+- 🔋 **WLAN-Leistungsmanagement:** Einstellbare/adaptive Sendeleistung gegen versorgungsbedingte Resets
+- 🔗 **Webhook / MQTT:** Externe Systeme bei Frühwarnung und Auslösung benachrichtigen
+- 🔒 **Browser-Passwort:** Sitzungs-Cookie, Sperre nach Fehlversuchen
 - ⚠️ **Frühwarnsystem:** Konfigurierbare Anzahl von Warnungen vor Protokollaktivierung
 
 ### 🛠️ Hardware-Anforderungen
@@ -225,13 +242,13 @@ http://[gerät-ip-adresse]
 
 #### Hardware
 - **Prozessor:** ESP32-C6 (RISC-V, 160 MHz)
-- **Flash-Speicher:** 4MB intern (Dual OTA) + 32MB extern (LittleFS)
+- **Flash-Speicher:** 4MB intern (Dual OTA) + 16/32MB extern (LittleFS, Größe wird beim Start erkannt)
 - **WiFi:** 2.4 GHz 802.11 b/g/n
 - **Stromeingang:** 5V USB-C oder 230V AC
 
 #### Software
 - **OTA-Update:** GitHub-Repository-basierte automatische Updates
-- **Firmware-Version:** v1.0.0
+- **Firmware-Version:** siehe `HW/CMakeLists.txt` (`PROJECT_VER`)
 - **Partitionsschema:** SmartKraft OTA (Dual APP) + Extern LittleFS (3 Partitionen)
 
 ### 📝 Lizenz
@@ -298,7 +315,11 @@ LebensSpur Protokolü, belirlediğiniz süre zarfında fiziksel veya sanal buton
 - 🌐 **Tam Özellikli Web Arayüzü:** Tüm ayarlar ve kontroller için modern web paneli
 - 📱 **API Endpoint Desteği:** Sanal buton için mobil entegrasyon
 - 🔄 **Otomatik OTA Güncelleme:** GitHub üzerinden kesintisiz firmware güncellemeleri
-- 🌍 **Çoklu Dil Desteği:** Türkçe, İngilizce ve Almanca arayüz
+- 🌍 **Çoklu Dil Desteği:** Türkçe, İngilizce, Almanca, İspanyolca, Fransızca ve İtalyanca arayüz
+- 📜 **Kalıcı Olay Kaydı:** Sınıflandırılmış kapanış nedeni (brownout, güç kesintisi, çökme, kullanıcı), sıfırlamalar, mailler, tetiklemeler
+- 🔋 **WiFi Güç Yönetimi:** Ayarlanabilir/uyarlanabilir TX gücü ile besleme kaynaklı resetlerin önlenmesi
+- 🔗 **Webhook / MQTT:** Erken uyarı ve tetiklemede dış sistemlere bildirim
+- 🔒 **Tarayıcı Parolası:** Oturum çerezi, hatalı denemede kilit
 - ⚠️ **Erken Uyarı Sistemi:** Protokol devreye girmeden önce ayarlanabilir sayıda uyarı
 
 ### 🛠️ Donanım Gereksinimleri
@@ -354,13 +375,13 @@ http://[cihaz-ip-adresi]
 
 #### Donanım
 - **İşlemci:** ESP32-C6 (RISC-V, 160 MHz)
-- **Flash Bellek:** 4MB dahili (Dual OTA) + 32MB harici (LittleFS)
+- **Flash Bellek:** 4MB dahili (Dual OTA) + 16/32MB harici (LittleFS, boyut açılışta algılanır)
 - **WiFi:** 2.4 GHz 802.11 b/g/n
 - **Güç Girişi:** 5V USB-C veya 230V AC
 
 #### Yazılım
 - **OTA Güncelleme:** GitHub repository tabanlı otomatik güncelleme
-- **Firmware Sürümü:** v1.0.0
+- **Firmware Sürümü:** `HW/CMakeLists.txt` içindeki `PROJECT_VER`
 - **Partition Scheme:** SmartKraft OTA (Dual APP) + Harici LittleFS (3 bölüm)
 
 ### 📝 Lisans
