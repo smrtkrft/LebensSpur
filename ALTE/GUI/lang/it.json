@@ -232,7 +232,7 @@
   "device.used": "Usata",
   "device.usage": "in uso",
   "device.int_flash": "Flash Interna",
-  "device.ext_flash_title": "Flash Esterna (32 MB)",
+  "device.ext_flash_title": "Flash esterna",
   "device.slot_a": "Slot A (GUI)",
   "device.slot_b": "Slot B (Riservato)",
   "device.slot_b_text": "{size} KB (riservato)",

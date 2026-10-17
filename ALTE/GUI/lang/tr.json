@@ -232,7 +232,7 @@
   "device.used": "Kullanilan",
   "device.usage": "kullanilmakta",
   "device.int_flash": "Dahili Flash",
-  "device.ext_flash_title": "Harici Flash (32 MB)",
+  "device.ext_flash_title": "Harici Flash",
   "device.slot_a": "Slot A (GUI)",
   "device.slot_b": "Slot B (Rezerve)",
   "device.slot_b_text": "{size} KB (rezerve)",

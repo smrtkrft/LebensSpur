@@ -232,7 +232,7 @@
   "device.used": "Utilise",
   "device.usage": "en cours d'utilisation",
   "device.int_flash": "Flash interne",
-  "device.ext_flash_title": "Flash externe (32 Mo)",
+  "device.ext_flash_title": "Flash externe",
   "device.slot_a": "Slot A (GUI)",
   "device.slot_b": "Slot B (Reserve)",
   "device.slot_b_text": "{size} Ko (reserve)",

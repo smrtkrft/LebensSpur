@@ -746,7 +746,8 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              "\"prev_uptime\":%lu,"
              "\"tx_now\":%d,"
              "\"tx_max\":%d,"
-             "\"ap_clients\":%d"
+             "\"ap_clients\":%d,"
+             "\"ext_flash_mb\":%lu"
              "}",
              info.chip_model,
              (unsigned)info.cores,
@@ -772,7 +773,8 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              (unsigned long)sys_log_prev_uptime(),
              wifi_manager_get_tx_power_now(),
              wifi_manager_get_tx_power_max(),
-             wifi_manager_get_ap_client_count());
+             wifi_manager_get_ap_client_count(),
+             (unsigned long)(ext_flash_get_chip_size() / (1024 * 1024)));
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));

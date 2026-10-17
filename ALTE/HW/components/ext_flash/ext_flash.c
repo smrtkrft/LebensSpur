@@ -1,11 +1,11 @@
 /**
  * LebensSpur - Harici Flash Modulu
- * W25Q256 (32MB) SPI Flash - 3 Partition Yapisi
+ * SPI Flash (W25Q128 16 MB veya W25Q256 32 MB) - 3 Partition Yapisi
  *
- * Partition Haritasi:
+ * Partition Haritasi (User Data boyutu cipin gercek boyutundan turetilir):
  *   Slot A    : 0x000000 - 0x1FFFFF  (2 MB)  - GUI Web Arayuzu (LittleFS)
- *   Slot B    : 0x200000 - 0x3FFFFF  (2 MB)  - Yedek / OTA slot (rezerve)
- *   User Data : 0x400000 - 0x1FFFFFF (28 MB)  - Kullanici verileri (LittleFS)
+ *   Slot B    : 0x200000 - 0x3FFFFF  (2 MB)  - Yedek / OTA slot
+ *   User Data : 0x400000 - cip sonu  (12 MB @16MB cip, 28 MB @32MB cip) - Kullanici verileri
  *
  * Pin Baglantilari:
  *   CS   = D3 = GPIO21
@@ -50,11 +50,13 @@ static const char *TAG = "EXT_FLASH";
 #define SLOT_B_MOUNT         "/slot_b"
 
 #define USER_DATA_OFFSET     0x400000
-#define USER_DATA_SIZE       (28 * 1024 * 1024)   // 28 MB
 #define USER_DATA_LABEL      "user_data"
 #define USER_DATA_MOUNT      "/ext"
+#define MIN_CHIP_SIZE        (USER_DATA_OFFSET + 1 * 1024 * 1024)   // en az 5 MB
 
 static esp_flash_t *s_ext_flash = NULL;
+static uint32_t s_chip_size = 0;          // cipin gercek boyutu (byte)
+static uint32_t s_user_data_size = 0;     // = s_chip_size - USER_DATA_OFFSET
 static bool s_slot_a_mounted = false;
 static bool s_slot_b_mounted = false;
 static bool s_user_data_mounted = false;
@@ -130,6 +132,13 @@ esp_err_t ext_flash_init(void)
         return ret;
     }
     ESP_LOGI(TAG, "Harici flash boyutu: %lu MB", (unsigned long)(flash_size / (1024 * 1024)));
+    if (flash_size < MIN_CHIP_SIZE) {
+        ESP_LOGE(TAG, "Flash cok kucuk (%lu byte), en az %d MB gerekli",
+                 (unsigned long)flash_size, MIN_CHIP_SIZE / (1024 * 1024));
+        return ESP_ERR_INVALID_SIZE;
+    }
+    s_chip_size = flash_size;
+    s_user_data_size = flash_size - USER_DATA_OFFSET;   // 16 MB cip: 12 MB, 32 MB cip: 28 MB
 
     // ============================================================
     // 3 Partition Kaydi
@@ -137,19 +146,20 @@ esp_err_t ext_flash_init(void)
     ESP_LOGI(TAG, "Partition haritasi:");
     ESP_LOGI(TAG, "  Slot A    : 0x%06X - 0x%06X (%d MB) - GUI Web",
              SLOT_A_OFFSET, SLOT_A_OFFSET + SLOT_A_SIZE - 1, SLOT_A_SIZE / (1024 * 1024));
-    ESP_LOGI(TAG, "  Slot B    : 0x%06X - 0x%06X (%d MB) - Rezerve",
+    ESP_LOGI(TAG, "  Slot B    : 0x%06X - 0x%06X (%d MB) - OTA",
              SLOT_B_OFFSET, SLOT_B_OFFSET + SLOT_B_SIZE - 1, SLOT_B_SIZE / (1024 * 1024));
-    ESP_LOGI(TAG, "  User Data : 0x%06X - 0x%06X (%d MB) - Kullanici",
-             USER_DATA_OFFSET, USER_DATA_OFFSET + USER_DATA_SIZE - 1, USER_DATA_SIZE / (1024 * 1024));
+    ESP_LOGI(TAG, "  User Data : 0x%06X - 0x%06lX (%lu MB) - Kullanici",
+             USER_DATA_OFFSET, (unsigned long)(USER_DATA_OFFSET + s_user_data_size - 1),
+             (unsigned long)(s_user_data_size / (1024 * 1024)));
 
     // Slot A partition (GUI Web Arayuzu)
     const esp_partition_t *slot_a_part;
     ret = esp_partition_register_external(s_ext_flash, SLOT_A_OFFSET, SLOT_A_SIZE,
                                           SLOT_A_LABEL, ESP_PARTITION_TYPE_DATA,
                                           ESP_PARTITION_SUBTYPE_ANY, &slot_a_part);
-    if (ret != ESP_OK) {
+    bool slot_a_reg = (ret == ESP_OK);
+    if (!slot_a_reg) {
         ESP_LOGE(TAG, "Slot A partition kaydi hatasi: %s", esp_err_to_name(ret));
-        return ret;
     }
 
     // Slot B partition (Rezerve - sadece kayit, mount yok)
@@ -157,19 +167,19 @@ esp_err_t ext_flash_init(void)
     ret = esp_partition_register_external(s_ext_flash, SLOT_B_OFFSET, SLOT_B_SIZE,
                                           SLOT_B_LABEL, ESP_PARTITION_TYPE_DATA,
                                           ESP_PARTITION_SUBTYPE_ANY, &slot_b_part);
-    if (ret != ESP_OK) {
+    bool slot_b_reg = (ret == ESP_OK);
+    if (!slot_b_reg) {
         ESP_LOGE(TAG, "Slot B partition kaydi hatasi: %s", esp_err_to_name(ret));
-        return ret;
     }
 
     // User Data partition (Kullanici verileri)
     const esp_partition_t *user_data_part;
-    ret = esp_partition_register_external(s_ext_flash, USER_DATA_OFFSET, USER_DATA_SIZE,
+    ret = esp_partition_register_external(s_ext_flash, USER_DATA_OFFSET, s_user_data_size,
                                           USER_DATA_LABEL, ESP_PARTITION_TYPE_DATA,
                                           ESP_PARTITION_SUBTYPE_ANY, &user_data_part);
-    if (ret != ESP_OK) {
+    bool user_reg = (ret == ESP_OK);
+    if (!user_reg) {
         ESP_LOGE(TAG, "User Data partition kaydi hatasi: %s", esp_err_to_name(ret));
-        return ret;
     }
 
     // ============================================================
@@ -182,7 +192,7 @@ esp_err_t ext_flash_init(void)
         .dont_mount = false,
     };
 
-    ret = esp_vfs_littlefs_register(&slot_a_conf);
+    ret = slot_a_reg ? esp_vfs_littlefs_register(&slot_a_conf) : ESP_ERR_INVALID_STATE;
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Slot A LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
@@ -200,7 +210,7 @@ esp_err_t ext_flash_init(void)
         .dont_mount = false,
     };
 
-    ret = esp_vfs_littlefs_register(&slot_b_conf);
+    ret = slot_b_reg ? esp_vfs_littlefs_register(&slot_b_conf) : ESP_ERR_INVALID_STATE;
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Slot B LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
@@ -218,12 +228,13 @@ esp_err_t ext_flash_init(void)
         .dont_mount = false,
     };
 
-    ret = esp_vfs_littlefs_register(&user_data_conf);
+    ret = user_reg ? esp_vfs_littlefs_register(&user_data_conf) : ESP_ERR_INVALID_STATE;
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "User Data LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
         s_user_data_mounted = true;
-        ESP_LOGI(TAG, "User Data mount edildi: %s (LittleFS, 28MB)", USER_DATA_MOUNT);
+        ESP_LOGI(TAG, "User Data mount edildi: %s (LittleFS, %lu MB)", USER_DATA_MOUNT,
+                 (unsigned long)(s_user_data_size / (1024 * 1024)));
     }
 
     if (!s_slot_a_mounted && !s_user_data_mounted) {
@@ -558,6 +569,11 @@ long ext_flash_active_get_file_size(const char *path)
 bool ext_flash_is_mounted(void)
 {
     return s_slot_a_mounted || s_user_data_mounted;
+}
+
+uint32_t ext_flash_get_chip_size(void)
+{
+    return s_chip_size;
 }
 
 bool ext_flash_is_slot_a_mounted(void)

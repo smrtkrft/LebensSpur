@@ -1336,6 +1336,8 @@ function loadSystemDetail() {
       el = document.getElementById('sysRssi');
       if (el) el.textContent = d.rssi ? rssiLabel(d.rssi) : '-';
 
+      el = document.getElementById('sysExtFlashSize');
+      if (el) el.textContent = d.ext_flash_mb ? '(' + d.ext_flash_mb + ' MB)' : '(' + t('ota.ext_flash_unavailable') + ')';
       el = document.getElementById('sysApClients');
       if (el && d.ap_clients !== undefined) el.textContent = d.ap_clients;
       el = document.getElementById('sysTxPower');

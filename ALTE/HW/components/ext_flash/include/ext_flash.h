@@ -3,13 +3,14 @@
 #include "esp_err.h"
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
- * Harici SPI flash baslatma (W25Q256 - 32MB)
+ * Harici SPI flash baslatma (16 MB veya 32 MB cip; boyut calisma aninda okunur)
  * 3 Partition Yapisi:
- *   Slot A    : 0x000000 (2 MB)  - GUI Web Arayuzu (LittleFS, /slot_a)
- *   Slot B    : 0x200000 (2 MB)  - GUI OTA slot (LittleFS, /slot_b)
- *   User Data : 0x400000 (28 MB) - Kullanici verileri (LittleFS, /ext)
+ *   Slot A    : 0x000000 (2 MB)      - GUI Web Arayuzu (LittleFS, /slot_a)
+ *   Slot B    : 0x200000 (2 MB)      - GUI OTA slot (LittleFS, /slot_b)
+ *   User Data : 0x400000 (cip sonu)  - Kullanici verileri (LittleFS, /ext)
  */
 esp_err_t ext_flash_init(void);
 
@@ -42,6 +43,7 @@ esp_err_t ext_flash_delete_file(const char *path);
 
 // Durum sorgulama
 bool ext_flash_is_mounted(void);
+uint32_t ext_flash_get_chip_size(void);   // byte, 0 = cip yanit vermedi
 bool ext_flash_is_slot_a_mounted(void);
 bool ext_flash_is_slot_b_mounted(void);
 bool ext_flash_is_user_data_mounted(void);
