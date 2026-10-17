@@ -1,4 +1,4 @@
-set(GUI_DIR "${CMAKE_SOURCE_DIR}/../GUI")
+set(GUI_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../GUI")
 
 idf_component_register(
     SRCS "ext_flash.c"

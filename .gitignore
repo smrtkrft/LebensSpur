@@ -1,20 +1,28 @@
-# Build ciktilari
-HW_esp32C6/build/
+# macOS
+.DS_Store
+Thumbs.db
 
-# ESP-IDF managed components (otomatik indirilir)
-HW_esp32C6/managed_components/
+# esp_bin — uretilen build dosyalari (dependencies.lock TRACKED kalir)
+esp_bin/HW/build/
+esp_bin/HW/sdkconfig
+esp_bin/HW/sdkconfig.old
+esp_bin/HW/managed_components/
+esp_bin/firmware/*.bin
+esp_bin/logs/
 
-# Uretilen config (sdkconfig.defaults'tan olusur)
-HW_esp32C6/sdkconfig
-HW_esp32C6/dependencies.lock
+# ALTE/ altinda yanlislikla uretilen build dosyalari (olmamali)
+ALTE/HW/build/
+ALTE/HW/sdkconfig
+ALTE/HW/sdkconfig.old
+ALTE/HW/managed_components/
+ALTE/HW/dependencies.lock
+
+# Neue (park edilmis hat) build ciktilari
+Neue/build/
+Neue/managed_components/
+Neue/sdkconfig
+Neue/sdkconfig.old
 
 # IDE / Editor
 .claude/
 .vscode/
-
-# Python analiz scriptleri
-HW_esp32C6/main/*.py
-
-# OS dosyalari
-.DS_Store
-Thumbs.db
