@@ -660,7 +660,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
         ext_flash_get_info(&user_total, &user_free);
     }
 
-    char resp[768];
+    char resp[960];
     snprintf(resp, sizeof(resp),
              "{"
              "\"chip\":\"%s\","
@@ -680,7 +680,12 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              "\"slot_a_free\":%zu,"
              "\"slot_b_kb\":2048,"
              "\"user_total\":%zu,"
-             "\"user_free\":%zu"
+             "\"user_free\":%zu,"
+             "\"boot_count\":%lu,"
+             "\"short_boots\":%lu,"
+             "\"last_cause\":\"%s\","
+             "\"last_cat\":\"%s\","
+             "\"prev_uptime\":%lu"
              "}",
              info.chip_model,
              (unsigned)info.cores,
@@ -698,7 +703,12 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              slot_a_total / 1024,
              slot_a_free / 1024,
              user_total / 1024,
-             user_free / 1024);
+             user_free / 1024,
+             (unsigned long)sys_log_boot_count(),
+             (unsigned long)sys_log_short_boots(),
+             sys_log_last_cause(),
+             sys_log_last_cause_cat(),
+             (unsigned long)sys_log_prev_uptime());
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));

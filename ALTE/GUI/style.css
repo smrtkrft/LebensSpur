@@ -1446,6 +1446,76 @@ body {
   color: #e0e0e0;
 }
 
+/* sys_log: acilis kayitlari + kategori rozetleri */
+.log-item.log-boot { background: #141414; border-left-width: 4px; }
+.log-item.log-boot.cat-power { border-left-color: #ef4444; }
+.log-item.log-boot.cat-software { border-left-color: #f59e0b; }
+.log-item.log-boot.cat-user { border-left-color: #3b82f6; }
+.log-item.log-boot.cat-other,
+.log-item.log-boot.cat-unknown { border-left-color: #6b7280; }
+.log-boot-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.log-cause { font-weight: 600; }
+.log-hint { font-size: 12px; color: #cbd5e1; font-style: italic; }
+.log-meta { font-size: 11px; color: #888; }
+.log-meta.log-warn { color: #fbbf24; }
+.log-type.type-boot { background: #27272a; color: #e4e4e7; }
+.log-type.cat-power { background: #450a0a; color: #fca5a5; }
+.log-type.cat-software { background: #451a03; color: #fcd34d; }
+.log-type.cat-user { background: #172554; color: #93c5fd; }
+.log-type.cat-other, .log-type.cat-unknown { background: #27272a; color: #a1a1aa; }
+.log-type.lvl-WARN { background: #451a03; color: #fcd34d; }
+.log-type.lvl-ERR { background: #450a0a; color: #fca5a5; }
+.log-item.log-sys { border-left-color: #6366f1; }
+.log-item.log-power { border-left-color: #ef4444; }
+.log-item.log-mail { border-left-color: #06b6d4; }
+.log-item.log-tg { border-left-color: #0ea5e9; }
+.log-item.log-api { border-left-color: #14b8a6; }
+.log-item.log-relay { border-left-color: #f97316; }
+.log-item.log-user { border-left-color: #3b82f6; }
+.log-item.lvl-ERR { border-left-color: #f44336; }
+.log-type.type-sys { background: #1e1b4b; color: #a5b4fc; }
+.log-type.type-power { background: #450a0a; color: #fca5a5; }
+.log-type.type-mail { background: #042f2e; color: #67e8f9; }
+.log-type.type-tg { background: #0c4a6e; color: #7dd3fc; }
+.log-type.type-api { background: #134e4a; color: #5eead4; }
+.log-type.type-relay { background: #431407; color: #fdba74; }
+.log-type.type-user { background: #172554; color: #93c5fd; }
+
+.log-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.log-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+}
+.log-summary-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.4px; }
+.log-summary-value { font-size: 13px; color: #e0e0e0; font-weight: 600; }
+
+.log-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.log-filter-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #aaa;
+  cursor: pointer;
+}
+.log-filter-btn.active { background: #e0e0e0; color: #111; border-color: #e0e0e0; }
+
 /* ============================================================
    Development Notes
    ============================================================ */
@@ -2746,6 +2816,22 @@ body.light-theme .log-type.type-timer { background: #fef3c7; color: #92400e; }
 body.light-theme .log-type.type-smtp { background: #cffafe; color: #155e75; }
 body.light-theme .log-type.type-error { background: #fee2e2; color: #991b1b; }
 body.light-theme .log-type.type-ota { background: #ede9fe; color: #5b21b6; }
+body.light-theme .log-item.log-boot { background: #f3f4f6; }
+body.light-theme .log-hint { color: #475569; }
+body.light-theme .log-type.type-boot { background: #e5e7eb; color: #111827; }
+body.light-theme .log-type.cat-power, body.light-theme .log-type.type-power, body.light-theme .log-type.lvl-ERR { background: #fee2e2; color: #991b1b; }
+body.light-theme .log-type.cat-software, body.light-theme .log-type.lvl-WARN { background: #fef3c7; color: #92400e; }
+body.light-theme .log-type.cat-user, body.light-theme .log-type.type-user { background: #dbeafe; color: #1e40af; }
+body.light-theme .log-type.cat-other, body.light-theme .log-type.cat-unknown { background: #e5e7eb; color: #374151; }
+body.light-theme .log-type.type-sys { background: #e0e7ff; color: #3730a3; }
+body.light-theme .log-type.type-mail { background: #cffafe; color: #155e75; }
+body.light-theme .log-type.type-tg { background: #e0f2fe; color: #075985; }
+body.light-theme .log-type.type-api { background: #ccfbf1; color: #115e59; }
+body.light-theme .log-type.type-relay { background: #ffedd5; color: #9a3412; }
+body.light-theme .log-summary-item { background: #ffffff; border-color: #e5e7eb; }
+body.light-theme .log-summary-value { color: #111827; }
+body.light-theme .log-filter-btn { background: #ffffff; color: #4b5563; border-color: #d1d5db; }
+body.light-theme .log-filter-btn.active { background: #111827; color: #ffffff; border-color: #111827; }
 body.light-theme .log-type.type-restart { background: #fce7f3; color: #9d174d; }
 body.light-theme .log-type.type-hw { background: #ffedd5; color: #9a3412; }
 

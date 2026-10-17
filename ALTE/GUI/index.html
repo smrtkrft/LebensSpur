@@ -1623,7 +1623,9 @@
           <h4 class='section-title' data-i18n='device.runtime_title'>Runtime Information</h4>
           <div class='system-info'>
             <div class='system-row'><span class='system-label' data-i18n='device.uptime'>Uptime</span><span class='system-value' id='sysUptime'>-</span></div>
-            <div class='system-row'><span class='system-label' data-i18n='device.restart_reason'>Restart Reason</span><span class='system-value' id='sysResetReason'>-</span></div>
+            <div class='system-row'><span class='system-label' data-i18n='device.boot_count'>Boot Count</span><span class='system-value' id='sysBootCount'>-</span></div>
+            <div class='system-row'><span class='system-label' data-i18n='device.restart_reason'>Last Shutdown Cause</span><span class='system-value' id='sysResetReason'>-</span></div>
+            <div class='system-row'><span class='system-label' data-i18n='device.prev_uptime'>Previous Run</span><span class='system-value' id='sysPrevUptime'>-</span></div>
             <div class='system-row'><span class='system-label' data-i18n='device.firmware'>Firmware</span><span class='system-value' id='sysFirmware'>-</span></div>
           </div>
         </div>
@@ -1635,7 +1637,40 @@
           <h4 class='section-title' data-i18n='logs.title'>Device Logs</h4>
           <p class='section-desc' data-i18n='logs.desc'>System events, restarts, updates and error records</p>
 
+          <div class='log-summary' id='logSummary'>
+            <div class='log-summary-item'><span class='log-summary-label' data-i18n='logs.boot_count'>Boot count</span><span class='log-summary-value' id='logBootCount'>-</span></div>
+            <div class='log-summary-item'><span class='log-summary-label' data-i18n='logs.last_cause'>Last shutdown</span><span class='log-summary-value' id='logLastCause'>-</span></div>
+            <div class='log-summary-item'><span class='log-summary-label' data-i18n='logs.prev_uptime'>Previous run</span><span class='log-summary-value' id='logPrevUptime'>-</span></div>
+            <div class='log-summary-item'><span class='log-summary-label' data-i18n='logs.short_boots'>Short boots</span><span class='log-summary-value' id='logShortBoots'>-</span></div>
+          </div>
+
+          <div class='log-filter' id='logFilter'>
+            <button type='button' class='log-filter-btn active' data-filter='all' data-i18n='logs.filter_all'>All</button>
+            <button type='button' class='log-filter-btn' data-filter='boot' data-i18n='logs.filter_boot'>Boots</button>
+            <button type='button' class='log-filter-btn' data-filter='timer' data-i18n='logs.filter_timer'>Timer</button>
+            <button type='button' class='log-filter-btn' data-filter='msg' data-i18n='logs.filter_msg'>Messages</button>
+            <button type='button' class='log-filter-btn' data-filter='wifi' data-i18n='logs.filter_wifi'>WiFi</button>
+            <button type='button' class='log-filter-btn' data-filter='err' data-i18n='logs.filter_err'>Errors</button>
+          </div>
+
           <div class='log-list' id='logList'>
+          </div>
+
+          <div class='action-buttons' style='margin-top:12px'>
+            <button class='btn-sys' id='logRefreshBtn'>
+              <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
+                <polyline points='23 4 23 10 17 10'></polyline>
+                <path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path>
+              </svg>
+              <span data-i18n='logs.refresh'>Refresh</span>
+            </button>
+            <button class='btn-sys btn-sys-danger' id='logClearBtn'>
+              <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='18' height='18'>
+                <polyline points='3 6 5 6 21 6'></polyline>
+                <path d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'></path>
+              </svg>
+              <span data-i18n='logs.clear'>Clear</span>
+            </button>
           </div>
         </div>
       </div>

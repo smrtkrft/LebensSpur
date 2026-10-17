@@ -1,4 +1,15 @@
 // ============================================================
+// Yardimcilar
+// ============================================================
+// HTML icine gomulecek metni kacisla (log mesaji, SSID, dosya adi: XSS onlemi)
+function esc(str) {
+  if (str === undefined || str === null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ============================================================
 // i18n - Cok dilli destek
 // ============================================================
 var currentLang = localStorage.getItem('ls_lang') || 'en';
@@ -309,10 +320,10 @@ function loadInfo() {
       var sysInfo = document.getElementById('sysInfo');
       if (sysInfo) {
         var s = '<div class="info-grid">';
-        s += '<span class="lbl">' + t('device.id') + ':</span><span>' + d.device_name + '</span>';
-        s += '<span class="lbl">' + t('device.wifi_status') + ':</span><span>' + (d.connected ? t('wifi.connected') + ' (' + d.sta_ssid + ')' : t('device.ap_mode')) + '</span>';
-        s += '<span class="lbl">' + t('device.ip') + ':</span><span>' + d.ip + '</span>';
-        s += '<span class="lbl">' + t('device.mdns') + ':</span><span>' + d.mdns + '</span>';
+        s += '<span class="lbl">' + t('device.id') + ':</span><span>' + esc(d.device_name) + '</span>';
+        s += '<span class="lbl">' + t('device.wifi_status') + ':</span><span>' + (d.connected ? t('wifi.connected') + ' (' + esc(d.sta_ssid) + ')' : t('device.ap_mode')) + '</span>';
+        s += '<span class="lbl">' + t('device.ip') + ':</span><span>' + esc(d.ip) + '</span>';
+        s += '<span class="lbl">' + t('device.mdns') + ':</span><span>' + esc(d.mdns) + '</span>';
         s += '</div>';
         sysInfo.innerHTML = s;
       }
@@ -1278,8 +1289,12 @@ function loadSystemDetail() {
 
       el = document.getElementById('sysUptime');
       if (el) el.textContent = formatUptime(d.uptime);
+      el = document.getElementById('sysBootCount');
+      if (el && d.boot_count !== undefined) el.textContent = '#' + d.boot_count;
       el = document.getElementById('sysResetReason');
-      if (el) el.textContent = d.reset_reason;
+      if (el) el.textContent = d.last_cause ? causeLabel(d.last_cause, d.last_cat) : d.reset_reason;
+      el = document.getElementById('sysPrevUptime');
+      if (el) el.textContent = d.prev_uptime ? formatUptime(d.prev_uptime) : '-';
       el = document.getElementById('sysFirmware');
       if (el) el.textContent = 'v' + d.fw_version;
     })
@@ -1287,9 +1302,58 @@ function loadSystemDetail() {
 }
 
 // ============================================================
-// Log Yukle
+// Log Yukle (sys_log: acilis kayitlari + olay satirlari, en yeni once)
 // ============================================================
 var logData = [];
+var logFilter = 'all';
+
+// Kapanis nedeni kodu -> ceviri
+function causeLabel(cause, cat) {
+  var k = 'cause.' + cause;
+  var txt = langData[k] ? langData[k] : cause;
+  if (cat && langData['cat.' + cat]) txt += ' (' + langData['cat.' + cat] + ')';
+  return txt;
+}
+
+// Yuk piki ureten son olaylar (brownout yorumu icin)
+var LOAD_PEAK_EVENTS = {BOOT:1, AP_CLIENT_JOIN:1, GUI_SERVE:1, STA_CONNECTING:1, STA_GOT_IP:1,
+                        MAIL_SEND:1, TG_SEND:1, WEBHOOK:1, OTA_FW:1, OTA_GUI:1, RELAY:1};
+
+function causeHint(rec) {
+  if (rec.cause === 'brownout') {
+    var peak = LOAD_PEAK_EVENTS[rec.ev] && rec.ev_dt >= 0 && rec.ev_dt <= 30;
+    return t(peak ? 'hint.brownout_load' : 'hint.brownout_other');
+  }
+  var k = 'hint.' + rec.cause;
+  return langData[k] ? langData[k] : '';
+}
+
+function logTimeLabel(rec) {
+  // ts: epoch (SNTP senkronu varsa), yoksa calisma suresi
+  if (rec.ts && rec.ts > 1700000000) {
+    var d = new Date(rec.ts * 1000);
+    var p2 = function(n) { return (n < 10 ? '0' : '') + n; };
+    return p2(d.getDate()) + '.' + p2(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' +
+           p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  return '+' + formatUptime(rec.up || 0);
+}
+
+function evLabel(ev) {
+  var k = 'ev.' + ev;
+  return langData[k] ? langData[k] : ev;
+}
+
+function logMatchesFilter(rec) {
+  if (logFilter === 'all') return true;
+  if (logFilter === 'boot') return rec.type === 'boot';
+  if (rec.type === 'boot') return logFilter === 'err' && (rec.cat === 'power' || rec.cat === 'software');
+  if (logFilter === 'err') return rec.lvl === 'ERR' || rec.lvl === 'WARN';
+  if (logFilter === 'msg') return rec.cat === 'mail' || rec.cat === 'tg' || rec.cat === 'api';
+  if (logFilter === 'timer') return rec.cat === 'timer' || rec.cat === 'relay';
+  if (logFilter === 'wifi') return rec.cat === 'wifi';
+  return true;
+}
 
 function loadLogs() {
   var list = document.getElementById('logList');
@@ -1299,6 +1363,15 @@ function loadLogs() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       logData = d.logs || [];
+      var el;
+      el = document.getElementById('logBootCount');
+      if (el) el.textContent = d.boot_count !== undefined ? '#' + d.boot_count : '-';
+      el = document.getElementById('logLastCause');
+      if (el) el.textContent = d.last_cause ? causeLabel(d.last_cause, d.last_cat) : '-';
+      el = document.getElementById('logPrevUptime');
+      if (el) el.textContent = d.prev_uptime ? formatUptime(d.prev_uptime) : '-';
+      el = document.getElementById('logShortBoots');
+      if (el) el.textContent = d.short_boots !== undefined ? String(d.short_boots) : '-';
       renderLogs();
     })
     .catch(function() {
@@ -1307,38 +1380,105 @@ function loadLogs() {
     });
 }
 
+function renderBootRecord(rec) {
+  var catCls = 'cat-' + (rec.cat || 'unknown');
+  var h = '<div class="log-item log-boot ' + catCls + '">';
+  h += '<div class="log-boot-top">';
+  h += '<span class="log-time">' + esc(logTimeLabel(rec)) + '</span> ';
+  h += '<span class="log-type type-boot">' + t('logs.boot') + ' #' + esc(rec.n) + '</span> ';
+  h += '<span class="log-type ' + catCls + '">' + esc(t('cat.' + (rec.cat || 'unknown'))) + '</span>';
+  h += '</div>';
+  h += '<span class="log-text log-cause">' + esc(causeLabel(rec.cause, null)) + '</span>';
+  var hint = causeHint(rec);
+  if (hint) h += '<span class="log-hint">' + esc(hint) + '</span>';
+  h += '<span class="log-meta">' + esc(t('logs.ran_for', {time: formatUptime(rec.up || 0)})) +
+       (rec.approx ? ' (' + t('logs.approx') + ')' : '') + '</span>';
+  if (rec.ev && rec.ev !== 'NONE') {
+    h += '<span class="log-meta">' + esc(t('logs.last_event')) + ': ' + esc(evLabel(rec.ev)) +
+         (rec.ev_dt >= 0 ? ' (' + t('logs.secs_before', {n: rec.ev_dt}) + ')' : '') + '</span>';
+  }
+  if (rec.wifi && rec.wifi !== '?') {
+    h += '<span class="log-meta">WiFi ' + esc(rec.wifi) + ' · ' + t('logs.clients', {n: rec.cl || 0}) +
+         (rec.rssi ? ' · RSSI ' + esc(rec.rssi) + ' dBm' : '') + (rec.tx ? ' · TX ' + esc(rec.tx) + ' dBm' : '') +
+         ' · heap ' + formatKB(rec.heap_free || 0) + ' / min ' + formatKB(rec.heap_min || 0) + '</span>';
+  }
+  if (rec.short > 0) {
+    h += '<span class="log-meta log-warn">' + esc(t('logs.short_boots_note', {n: rec.short})) + '</span>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function renderEventRecord(rec) {
+  var cat = rec.cat || 'sys';
+  var lvl = rec.lvl || 'INFO';
+  var h = '<div class="log-item log-' + esc(cat) + ' lvl-' + esc(lvl) + '">';
+  h += '<div><span class="log-time">' + esc(logTimeLabel(rec)) + '</span> ';
+  if (lvl !== 'INFO') h += '<span class="log-type lvl-' + esc(lvl) + '">' + esc(lvl) + '</span> ';
+  h += '<span class="log-type type-' + esc(cat) + '">' + esc(t('logcat.' + cat)) + '</span></div>';
+  h += '<span class="log-text">' + esc(rec.msg) + '</span>';
+  h += '</div>';
+  return h;
+}
+
 function renderLogs() {
   var list = document.getElementById('logList');
   if (!list) return;
 
-  if (logData.length === 0) {
-    list.innerHTML = '<div class="log-item"><span class="log-text">' + t('logs.empty') + '</span></div>';
-    return;
-  }
-
   var h = '';
   var lastBoot = -1;
+  var shown = 0;
   for (var j = 0; j < logData.length; j++) {
-    var log = logData[j];
+    var rec = logData[j];
+    if (!logMatchesFilter(rec)) continue;
+    shown++;
 
-    // Boot numarasi degistiyse ayirici goster
-    if (log.boot !== undefined && log.boot !== lastBoot) {
-      if (j > 0) h += '<div class="log-boot-divider"></div>';
-      h += '<div class="log-boot-header">' + t('logs.boot') + ' #' + log.boot + '</div>';
-      lastBoot = log.boot;
+    // Acilis numarasi degistiyse ayirici goster (olay satirlari icin)
+    var bootNo = rec.type === 'boot' ? rec.n + 1 : rec.n;
+    if (bootNo !== undefined && bootNo !== lastBoot && rec.type !== 'boot') {
+      if (h) h += '<div class="log-boot-divider"></div>';
+      h += '<div class="log-boot-header">' + t('logs.boot') + ' #' + esc(bootNo) + '</div>';
+      lastBoot = bootNo;
     }
-
-    var typeClass = 'log-' + log.type;
-    var typeBadgeClass = 'type-' + log.type;
-    var uptime = formatUptime(log.ts);
-
-    h += '<div class="log-item ' + typeClass + '">';
-    h += '<div><span class="log-time">' + uptime + '</span> ';
-    h += '<span class="log-type ' + typeBadgeClass + '">' + log.type + '</span></div>';
-    h += '<span class="log-text">' + log.msg + '</span>';
-    h += '</div>';
+    if (rec.type === 'boot') {
+      h += renderBootRecord(rec);
+      lastBoot = rec.n;
+    } else {
+      h += renderEventRecord(rec);
+    }
+  }
+  if (shown === 0) {
+    h = '<div class="log-item"><span class="log-text">' + t('logs.empty') + '</span></div>';
   }
   list.innerHTML = h;
+}
+
+// Filtre butonlari
+var logFilterBtns = document.querySelectorAll('#logFilter .log-filter-btn');
+for (var lf = 0; lf < logFilterBtns.length; lf++) {
+  logFilterBtns[lf].addEventListener('click', function() {
+    for (var k = 0; k < logFilterBtns.length; k++) logFilterBtns[k].className = 'log-filter-btn';
+    this.className = 'log-filter-btn active';
+    logFilter = this.getAttribute('data-filter');
+    renderLogs();
+  });
+}
+
+var logRefreshBtn = document.getElementById('logRefreshBtn');
+if (logRefreshBtn) logRefreshBtn.addEventListener('click', loadLogs);
+
+var logClearBtn = document.getElementById('logClearBtn');
+if (logClearBtn) {
+  logClearBtn.addEventListener('click', function() {
+    if (!confirm(t('logs.clear_confirm'))) return;
+    fetch('/api/logs/clear', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.status === 'ok') loadLogs();
+        else alert(d.message || t('alert.error'));
+      })
+      .catch(function() { alert(t('alert.connection_error')); });
+  });
 }
 
 // ============================================================
@@ -2360,7 +2500,7 @@ function renderMailGroupList() {
     item.setAttribute('data-group-id', g.id);
     item.innerHTML =
       '<div class="mail-group-info">' +
-        '<span class="mail-group-name">' + (g.name || t('mail_group.unnamed')) + '</span>' +
+        '<span class="mail-group-name">' + esc(g.name || t('mail_group.unnamed')) + '</span>' +
         '<span class="mail-group-count">' + t('mail_group.recipient_count', {count: rcptCount}) + '</span>' +
       '</div>' +
       '<button class="btn-cancel" style="width:auto;margin-top:0;padding:6px 12px" data-action="view-group" data-gid="' + g.id + '">' + t('mail_group.view') + '</button>';
@@ -2436,8 +2576,8 @@ function renderRecipients() {
     var row = document.createElement('div');
     row.className = 'recipient-item';
     row.innerHTML =
-      '<span class="recipient-email">' + email + '</span>' +
-      '<button class="recipient-remove" data-idx="' + i + '" title="Kaldir">' +
+      '<span class="recipient-email">' + esc(email) + '</span>' +
+      '<button class="recipient-remove" data-idx="' + i + '" title="' + esc(t('mail_group.remove')) + '">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">' +
           '<line x1="18" y1="6" x2="6" y2="18"></line>' +
           '<line x1="6" y1="6" x2="18" y2="18"></line>' +
@@ -2595,9 +2735,9 @@ function renderGroupFiles() {
     var row = document.createElement('div');
     row.className = 'recipient-item';
     row.innerHTML =
-      '<span class="recipient-email" style="flex:1">' + f.name + '</span>' +
+      '<span class="recipient-email" style="flex:1">' + esc(f.name) + '</span>' +
       '<span style="color:#888;font-size:12px;margin-right:8px">' + formatFileSize(f.size) + '</span>' +
-      '<button class="recipient-remove" data-fname="' + f.name + '" title="Sil">' +
+      '<button class="recipient-remove" data-fname="' + esc(f.name) + '" title="' + esc(t('mail_group.delete')) + '">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">' +
           '<line x1="18" y1="6" x2="6" y2="18"></line>' +
           '<line x1="6" y1="6" x2="18" y2="18"></line>' +
