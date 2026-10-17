@@ -12,6 +12,7 @@
 #include "smtp_client.h"
 #include "system_info.h"
 #include "sys_log.h"
+#include "ls_util.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -132,49 +133,27 @@ static const char *get_embedded_end(int idx) {
     }
 }
 
-// Basit JSON string parse helper
-static int parse_json_string(const char *json, const char *key, char *out, size_t out_size)
-{
-    char search[64];
-    snprintf(search, sizeof(search), "\"%s\":\"", key);
-    char *start = strstr(json, search);
-    if (!start) return -1;
-    start += strlen(search);
-    char *end = strchr(start, '"');
-    if (!end) return -1;
-    size_t len = end - start;
-    if (len >= out_size) len = out_size - 1;
-    strncpy(out, start, len);
-    out[len] = '\0';
-    return (int)len;
-}
+/* JSON alan okuma -> ls_util (cJSON): kacisli tirnak/yeni satir dogru cozulur,
+ * eski strstr tabanli ayristirici sifre/metin icindeki '"' karakterinde kiriliyordu */
+#define parse_json_string(json, key, out, size) ls_json_get_str((json), (key), (out), (size))
+#define json_escape(src, dst, size)              ls_json_escape((src), (dst), (size))
 
-/* JSON string icindeki ozel karakterleri escape'le (" \ \n \r \t) */
-static size_t json_escape(const char *src, char *dst, size_t dst_size)
+/* Istek govdesini oku (content_len sinirli, timeout tekrarli). Donus: uzunluk, hata: <=0 */
+static int read_body(httpd_req_t *req, char *buf, size_t size)
 {
-    size_t si = 0, di = 0;
-    while (src[si] && di < dst_size - 1) {
-        char c = src[si++];
-        const char *esc = NULL;
-        switch (c) {
-            case '"':  esc = "\\\""; break;
-            case '\\': esc = "\\\\"; break;
-            case '\n': esc = "\\n";  break;
-            case '\r': esc = "\\r";  break;
-            case '\t': esc = "\\t";  break;
-            default: break;
-        }
-        if (esc) {
-            size_t el = strlen(esc);
-            if (di + el > dst_size - 1) break;
-            memcpy(&dst[di], esc, el);
-            di += el;
-        } else if ((unsigned char)c >= 0x20) {
-            dst[di++] = c;
-        }
+    size_t total = req->content_len;
+    if (total == 0) { buf[0] = '\0'; return 0; }
+    if (total >= size) total = size - 1;
+    size_t got = 0;
+    int retries = 0;
+    while (got < total) {
+        int r = httpd_req_recv(req, buf + got, total - got);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT && ++retries < 5) continue;
+        if (r <= 0) return -1;
+        got += (size_t)r;
     }
-    dst[di] = '\0';
-    return di;
+    buf[got] = '\0';
+    return (int)got;
 }
 
 // ============================================================
@@ -288,12 +267,11 @@ static esp_err_t api_system_info_handler(httpd_req_t *req)
 static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
 {
     char buf[384];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     char ssid[33] = {0};
     char password[65] = {0};
@@ -333,12 +311,11 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
 static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
 {
     char buf[384];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     char ssid[33] = {0};
     char password[65] = {0};
@@ -421,17 +398,14 @@ static esp_err_t api_wifi_config_handler(httpd_req_t *req)
 static esp_err_t api_wifi_ap_set_handler(httpd_req_t *req)
 {
     char buf[64];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
-    // "enabled" degerini parse et (true/false veya 1/0)
-    char enabled_str[8] = {0};
-    parse_json_string(buf, "enabled", enabled_str, sizeof(enabled_str));
-    bool enabled = (strcmp(enabled_str, "true") == 0 || strcmp(enabled_str, "1") == 0);
+    bool enabled = false;
+    ls_json_get_bool(buf, "enabled", &enabled);
 
     esp_err_t err = wifi_manager_set_ap_enabled(enabled);
     char resp[128];
@@ -455,20 +429,16 @@ static esp_err_t api_wifi_ap_set_handler(httpd_req_t *req)
 static esp_err_t api_wifi_txpower_handler(httpd_req_t *req)
 {
     char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
-    char v[8] = {0};
     int max_dbm = wifi_manager_get_tx_power_max();
-    if (parse_json_string(buf, "max_dbm", v, sizeof(v)) > 0) max_dbm = atoi(v);
+    ls_json_get_int(buf, "max_dbm", &max_dbm);
     bool adaptive = wifi_manager_get_tx_adaptive();
-    if (parse_json_string(buf, "adaptive", v, sizeof(v)) > 0) {
-        adaptive = (strcmp(v, "true") == 0 || strcmp(v, "1") == 0);
-    }
+    ls_json_get_bool(buf, "adaptive", &adaptive);
 
     esp_err_t err = wifi_manager_set_tx_power(max_dbm, adaptive);
     char resp[128];
@@ -509,12 +479,11 @@ static esp_err_t api_timer_get_handler(httpd_req_t *req)
 static esp_err_t api_timer_set_handler(httpd_req_t *req)
 {
     char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     // Aksiyon kontrolu
     char action[20] = {0};
@@ -522,6 +491,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
 
     if (strcmp(action, "cancel") == 0) {
         timer_manager_cancel();
+        sys_log_write("INFO", "timer", "Geri sayim durduruldu (web)");
         web_server_send_timer_event();
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_send(req, "{\"status\":\"ok\",\"remaining_seconds\":0}", HTTPD_RESP_USE_STRLEN);
@@ -531,6 +501,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
         if (err == ESP_OK) {
             web_server_send_timer_event();
             timer_state_t st = timer_manager_get_state();
+            sys_log_write("INFO", "timer", "Geri sayim sifirlandi (web, %ld sn)", (long)st.total_seconds);
             char rsp[128];
             snprintf(rsp, sizeof(rsp),
                      "{\"status\":\"ok\",\"remaining_seconds\":%ld,\"total_seconds\":%ld}",
@@ -549,6 +520,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
         int days = atoi(days_str);
         esp_err_t err = timer_manager_set_vacation(days);
         if (err == ESP_OK) {
+            sys_log_write("INFO", "timer", "Tatil modu: %d gun", days);
             web_server_send_timer_event();
             timer_state_t st = timer_manager_get_state();
             char rsp[256];
@@ -565,6 +537,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
     // Tatil modu iptal
     if (strcmp(action, "vacation_cancel") == 0) {
         timer_manager_cancel_vacation();
+        sys_log_write("INFO", "timer", "Tatil modu iptal edildi");
         web_server_send_timer_event();
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
@@ -603,6 +576,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
     if (err == ESP_OK) {
         web_server_send_timer_event();
         timer_state_t state = timer_manager_get_state();
+        sys_log_write("INFO", "timer", "Geri sayim ayarlandi: %d %s (%ld sn)", value, unit, (long)state.total_seconds);
         snprintf(resp, sizeof(resp),
                  "{\"status\":\"ok\",\"remaining_seconds\":%ld,\"total_seconds\":%ld}",
                  (long)state.remaining_seconds, (long)state.total_seconds);
@@ -622,11 +596,14 @@ static esp_err_t api_smtp_get_handler(httpd_req_t *req)
     smtp_client_get_config(&cfg);
     bool has = smtp_client_has_config();
 
+    char e_srv[130], e_usr[130];
+    json_escape(cfg.server, e_srv, sizeof(e_srv));
+    json_escape(cfg.user, e_usr, sizeof(e_usr));
     char resp[384];
     snprintf(resp, sizeof(resp),
              "{\"configured\":%s,\"server\":\"%s\",\"port\":%d,\"user\":\"%s\"}",
              has ? "true" : "false",
-             cfg.server, cfg.port, cfg.user);
+             e_srv, cfg.port, e_usr);
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
@@ -636,12 +613,11 @@ static esp_err_t api_smtp_get_handler(httpd_req_t *req)
 static esp_err_t api_smtp_save_handler(httpd_req_t *req)
 {
     char buf[384];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     smtp_config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
@@ -655,6 +631,8 @@ static esp_err_t api_smtp_save_handler(httpd_req_t *req)
 
     parse_json_string(buf, "user", cfg.user, sizeof(cfg.user));
     parse_json_string(buf, "api_key", cfg.api_key, sizeof(cfg.api_key));
+    ls_strip_crlf(cfg.server);
+    ls_strip_crlf(cfg.user);
 
     // api_key bos geldiyse mevcut NVS degerini koru (sifre sayfaya yuklenmez)
     if (strlen(cfg.api_key) == 0) {
@@ -832,44 +810,27 @@ static esp_err_t api_relay_get_handler(httpd_req_t *req)
 static esp_err_t api_relay_set_handler(httpd_req_t *req)
 {
     char buf[256];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
-    // "duration" parse et (toplam calisma suresi, saniye)
-    char *p = strstr(buf, "\"duration\"");
-    uint16_t duration = 0;
-    if (p) {
-        p = strchr(p, ':');
-        if (p) duration = (uint16_t)atoi(p + 1);
+    int duration = 0, pulse = 0, delay_v = 0;
+    ls_json_get_int(buf, "duration", &duration);
+    ls_json_get_int(buf, "pulse", &pulse);
+    ls_json_get_int(buf, "delay", &delay_v);
+    if (duration < 0 || duration > 3600 || pulse < 0 || pulse > 60 || delay_v < 0 || delay_v > 60) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Gecersiz deger");
+        return ESP_FAIL;
     }
 
-    // "pulse" parse et (pulse suresi, saniye)
-    p = strstr(buf, "\"pulse\"");
-    uint8_t pulse = 0;
-    if (p) {
-        p = strchr(p, ':');
-        if (p) pulse = (uint8_t)atoi(p + 1);
+    bool inv;
+    if (ls_json_get_bool(buf, "inverted", &inv)) {
+        output_set_inverted(inv);
     }
 
-    // "delay" parse et (baslanma gecikmesi, saniye)
-    p = strstr(buf, "\"delay\"");
-    uint8_t delay_v = 0;
-    if (p) {
-        p = strchr(p, ':');
-        if (p) delay_v = (uint8_t)atoi(p + 1);
-    }
-
-    // "inverted" parse et
-    char inv_str[8] = {0};
-    if (parse_json_string(buf, "inverted", inv_str, sizeof(inv_str)) >= 0) {
-        output_set_inverted(strcmp(inv_str, "true") == 0);
-    }
-
-    output_set_relay_config(duration, pulse, delay_v);
+    output_set_relay_config((uint16_t)duration, (uint8_t)pulse, (uint8_t)delay_v);
     output_save_config();
     ESP_LOGI(TAG, "Role ayarlari kaydedildi: dur=%d pulse=%d delay=%d inv=%d",
              duration, pulse, delay_v, (int)output_get_inverted());
@@ -950,18 +911,41 @@ static esp_err_t api_events_handler(httpd_req_t *req)
 
     s_sse_fds[slot] = fd;
 
-    // SSE header'lari gonder
-    httpd_resp_set_status(req, "200 OK");
-    httpd_resp_set_type(req, "text/event-stream");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-
-    // Bos yanit gonder (header'lari flush etmek icin)
-    httpd_resp_send_chunk(req, "data: connected\n\n", 17);
+    /* Basliklar ham olarak yazilir: httpd_resp_send_chunk "Transfer-Encoding: chunked"
+     * eklerdi, sonraki ham "data:" satirlari chunk cercevesi olmadigi icin tarayici
+     * akisi kapatiyordu (surekli yeniden baglanma). */
+    const char *hdr =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/event-stream\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: keep-alive\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
+        "\r\n"
+        "retry: 3000\n"
+        "data: connected\n\n";
+    if (httpd_socket_send(req->handle, fd, hdr, strlen(hdr), 0) < 0) {
+        s_sse_fds[slot] = -1;
+        return ESP_FAIL;
+    }
 
     ESP_LOGI(TAG, "SSE istemci baglandi (fd=%d, slot=%d)", fd, slot);
+    /* Yaniti biz yazdik; httpd ek bir sey gondermesin ve soketi acik tutsun */
     return ESP_OK;
+}
+
+/* Oturum kapanisi: SSE slotunu bosalt. close_fn verildiginde soketi kapatmak
+ * bize duser; aksi halde fd numarasi yeni bir baglantiya verilip SSE verisi
+ * yanlis istemciye gidebilirdi. */
+static void sse_session_close(httpd_handle_t hd, int sockfd)
+{
+    (void)hd;
+    for (int i = 0; i < SSE_MAX_CLIENTS; i++) {
+        if (s_sse_fds[i] == sockfd) {
+            s_sse_fds[i] = -1;
+            ESP_LOGI(TAG, "SSE istemci ayrildi (fd=%d)", sockfd);
+        }
+    }
+    close(sockfd);
 }
 
 // SSE gonderim - httpd task context'inde calistirilmali
@@ -990,6 +974,9 @@ static void sse_do_send(void)
                 ESP_LOGW(TAG, "SSE gonderim basarisiz (fd=%d), kapatiliyor", s_sse_fds[i]);
                 httpd_sess_trigger_close(s_server, s_sse_fds[i]);
                 s_sse_fds[i] = -1;
+            } else {
+                /* Aktif akis LRU temizligine kurban gitmesin */
+                httpd_sess_update_lru_counter(s_server, s_sse_fds[i]);
             }
         }
     }
@@ -1031,6 +1018,10 @@ static esp_err_t ext_file_handler(httpd_req_t *req)
     clean_path[sizeof(clean_path) - 1] = '\0';
     char *qmark = strchr(clean_path, '?');
     if (qmark) *qmark = '\0';
+    if (strstr(clean_path, "..") || strchr(clean_path, '\\')) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Gecersiz yol");
+        return ESP_FAIL;
+    }
 
     // Once aktif slot'tan dene (GUI web arayuzu)
     if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
@@ -1065,6 +1056,7 @@ static esp_err_t ext_file_handler(httpd_req_t *req)
             size_t len = end - start;
             ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte)", file_path, len);
             httpd_resp_set_type(req, s_embedded_files[i].content_type);
+            httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
             return httpd_resp_send(req, start, len);
         }
     }
@@ -1097,10 +1089,14 @@ static esp_err_t api_early_mail_get_handler(httpd_req_t *req)
         nvs_close(nvs);
     }
 
-    char resp[512];
+    char e_mail[130], e_subj[130], e_body[520];
+    json_escape(email, e_mail, sizeof(e_mail));
+    json_escape(subject, e_subj, sizeof(e_subj));
+    json_escape(body, e_body, sizeof(e_body));
+    char resp[900];
     snprintf(resp, sizeof(resp),
              "{\"configured\":%s,\"email\":\"%s\",\"subject\":\"%s\",\"body\":\"%s\"}",
-             configured ? "true" : "false", email, subject, body);
+             configured ? "true" : "false", e_mail, e_subj, e_body);
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, strlen(resp));
@@ -1110,17 +1106,18 @@ static esp_err_t api_early_mail_get_handler(httpd_req_t *req)
 static esp_err_t api_early_mail_save_handler(httpd_req_t *req)
 {
     char buf[512];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     char email[64] = {0}, subject[64] = {0}, body[256] = {0};
     parse_json_string(buf, "email", email, sizeof(email));
     parse_json_string(buf, "subject", subject, sizeof(subject));
     parse_json_string(buf, "body", body, sizeof(body));
+    ls_strip_crlf(email);
+    ls_strip_crlf(subject);     /* SMTP baslik satiri: CR/LF enjeksiyonu engellenir */
 
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_ew_mail", NVS_READWRITE, &nvs);
@@ -1150,48 +1147,53 @@ static esp_err_t api_trigger_mail_get_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     uint8_t count = 0;
 
-    // Yeterli tampon - her grup ~300 byte, max 10 grup
-    char *resp = malloc(4096);
+    /* 10 grup x (64+64+256+256 byte, escape ile 2x) -> 14 KB yeterli (4 KB tasiyordu) */
+    const size_t cap = 14 * 1024;
+    char *resp = malloc(cap);
     if (!resp) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
         return ESP_FAIL;
     }
 
-    int pos = 0;
-    pos += snprintf(resp + pos, 4096 - pos, "{\"count\":");
+    size_t pos = 0;
+    pos += snprintf(resp + pos, cap - pos, "{\"count\":");
 
     if (nvs_open("ls_tg_mail", NVS_READONLY, &nvs) == ESP_OK) {
         nvs_get_u8(nvs, "count", &count);
-        pos += snprintf(resp + pos, 4096 - pos, "%d,\"groups\":[", count);
+        pos += snprintf(resp + pos, cap - pos, "%d,\"groups\":[", count);
 
         for (int i = 0; i < count && i < 10; i++) {
             char key[20];
             char name[64] = {0}, subj[64] = {0}, body[256] = {0}, rcpt[256] = {0};
+            char e_name[130], e_subj[130], e_body[520], e_rcpt[520];
             size_t len;
 
             snprintf(key, sizeof(key), "g%d_name", i);
             len = sizeof(name); nvs_get_str(nvs, key, name, &len);
-
             snprintf(key, sizeof(key), "g%d_subj", i);
             len = sizeof(subj); nvs_get_str(nvs, key, subj, &len);
-
             snprintf(key, sizeof(key), "g%d_body", i);
             len = sizeof(body); nvs_get_str(nvs, key, body, &len);
-
             snprintf(key, sizeof(key), "g%d_rcpt", i);
             len = sizeof(rcpt); nvs_get_str(nvs, key, rcpt, &len);
 
-            if (i > 0) pos += snprintf(resp + pos, 4096 - pos, ",");
-            pos += snprintf(resp + pos, 4096 - pos,
+            json_escape(name, e_name, sizeof(e_name));
+            json_escape(subj, e_subj, sizeof(e_subj));
+            json_escape(body, e_body, sizeof(e_body));
+            json_escape(rcpt, e_rcpt, sizeof(e_rcpt));
+
+            if (i > 0) pos += snprintf(resp + pos, cap - pos, ",");
+            pos += snprintf(resp + pos, cap - pos,
                 "{\"id\":%d,\"name\":\"%s\",\"subject\":\"%s\",\"body\":\"%s\",\"recipients\":\"%s\"}",
-                i, name, subj, body, rcpt);
+                i, e_name, e_subj, e_body, e_rcpt);
+            if (pos >= cap - 1) break;
         }
         nvs_close(nvs);
     } else {
-        pos += snprintf(resp + pos, 4096 - pos, "0,\"groups\":[");
+        pos += snprintf(resp + pos, cap - pos, "0,\"groups\":[");
     }
 
-    pos += snprintf(resp + pos, 4096 - pos, "]}");
+    pos += snprintf(resp + pos, cap - pos, "]}");
 
     httpd_resp_set_type(req, "application/json");
     esp_err_t r = httpd_resp_send(req, resp, strlen(resp));
@@ -1202,13 +1204,12 @@ static esp_err_t api_trigger_mail_get_handler(httpd_req_t *req)
 // POST /api/trigger-mail/save
 static esp_err_t api_trigger_mail_save_handler(httpd_req_t *req)
 {
-    char buf[768];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    char buf[1024];
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     // id parse (-1 = yeni, >=0 = guncelle)
     char id_str[8] = {0};
@@ -1222,6 +1223,8 @@ static esp_err_t api_trigger_mail_save_handler(httpd_req_t *req)
     parse_json_string(buf, "subject", subj, sizeof(subj));
     parse_json_string(buf, "body", body, sizeof(body));
     parse_json_string(buf, "recipients", rcpt, sizeof(rcpt));
+    ls_strip_crlf(subj);        /* SMTP baslik satiri */
+    ls_strip_crlf(rcpt);
 
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_tg_mail", NVS_READWRITE, &nvs);
@@ -1273,12 +1276,11 @@ static esp_err_t api_trigger_mail_save_handler(httpd_req_t *req)
 static esp_err_t api_trigger_mail_delete_handler(httpd_req_t *req)
 {
     char buf[64];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     char id_str[8] = {0};
     parse_json_string(buf, "id", id_str, sizeof(id_str));
@@ -1420,12 +1422,11 @@ static esp_err_t api_actions_get_handler(httpd_req_t *req)
 static esp_err_t api_actions_save_handler(httpd_req_t *req)
 {
     char buf[256];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_actions", NVS_READWRITE, &nvs);
@@ -1440,9 +1441,9 @@ static esp_err_t api_actions_save_handler(httpd_req_t *req)
     const char *nvs_keys[] = {"early_tg", "early_mail", "early_api",
                               "trig_mail", "trig_api", "trig_relay"};
     for (int i = 0; i < 6; i++) {
-        char val[8] = {0};
-        if (parse_json_string(buf, keys[i], val, sizeof(val)) >= 0) {
-            nvs_set_u8(nvs, nvs_keys[i], (strcmp(val, "true") == 0) ? 1 : 0);
+        bool v;
+        if (ls_json_get_bool(buf, keys[i], &v)) {
+            nvs_set_u8(nvs, nvs_keys[i], v ? 1 : 0);
         }
     }
 
@@ -1483,12 +1484,11 @@ static esp_err_t api_telegram_get_handler(httpd_req_t *req)
 static esp_err_t api_telegram_save_handler(httpd_req_t *req)
 {
     char buf[512];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     telegram_config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
@@ -1590,16 +1590,15 @@ static esp_err_t api_reset_config_get_handler(httpd_req_t *req)
 static esp_err_t api_reset_config_save_handler(httpd_req_t *req)
 {
     char buf[64];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
-    char enabled_str[8] = {0};
-    parse_json_string(buf, "enabled", enabled_str, sizeof(enabled_str));
-    uint8_t enabled = (strcmp(enabled_str, "true") == 0 || strcmp(enabled_str, "1") == 0) ? 1 : 0;
+    bool en = false;
+    ls_json_get_bool(buf, "enabled", &en);
+    uint8_t enabled = en ? 1 : 0;
 
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_reset", NVS_READWRITE, &nvs);
@@ -1670,7 +1669,13 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
         httpd_query_key_value(query, "key", key_param, sizeof(key_param));
     }
 
-    if (strlen(key_param) == 0 || strcmp(key_param, stored_key) != 0) {
+    bool key_ok = (strlen(key_param) > 0 && strlen(key_param) == strlen(stored_key));
+    if (key_ok) {
+        unsigned char d = 0;
+        for (size_t i = 0; key_param[i]; i++) d |= (unsigned char)(key_param[i] ^ stored_key[i]);
+        key_ok = (d == 0);
+    }
+    if (!key_ok) {
         httpd_resp_set_status(req, "401 Unauthorized");
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz API anahtari\"}", HTTPD_RESP_USE_STRLEN);
@@ -1679,6 +1684,7 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
     // Timer'i sifirla (restart butonu simule)
     esp_err_t err = timer_manager_restart();
     if (err == ESP_OK) {
+        sys_log_write("INFO", "api", "Uzaktan sifirlama API: geri sayim sifirlandi");
         web_server_send_timer_event();
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"Timer sifirlandi\"}", HTTPD_RESP_USE_STRLEN);
@@ -1716,8 +1722,8 @@ static esp_err_t api_trigger_mail_upload_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    // Max 2 MB
-    if (req->content_len > 2 * 1024 * 1024) {
+    // Max 2 MB, bos dosya yok
+    if (req->content_len == 0 || req->content_len > 2 * 1024 * 1024) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Dosya cok buyuk (max 2MB)");
         return ESP_FAIL;
     }
@@ -1755,14 +1761,16 @@ static esp_err_t api_trigger_mail_upload_handler(httpd_req_t *req)
 
     int remaining = req->content_len;
     bool write_ok = true;
+    int timeouts = 0;
     while (remaining > 0) {
         int to_recv = (remaining > 1024) ? 1024 : remaining;
         int received = httpd_req_recv(req, chunk, to_recv);
         if (received <= 0) {
-            if (received == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            if (received == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 5) continue;
             write_ok = false;
             break;
         }
+        timeouts = 0;
         if (fwrite(chunk, 1, received, f) != (size_t)received) {
             write_ok = false;
             break;
@@ -1839,12 +1847,11 @@ static esp_err_t api_trigger_mail_files_handler(httpd_req_t *req)
 static esp_err_t api_trigger_mail_file_delete_handler(httpd_req_t *req)
 {
     char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Veri alinamadi");
         return ESP_FAIL;
     }
-    buf[ret] = '\0';
 
     char group_str[8] = {0};
     char filename[64] = {0};
@@ -1947,9 +1954,8 @@ static esp_err_t api_gui_ota_start_handler(httpd_req_t *req)
     memset(&params, 0, sizeof(params));
 
     char buf[256] = {0};
-    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    int ret = read_body(req, buf, sizeof(buf));
     if (ret > 0) {
-        buf[ret] = '\0';
         char source[16] = {0};
         parse_json_string(buf, "source", source, sizeof(source));
         if (strcmp(source, "custom") == 0) {
@@ -2007,7 +2013,7 @@ static esp_err_t api_gui_ota_rollback_handler(httpd_req_t *req)
 {
     // Body'yi oku (bos olabilir)
     char buf[32];
-    httpd_req_recv(req, buf, sizeof(buf) - 1);
+    read_body(req, buf, sizeof(buf));
 
     esp_err_t err = gui_ota_rollback();
     char resp[128];
@@ -2070,8 +2076,7 @@ static esp_err_t api_fw_ota_check_handler(httpd_req_t *req)
 
     // Body oku (opsiyonel custom URL)
     char body[512] = {0};
-    int len = httpd_req_recv(req, body, sizeof(body) - 1);
-    if (len > 0) body[len] = '\0';
+    int len = read_body(req, body, sizeof(body));
 
     // Custom URL parse et
     const char *custom_url = NULL;
@@ -2182,6 +2187,7 @@ esp_err_t web_server_start(void)
     config.stack_size = 8192;
     config.max_open_sockets = 7;    // LWIP varsayilan max (lru_purge ile yeterli)
     config.lru_purge_enable = true;  // soket dolunca en eski idle baglantiyi kapat
+    config.close_fn = sse_session_close;
 
     esp_err_t ret = httpd_start(&s_server, &config);
     if (ret != ESP_OK) {

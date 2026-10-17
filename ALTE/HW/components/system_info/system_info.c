@@ -8,6 +8,7 @@
 #include "esp_heap_caps.h"
 #include "esp_partition.h"
 #include "esp_log.h"
+#include "esp_app_desc.h"
 
 esp_err_t system_info_get(system_info_t *info)
 {
@@ -77,8 +78,8 @@ esp_err_t system_info_get(system_info_t *info)
         default:               strncpy(info->reset_reason, "Unknown", sizeof(info->reset_reason)-1); break;
     }
 
-    /* FW version */
-    strncpy(info->fw_version, "0.0.69", sizeof(info->fw_version)-1);
+    /* FW version: derleme surumunden (PROJECT_VER), sabit metin degil */
+    strncpy(info->fw_version, esp_app_get_description()->version, sizeof(info->fw_version)-1);
 
     return ESP_OK;
 }

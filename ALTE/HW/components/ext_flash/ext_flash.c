@@ -251,33 +251,6 @@ esp_err_t ext_flash_init(void)
 // Slot A (GUI) dosya islemleri - /slot_a mount noktasi
 // ============================================================
 
-int ext_flash_slot_a_read_file(const char *path, char *buf, size_t buf_size)
-{
-    if (!s_slot_a_mounted || !path || !buf) {
-        return -1;
-    }
-
-    char full_path[128];
-    if (path[0] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", SLOT_A_MOUNT, path);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", SLOT_A_MOUNT, path);
-    }
-
-    FILE *f = fopen(full_path, "rb");
-    if (!f) {
-        ESP_LOGW(TAG, "Slot A dosya acilamadi: %s", full_path);
-        return -1;
-    }
-
-    int bytes_read = fread(buf, 1, buf_size - 1, f);
-    buf[bytes_read] = '\0';
-    fclose(f);
-
-    ESP_LOGD(TAG, "Slot A dosya okundu: %s (%d byte)", full_path, bytes_read);
-    return bytes_read;
-}
-
 long ext_flash_slot_a_get_file_size(const char *path)
 {
     if (!s_slot_a_mounted || !path) return -1;
@@ -292,29 +265,6 @@ long ext_flash_slot_a_get_file_size(const char *path)
     struct stat st;
     if (stat(full_path, &st) != 0) return -1;
     return (long)st.st_size;
-}
-
-int ext_flash_slot_a_read_file_chunk(const char *path, char *buf, size_t buf_size, long offset)
-{
-    if (!s_slot_a_mounted || !path || !buf) return -1;
-
-    char full_path[128];
-    if (path[0] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", SLOT_A_MOUNT, path);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", SLOT_A_MOUNT, path);
-    }
-
-    FILE *f = fopen(full_path, "rb");
-    if (!f) return -1;
-
-    if (offset > 0) {
-        fseek(f, offset, SEEK_SET);
-    }
-
-    int bytes_read = fread(buf, 1, buf_size, f);
-    fclose(f);
-    return bytes_read;
 }
 
 // ============================================================
@@ -367,90 +317,6 @@ void ext_flash_slot_a_fclose(ext_flash_file_t f)
     if (!f) return;
     if (f->fp) fclose(f->fp);
     free(f);
-}
-
-// ============================================================
-// User Data dosya islemleri - /ext mount noktasi (geriye uyumlu)
-// ============================================================
-
-int ext_flash_read_file(const char *path, char *buf, size_t buf_size)
-{
-    if (!s_user_data_mounted || !path || !buf) {
-        return -1;
-    }
-
-    char full_path[128];
-    if (path[0] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", USER_DATA_MOUNT, path);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", USER_DATA_MOUNT, path);
-    }
-
-    FILE *f = fopen(full_path, "r");
-    if (!f) {
-        ESP_LOGW(TAG, "Dosya acilamadi: %s", full_path);
-        return -1;
-    }
-
-    int bytes_read = fread(buf, 1, buf_size - 1, f);
-    buf[bytes_read] = '\0';
-    fclose(f);
-
-    ESP_LOGD(TAG, "Dosya okundu: %s (%d byte)", full_path, bytes_read);
-    return bytes_read;
-}
-
-esp_err_t ext_flash_write_file(const char *path, const char *data, size_t len)
-{
-    if (!s_user_data_mounted || !path || !data) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    char full_path[128];
-    if (path[0] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", USER_DATA_MOUNT, path);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", USER_DATA_MOUNT, path);
-    }
-
-    FILE *f = fopen(full_path, "w");
-    if (!f) {
-        ESP_LOGE(TAG, "Dosya yazilamadi: %s", full_path);
-        return ESP_FAIL;
-    }
-
-    size_t written = fwrite(data, 1, len, f);
-    fclose(f);
-
-    if (written != len) {
-        ESP_LOGE(TAG, "Yazma hatasi: %zu/%zu byte", written, len);
-        return ESP_FAIL;
-    }
-
-    ESP_LOGD(TAG, "Dosya yazildi: %s (%zu byte)", full_path, written);
-    return ESP_OK;
-}
-
-esp_err_t ext_flash_delete_file(const char *path)
-{
-    if (!s_user_data_mounted || !path) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    char full_path[128];
-    if (path[0] == '/') {
-        snprintf(full_path, sizeof(full_path), "%s%s", USER_DATA_MOUNT, path);
-    } else {
-        snprintf(full_path, sizeof(full_path), "%s/%s", USER_DATA_MOUNT, path);
-    }
-
-    if (remove(full_path) != 0) {
-        ESP_LOGE(TAG, "Dosya silinemedi: %s", full_path);
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI(TAG, "Dosya silindi: %s", full_path);
-    return ESP_OK;
 }
 
 // ============================================================

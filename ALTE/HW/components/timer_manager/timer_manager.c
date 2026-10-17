@@ -53,7 +53,7 @@ static void (*s_tick_cb)(void) = NULL;
 #define SSE_SYNC_INTERVAL 2
 
 // Alarm esik degerini hesapla
-// Alarmlar sondan geriye dogru: threshold = total * (fired+1) / (alarm_count+1)
+// Alarmlar sondan geriye dogru: threshold = total * (alarm_count - fired) / (alarm_count+1)
 static void recalc_alarm_threshold(void)
 {
     if (s_alarm_count == 0 || s_total <= 0) {
@@ -65,6 +65,19 @@ static void recalc_alarm_threshold(void)
     s_next_alarm_threshold = (int32_t)((int64_t)s_total * (s_alarm_count - s_alarms_fired) / (s_alarm_count + 1));
     if (s_alarms_fired >= s_alarm_count) {
         s_next_alarm_threshold = 0;  // Tum alarmlar tetiklendi
+    }
+}
+
+// Kalan sureye gore kac alarmin zaten gecmis oldugunu bul (acilis ve alarm sayisi
+// degisiminde). Eskiden acilista fired=0 kaliyordu: kalan sure esigin altindaysa
+// her tikte bir alarm atesleniyor, her yeniden baslatmada mail/Telegram patlamasi oluyordu.
+static void resync_alarms_fired(void)
+{
+    s_alarms_fired = 0;
+    recalc_alarm_threshold();
+    while (s_next_alarm_threshold > 0 && s_remaining <= s_next_alarm_threshold) {
+        s_alarms_fired++;
+        recalc_alarm_threshold();
     }
 }
 
@@ -292,8 +305,8 @@ esp_err_t timer_manager_init(void)
              s_vacation_enabled, (long)s_vacation_remaining, (long)s_vacation_total);
     ESP_LOGI(TAG, "Alarm sayisi: %d", s_alarm_count);
 
-    s_alarms_fired = 0;
-    recalc_alarm_threshold();
+    resync_alarms_fired();
+    ESP_LOGI(TAG, "Gecmis alarm sayisi: %d (sonraki esik %ld sn)", s_alarms_fired, (long)s_next_alarm_threshold);
 
     ensure_hw_timer();
 
@@ -464,6 +477,9 @@ esp_err_t timer_manager_set_alarm_count(int count)
     }
 
     s_alarm_count = (uint8_t)count;
+    if (s_enabled && s_remaining > 0) {
+        resync_alarms_fired();   // calisan sayimda yeni esikler hemen gecerli, gecmisler atlanir
+    }
     save_to_nvs();
 
     ESP_LOGI(TAG, "Alarm sayisi ayarlandi: %d", s_alarm_count);

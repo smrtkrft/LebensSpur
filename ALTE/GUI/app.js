@@ -343,7 +343,7 @@ function loadInfo() {
 }
 
 loadInfo();
-setInterval(loadInfo, 5000);
+setInterval(loadInfo, 15000);   // SSE anlik veriyi tasir; bu yalnizca baglanti durumu
 
 // ============================================================
 // SMTP Ayarlari
@@ -821,7 +821,7 @@ function fetchTimerState() {
 }
 
 fetchTimerState();
-setInterval(fetchTimerState, 5000);
+setInterval(fetchTimerState, 10000);   // SSE koparsa yedek senkron
 
 // ============================================================
 // SSE - Anlik timer guncelleme (buton, expire, restart)
@@ -1028,17 +1028,9 @@ function saveAllSettings() {
   // Timer ve tatil sirayla, diger ayarlar paralel gonderilir
   var otherPromises = [];
 
-  // Alarm sayisi
+  // Alarm sayisi: timer ayarindan SONRA sirali gonderilir (asagida timerChain icinde);
+  // paralel gonderim timer_set'in alarm kirpmasiyla yarisiyordu
   var alarmEl = document.getElementById('alarmCount');
-  if (alarmEl) {
-    otherPromises.push(
-      fetch('/api/timer/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set_alarms', count: alarmEl.value })
-      }).catch(function() {})
-    );
-  }
 
   // SMTP kaydet (alanlar doluysa)
   var smtpServer = document.getElementById('smtpServer');
@@ -1156,7 +1148,18 @@ function saveAllSettings() {
     });
   }
 
-  // 2. Sonra tatil modu
+  // 2. Alarm sayisi (timer'dan sonra: timer_set alarm sayisini sure/2 ile kirpar)
+  if (alarmEl) {
+    timerChain = timerChain.then(function() {
+      return fetch('/api/timer/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_alarms', count: alarmEl.value })
+      }).catch(function() {});
+    });
+  }
+
+  // 3. Sonra tatil modu
   var vacToggle = document.getElementById('vacationMode');
   if (vacToggle) {
     if (vacToggle.checked && !(vacationEnabled && vacationRemaining > 0)) {

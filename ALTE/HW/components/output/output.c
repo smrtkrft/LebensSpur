@@ -360,15 +360,25 @@ bool output_get_inverted(void)
     return s_inverted;
 }
 
-void output_relay_trigger(void)
+/* Calisan relay worker'i durdur ve cikmasini bekle (en fazla 1.5 sn: dongu 1 sn uyur) */
+static void stop_relay_worker(void)
 {
-    /* Onceki pulse task calisiyorsa durdur */
+    TaskHandle_t h = s_pulse_task_handle;
+    if (!h) return;
+    xTaskNotifyGive(h);
+    for (int i = 0; i < 30 && s_pulse_task_handle; i++) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     if (s_pulse_task_handle) {
-        xTaskNotifyGive(s_pulse_task_handle);
-        /* Task'in bitmesini bekle */
-        vTaskDelay(pdMS_TO_TICKS(100));
+        ESP_LOGW(TAG, "Relais worker zamaninda cikmadi");
         s_pulse_task_handle = NULL;
     }
+}
+
+void output_relay_trigger(void)
+{
+    /* Onceki worker calisiyorsa durdur (iki worker ayni anda role'yi surmesin) */
+    stop_relay_worker();
 
     ESP_LOGI(TAG, "Relais tetikleniyor (dur=%d, pulse=%d, delay=%d, inv=%d)",
              s_relay_duration, s_relay_pulse, s_relay_delay, (int)s_inverted);
@@ -382,12 +392,7 @@ void output_relay_trigger(void)
 
 void output_relay_off(void)
 {
-    /* Pulse task calisiyorsa durdur */
-    if (s_pulse_task_handle) {
-        xTaskNotifyGive(s_pulse_task_handle);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        s_pulse_task_handle = NULL;
-    }
+    stop_relay_worker();
     gpio_set_level(RELAY_GPIO, relay_idle_level());
     s_relay_on = false;
     ESP_LOGI(TAG, "Relais kapatildi (idle_level=%d)", relay_idle_level());
