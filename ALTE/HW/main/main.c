@@ -15,27 +15,70 @@
 #include "esp_system.h"
 #include "esp_partition.h"
 #include "esp_mac.h"
+#include "esp_timer.h"
+#include "esp_ota_ops.h"
 
 #include "wifi_manager.h"
 #include "web_server.h"
 #include "ext_flash.h"
-#include "flash_sync.h"
 #include "timer_manager.h"
 #include "smtp_client.h"
-#include "device_log.h"
+#include "sys_log.h"
 #include "output.h"
 #include "telegram_client.h"
 #include "gui_ota.h"
 #include "fw_ota.h"
-#include "esp_ota_ops.h"
 
 static const char *TAG = "MAIN";
 static char device_name[20] = {0};
+
+/* OTA sonrasi yeni firmware ancak bu kadar sure sorunsuz calisirsa onaylanir;
+ * oncesinde cokerse bootloader onceki surume doner. */
+#define OTA_VALID_AFTER_S   60
+
+/* ========== NVS yardimcilari ========== */
+
+static uint8_t nvs_get_flag(const char *ns, const char *key, uint8_t def)
+{
+    nvs_handle_t nvs;
+    uint8_t v = def;
+    if (nvs_open(ns, NVS_READONLY, &nvs) == ESP_OK) {
+        nvs_get_u8(nvs, key, &v);
+        nvs_close(nvs);
+    }
+    return v;
+}
+
+/* ========== OTA onayi (60 sn stabil calisma sonrasi) ========== */
+
+static void ota_confirm_task(void *arg)
+{
+    (void)arg;
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_ota_img_states_t st;
+    if (running && esp_ota_get_state_partition(running, &st) == ESP_OK &&
+        st == ESP_OTA_IMG_PENDING_VERIFY) {
+        esp_ota_mark_app_valid_cancel_rollback();
+        sys_log_write("INFO", "ota", "Firmware %s dogrulandi (%d sn stabil)",
+                      running->label, OTA_VALID_AFTER_S);
+    }
+    vTaskDelete(NULL);
+}
+
+static void ota_confirm_cb(void *arg)
+{
+    (void)arg;
+    /* esp_timer gorevinden flash'a yazilmaz: ayri gorevde */
+    xTaskCreate(ota_confirm_task, "ota_ok", 4096, NULL, 3, NULL);
+}
+
+/* ========== Buton ========== */
 
 /* Buton callback - timer'i yeniden baslat */
 static void on_button_pressed(void)
 {
     ESP_LOGI(TAG, "Buton basildi - timer restart");
+    sys_log_mark_event(SL_EV_BUTTON, 0);
 
     /* Relais aciksa kapat */
     if (output_relay_is_on()) {
@@ -45,7 +88,10 @@ static void on_button_pressed(void)
     esp_err_t err = timer_manager_restart();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Timer restart basarisiz: %s", esp_err_to_name(err));
-        device_log_add(LOG_TYPE_ERROR, "Timer restart basarisiz: %s", esp_err_to_name(err));
+        sys_log_write("WARN", "timer", "Buton: geri sayim yeniden baslatilamadi (%s)", esp_err_to_name(err));
+    } else {
+        timer_state_t st = timer_manager_get_state();
+        sys_log_write("INFO", "timer", "Buton: geri sayim sifirlandi (%ld sn)", (long)st.total_seconds);
     }
 
     /* Web arayuzune anlik bildirim */
@@ -56,11 +102,15 @@ static void on_button_pressed(void)
 static void on_factory_reset(void)
 {
     ESP_LOGW(TAG, "Factory Reset (buton 5x)");
+    sys_log_set_restart_reason(SL_RST_FACTORY);
+    sys_log_write("WARN", "user", "Fabrika sifirlama (buton 5x)");
     nvs_flash_erase();
     ext_flash_format_user_data();
     vTaskDelay(pdMS_TO_TICKS(200));
     esp_restart();
 }
+
+/* ========== Erken uyari (alarm) ========== */
 
 /* Alarm tetiklenince - erken uyari mail gonder (ayri task) */
 static void alarm_mail_task(void *arg)
@@ -68,27 +118,21 @@ static void alarm_mail_task(void *arg)
     int alarm_index = (int)(intptr_t)arg;
     ESP_LOGI(TAG, "Erken uyari mail gonderiliyor (alarm #%d)", alarm_index);
 
-    // Action aktif mi kontrol et
-    nvs_handle_t nvs;
-    uint8_t early_mail_active = 0;
-    if (nvs_open("ls_actions", NVS_READONLY, &nvs) == ESP_OK) {
-        nvs_get_u8(nvs, "early_mail", &early_mail_active);
-        nvs_close(nvs);
-    }
-    if (!early_mail_active) {
-        ESP_LOGI(TAG, "Erken uyari mail pasif, atlanıyor");
+    if (!nvs_get_flag("ls_actions", "early_mail", 0)) {
+        ESP_LOGI(TAG, "Erken uyari mail pasif, atlaniyor");
         vTaskDelete(NULL);
         return;
     }
 
-    // SMTP ayarli mi kontrol et
     if (!smtp_client_has_config()) {
         ESP_LOGW(TAG, "SMTP yapilandirilmamis, erken uyari mail gonderilemedi");
+        sys_log_write("WARN", "mail", "Erken uyari #%d: SMTP yapilandirilmamis", alarm_index + 1);
         vTaskDelete(NULL);
         return;
     }
 
     // Erken uyari mail config'ini NVS'den oku
+    nvs_handle_t nvs;
     char email[64] = {0}, subject[64] = {0}, body[256] = {0};
     if (nvs_open("ls_ew_mail", NVS_READONLY, &nvs) == ESP_OK) {
         size_t len;
@@ -100,15 +144,20 @@ static void alarm_mail_task(void *arg)
 
     if (strlen(email) == 0) {
         ESP_LOGW(TAG, "Erken uyari mail adresi bos");
+        sys_log_write("WARN", "mail", "Erken uyari #%d: alici adresi bos", alarm_index + 1);
         vTaskDelete(NULL);
         return;
     }
 
+    sys_log_mark_event(SL_EV_MAIL_SEND, alarm_index);
     esp_err_t err = smtp_client_send(email, subject, body);
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Erken uyari mail gonderildi: %s", email);
+        sys_log_write("INFO", "mail", "Erken uyari #%d maili gonderildi: %s", alarm_index + 1, email);
     } else {
         ESP_LOGW(TAG, "Erken uyari mail hatasi: %s", esp_err_to_name(err));
+        sys_log_write("ERR", "mail", "Erken uyari #%d maili gonderilemedi: %s (%s)",
+                      alarm_index + 1, email, esp_err_to_name(err));
     }
 
     vTaskDelete(NULL);
@@ -120,36 +169,32 @@ static void alarm_telegram_task(void *arg)
     int alarm_index = (int)(intptr_t)arg;
     ESP_LOGI(TAG, "Erken uyari Telegram gonderiliyor (alarm #%d)", alarm_index);
 
-    // Action aktif mi kontrol et
-    nvs_handle_t nvs;
-    uint8_t early_tg_active = 0;
-    if (nvs_open("ls_actions", NVS_READONLY, &nvs) == ESP_OK) {
-        nvs_get_u8(nvs, "early_tg", &early_tg_active);
-        nvs_close(nvs);
-    }
-    if (!early_tg_active) {
+    if (!nvs_get_flag("ls_actions", "early_tg", 0)) {
         ESP_LOGI(TAG, "Erken uyari Telegram pasif, atlaniyor");
         vTaskDelete(NULL);
         return;
     }
 
-    // Telegram ayarli mi kontrol et
     if (!telegram_client_has_config()) {
         ESP_LOGW(TAG, "Telegram yapilandirilmamis, erken uyari gonderilemedi");
+        sys_log_write("WARN", "tg", "Erken uyari #%d: Telegram yapilandirilmamis", alarm_index + 1);
         vTaskDelete(NULL);
         return;
     }
 
-    // Mesaj sablonunu oku
     telegram_config_t cfg;
     telegram_client_get_config(&cfg);
 
     const char *msg = (strlen(cfg.message) > 0) ? cfg.message : "LebensSpur: Zamanlayiciniz yakinda sona erecek!";
+    sys_log_mark_event(SL_EV_TG_SEND, alarm_index);
     esp_err_t err = telegram_client_send(msg);
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Erken uyari Telegram gonderildi");
+        sys_log_write("INFO", "tg", "Erken uyari #%d Telegram mesaji gonderildi", alarm_index + 1);
     } else {
         ESP_LOGW(TAG, "Erken uyari Telegram hatasi: %s", esp_err_to_name(err));
+        sys_log_write("ERR", "tg", "Erken uyari #%d Telegram gonderilemedi: %s",
+                      alarm_index + 1, esp_err_to_name(err));
     }
 
     vTaskDelete(NULL);
@@ -158,11 +203,16 @@ static void alarm_telegram_task(void *arg)
 static void on_alarm_triggered(int alarm_index)
 {
     ESP_LOGI(TAG, "Alarm tetiklendi: #%d", alarm_index);
+    timer_state_t st = timer_manager_get_state();
+    sys_log_write("WARN", "timer", "Erken uyari #%d/%d tetiklendi (kalan %ld sn)",
+                  alarm_index + 1, st.alarm_count, (long)st.remaining_seconds);
     xTaskCreate(alarm_mail_task, "alarm_mail", 10240,
                 (void *)(intptr_t)alarm_index, 5, NULL);
     xTaskCreate(alarm_telegram_task, "alarm_tg", 8192,
                 (void *)(intptr_t)alarm_index, 5, NULL);
 }
+
+/* ========== Tetikleme (sure doldu) ========== */
 
 /* Tetikleme mail gonder (ayri task) */
 static void trigger_mail_task(void *arg)
@@ -170,14 +220,7 @@ static void trigger_mail_task(void *arg)
     (void)arg;
     ESP_LOGI(TAG, "Tetikleme mailleri gonderiliyor");
 
-    // Action aktif mi kontrol et
-    nvs_handle_t nvs;
-    uint8_t trig_mail_active = 0;
-    if (nvs_open("ls_actions", NVS_READONLY, &nvs) == ESP_OK) {
-        nvs_get_u8(nvs, "trig_mail", &trig_mail_active);
-        nvs_close(nvs);
-    }
-    if (!trig_mail_active) {
+    if (!nvs_get_flag("ls_actions", "trig_mail", 0)) {
         ESP_LOGI(TAG, "Tetikleme mail pasif, atlaniyor");
         vTaskDelete(NULL);
         return;
@@ -185,18 +228,21 @@ static void trigger_mail_task(void *arg)
 
     if (!smtp_client_has_config()) {
         ESP_LOGW(TAG, "SMTP yapilandirilmamis, tetikleme mailleri gonderilemedi");
+        sys_log_write("ERR", "mail", "Tetikleme: SMTP yapilandirilmamis, mail gonderilemedi");
         vTaskDelete(NULL);
         return;
     }
 
-    // Tum gruplari oku ve her grubun alicilarina mail gonder
+    nvs_handle_t nvs;
     if (nvs_open("ls_tg_mail", NVS_READONLY, &nvs) != ESP_OK) {
+        sys_log_write("ERR", "mail", "Tetikleme: mail gruplari okunamadi");
         vTaskDelete(NULL);
         return;
     }
 
     uint8_t count = 0;
     nvs_get_u8(nvs, "count", &count);
+    int sent_ok = 0, sent_fail = 0;
 
     for (int i = 0; i < count && i < 10; i++) {
         char key[20];
@@ -243,10 +289,10 @@ static void trigger_mail_task(void *arg)
         char *saveptr = NULL;
         char *token = strtok_r(rcpt_copy, ",", &saveptr);
         while (token) {
-            // Bosluk trim
             while (*token == ' ') token++;
             if (strlen(token) > 0) {
                 esp_err_t err;
+                sys_log_mark_event(SL_EV_MAIL_SEND, i);
                 if (attach_count > 0) {
                     err = smtp_client_send_with_attachments(
                         token, subj, body,
@@ -255,21 +301,28 @@ static void trigger_mail_task(void *arg)
                     err = smtp_client_send(token, subj, body);
                 }
                 if (err == ESP_OK) {
+                    sent_ok++;
                     ESP_LOGI(TAG, "Tetikleme mail gonderildi: %s (grup %d, %d ek)", token, i, attach_count);
+                    sys_log_write("INFO", "mail", "Tetikleme maili gonderildi: %s (grup %d, %d ek)",
+                                  token, i + 1, attach_count);
                 } else {
+                    sent_fail++;
                     ESP_LOGW(TAG, "Tetikleme mail hatasi: %s -> %s", token, esp_err_to_name(err));
+                    sys_log_write("ERR", "mail", "Tetikleme maili gonderilemedi: %s (grup %d): %s",
+                                  token, i + 1, esp_err_to_name(err));
                 }
             }
             token = strtok_r(NULL, ",", &saveptr);
         }
 
-        // Ek yollarini serbest birak
         for (int j = 0; j < attach_count; j++) {
             free(attach_paths[j]);
         }
     }
 
     nvs_close(nvs);
+    sys_log_write(sent_fail ? "WARN" : "INFO", "mail", "Tetikleme mailleri: %d basarili, %d basarisiz",
+                  sent_ok, sent_fail);
     vTaskDelete(NULL);
 }
 
@@ -277,14 +330,11 @@ static void trigger_mail_task(void *arg)
 static void on_timer_expired(void)
 {
     ESP_LOGI(TAG, "Timer doldu - relais tetikleniyor");
+    sys_log_mark_event(SL_EV_TIMER_EXPIRED, 0);
 
-    // Relay aktif mi kontrol et
-    nvs_handle_t nvs;
-    uint8_t trig_relay = 1; // varsayilan aktif
-    if (nvs_open("ls_actions", NVS_READONLY, &nvs) == ESP_OK) {
-        nvs_get_u8(nvs, "trig_relay", &trig_relay);
-        nvs_close(nvs);
-    }
+    uint8_t trig_relay = nvs_get_flag("ls_actions", "trig_relay", 1);
+    sys_log_write("WARN", "timer", "GERI SAYIM DOLDU: LebensSpur protokolu tetiklendi (role %s)",
+                  trig_relay ? "aktif" : "pasif");
     if (trig_relay) {
         output_relay_trigger();
     }
@@ -295,6 +345,8 @@ static void on_timer_expired(void)
     /* Tetikleme mail gruplarina mail gonder */
     xTaskCreate(trigger_mail_task, "trig_mail", 10240, NULL, 5, NULL);
 }
+
+/* ========== Cihaz kimligi ========== */
 
 // MAC adresinden FNV-1a hash ile 10 haneli benzersiz cihaz ID olustur
 // Ornek: LS-K7M2X9P4HB
@@ -310,10 +362,9 @@ static void generate_device_name(void)
         hash *= 0x100000001b3ULL;            // FNV prime
     }
 
-    // 10 haneli alfanumerik ID olustur (A-Z, 0-9 = 36 karakter)
+    // 10 haneli alfanumerik ID olustur (I ve O cikarildi: 1 ve 0 ile karismasin)
     static const char charset[] = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-    // I ve O cikarildi (1 ve 0 ile karismamasi icin) = 33 karakter
-    const int base = sizeof(charset) - 1;  // 33
+    const int base = sizeof(charset) - 1;
 
     char id[11];
     for (int i = 0; i < 10; i++) {
@@ -327,11 +378,38 @@ static void generate_device_name(void)
              device_name, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
+/* ========== Flash bilgisi (acilis logu) ========== */
+
+static void log_flash_info(void)
+{
+    ESP_LOGI(TAG, "========== FLASH BILGILERI ==========");
+    uint32_t int_flash_size;
+    if (esp_flash_get_size(NULL, &int_flash_size) == ESP_OK) {
+        ESP_LOGI(TAG, "[DAHILI FLASH] %lu MB", (unsigned long)(int_flash_size / (1024 * 1024)));
+    }
+    size_t total = 0, free_sp = 0;
+    if (ext_flash_is_slot_a_mounted() && ext_flash_get_slot_a_info(&total, &free_sp) == ESP_OK) {
+        ESP_LOGI(TAG, "[HARICI] Slot A (GUI) : %zu KB toplam, %zu KB bos", total / 1024, free_sp / 1024);
+    } else {
+        ESP_LOGW(TAG, "[HARICI] Slot A (GUI) : mount edilemedi");
+    }
+    if (ext_flash_is_slot_b_mounted() && ext_flash_get_slot_b_info(&total, &free_sp) == ESP_OK) {
+        ESP_LOGI(TAG, "[HARICI] Slot B (OTA) : %zu KB toplam, %zu KB bos", total / 1024, free_sp / 1024);
+    } else {
+        ESP_LOGW(TAG, "[HARICI] Slot B (OTA) : mount edilemedi");
+    }
+    if (ext_flash_is_user_data_mounted() && ext_flash_get_info(&total, &free_sp) == ESP_OK) {
+        ESP_LOGI(TAG, "[HARICI] User Data    : %zu KB toplam, %zu KB bos", total / 1024, free_sp / 1024);
+    } else {
+        ESP_LOGW(TAG, "[HARICI] User Data    : mount edilemedi");
+    }
+    ESP_LOGI(TAG, "=====================================");
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "=== LebensSpur Baslatiliyor ===");
 
-    // Benzersiz cihaz adi olustur
     generate_device_name();
 
     // NVS Flash baslatma
@@ -342,209 +420,91 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    ESP_LOGI(TAG, "NVS Flash baslatildi");
-
-    // Device log baslatma
-    device_log_init();
 
     // Harici flash baslatma (SPI - W25Q256)
-    ret = ext_flash_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Harici flash baslatilamadi! Hata: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "Harici flash hatasi: %s", esp_err_to_name(ret));
+    esp_err_t ext_ret = ext_flash_init();
+    if (ext_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Harici flash baslatilamadi! Hata: %s", esp_err_to_name(ext_ret));
     } else {
-        ESP_LOGI(TAG, "Harici flash baslatildi (32MB)");
-        // Kalici loglari flash'tan yukle (ext_flash hazir)
-        device_log_persist_init();
-        // Boot/restart olayi logla
-        const char *rst_reason;
-        switch (esp_reset_reason()) {
-            case ESP_RST_POWERON:   rst_reason = "Power on"; break;
-            case ESP_RST_SW:        rst_reason = "Software restart"; break;
-            case ESP_RST_PANIC:     rst_reason = "Panic/crash"; break;
-            case ESP_RST_INT_WDT:   rst_reason = "Interrupt WDT"; break;
-            case ESP_RST_TASK_WDT:  rst_reason = "Task WDT"; break;
-            case ESP_RST_WDT:       rst_reason = "Watchdog"; break;
-            case ESP_RST_DEEPSLEEP: rst_reason = "Deep sleep"; break;
-            case ESP_RST_BROWNOUT:  rst_reason = "Brownout (dusuk voltaj)"; break;
-            default:                rst_reason = "Bilinmeyen"; break;
-        }
-        device_log_add(LOG_TYPE_RESTART, "Sistem basladi (boot #%lu) - Neden: %s",
-                       (unsigned long)device_log_get_boot_count(), rst_reason);
-        // Varsayilan web dosyalarini olustur (yoksa)
-        ext_flash_create_default_files();
+        ESP_LOGI(TAG, "Harici flash baslatildi");
     }
 
-    // Flash senkronizasyon baslatma
-    ret = flash_sync_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Flash senkronizasyon baslatilamadi: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "Flash sync hatasi: %s", esp_err_to_name(ret));
+    // Sistem olay kaydi: onceki kapanisi analiz eder, acilis kaydini yazar.
+    // Harici flash yoksa da calisir (RTC bellek), dosyaya yazamaz.
+    sys_log_init();
+    if (ext_ret != ESP_OK) {
+        sys_log_write("ERR", "sys", "Harici flash baslatilamadi: %s", esp_err_to_name(ext_ret));
     } else {
-        ESP_LOGI(TAG, "Flash senkronizasyon hazir");
+        // Varsayilan web dosyalarini olustur (yoksa / surum degistiyse)
+        ext_flash_create_default_files();
     }
 
     // Zamanlayici baslatma
     ret = timer_manager_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Timer manager baslatilamadi: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "Timer hatasi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "Timer manager hazir");
+        sys_log_write("ERR", "timer", "Zamanlayici baslatilamadi: %s", esp_err_to_name(ret));
     }
 
     // Output baslatma (buton + relais)
     ret = output_init();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Output baslatilamadi: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "Output hatasi: %s", esp_err_to_name(ret));
+        sys_log_write("ERR", "sys", "Buton/role baslatilamadi: %s", esp_err_to_name(ret));
     } else {
-        ESP_LOGI(TAG, "Output hazir (Buton + Relais)");
         output_set_button_callback(on_button_pressed);
         output_set_factory_reset_callback(on_factory_reset);
-        timer_manager_set_expiry_callback(on_timer_expired);
-        timer_manager_set_alarm_callback(on_alarm_triggered);
-        timer_manager_set_tick_callback(web_server_send_timer_event);
     }
+    timer_manager_set_expiry_callback(on_timer_expired);
+    timer_manager_set_alarm_callback(on_alarm_triggered);
+    timer_manager_set_tick_callback(web_server_send_timer_event);
 
-    // SMTP client baslatma
-    ret = smtp_client_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "SMTP client baslatilamadi: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "SMTP hatasi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "SMTP client hazir");
-    }
-
-    // Telegram client baslatma
-    ret = telegram_client_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Telegram client baslatilamadi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "Telegram client hazir");
-    }
-
-    // GUI OTA baslatma
-    ret = gui_ota_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "GUI OTA baslatilamadi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "GUI OTA hazir (aktif slot: %c)", ext_flash_get_active_slot());
-    }
-
-    // Firmware OTA baslatma
-    ret = fw_ota_init();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "FW OTA baslatilamadi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "FW OTA hazir (partition: %s)", fw_ota_get_running_label());
-    }
+    // SMTP / Telegram / OTA
+    if (smtp_client_init() != ESP_OK)     ESP_LOGW(TAG, "SMTP client baslatilamadi");
+    if (telegram_client_init() != ESP_OK) ESP_LOGW(TAG, "Telegram client baslatilamadi");
+    if (gui_ota_init() != ESP_OK)         ESP_LOGW(TAG, "GUI OTA baslatilamadi");
+    if (fw_ota_init() != ESP_OK)          ESP_LOGW(TAG, "FW OTA baslatilamadi");
 
     // WiFi AP modda baslat (cihaz adi ile)
     ret = wifi_manager_init(device_name);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "WiFi baslatilamadi! Hata: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "WiFi hatasi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "WiFi AP modu baslatildi");
+        sys_log_write("ERR", "wifi", "WiFi baslatilamadi: %s", esp_err_to_name(ret));
     }
 
-    // Web server baslatma (AP uzerinden erisim icin WiFi'dan ONCE baslamali)
-    // auto_connect blocking olabilir, web server önce hazir olmali
+    // Web server (AP uzerinden erisim icin auto_connect'ten ONCE hazir olmali)
     ret = web_server_start();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Web server baslatilamadi! Hata: %s", esp_err_to_name(ret));
-        device_log_add(LOG_TYPE_ERROR, "Web server hatasi: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "Web server baslatildi");
-        device_log_add(LOG_TYPE_SYSTEM, "Sistem hazir (slot:%c)",
-                       ext_flash_get_active_slot());
+        sys_log_write("ERR", "sys", "Web server baslatilamadi: %s", esp_err_to_name(ret));
     }
 
-    // OTA rollback korumasi: basarili boot'u onayla
-    // Web server ayaga kalktigindan firmware gecerli sayilir
-    esp_ota_mark_app_valid_cancel_rollback();
-
-    // ============================================================
-    // Flash Bilgileri
-    // ============================================================
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "========== FLASH BILGILERI ==========");
-
-    // Dahili flash bilgisi
-    uint32_t int_flash_size;
-    if (esp_flash_get_size(NULL, &int_flash_size) == ESP_OK) {
-        ESP_LOGI(TAG, "[DAHILI FLASH]");
-        ESP_LOGI(TAG, "  Toplam: %lu KB (%lu MB)", (unsigned long)(int_flash_size / 1024),
-                 (unsigned long)(int_flash_size / (1024 * 1024)));
-
-        // Partition bazinda kullanim (harici flash partition'lari haric)
-        size_t app_used = 0;
-        esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
-        while (it != NULL) {
-            const esp_partition_t *part = esp_partition_get(it);
-            // Harici flash partition'larini atla
-            if (strcmp(part->label, "slot_a") != 0 &&
-                strcmp(part->label, "slot_b") != 0 &&
-                strcmp(part->label, "user_data") != 0) {
-                ESP_LOGI(TAG, "  Partition: %-12s | Boyut: %6lu KB | Offset: 0x%06lx",
-                         part->label, (unsigned long)(part->size / 1024), (unsigned long)part->address);
-                app_used += part->size;
-            }
-            it = esp_partition_next(it);
+    // OTA rollback korumasi: onay OTA_VALID_AFTER_S sn sonra (ota_confirm_cb).
+    // Hemen onaylamak, yeni firmware bir dakika sonra cokse bile geri donusu engelliyordu.
+    {
+        const esp_timer_create_args_t ta = { .callback = ota_confirm_cb, .name = "ota_ok" };
+        esp_timer_handle_t th = NULL;
+        if (esp_timer_create(&ta, &th) == ESP_OK) {
+            esp_timer_start_once(th, (uint64_t)OTA_VALID_AFTER_S * 1000000ULL);
+        } else {
+            esp_ota_mark_app_valid_cancel_rollback();   // zamanlayici yoksa eski davranis
         }
-        esp_partition_iterator_release(it);
-
-        size_t int_free = int_flash_size - app_used;
-        ESP_LOGI(TAG, "  Kullanilan: %lu KB | Bos: %lu KB",
-                 (unsigned long)(app_used / 1024), (unsigned long)(int_free / 1024));
     }
 
-    // Harici flash bilgisi - 3 Partition
-    ESP_LOGI(TAG, "[HARICI FLASH - 32MB, 3 Partition]");
+    log_flash_info();
 
-    // Slot A (GUI Web)
-    if (ext_flash_is_slot_a_mounted()) {
-        size_t sa_total = 0, sa_free = 0;
-        if (ext_flash_get_slot_a_info(&sa_total, &sa_free) == ESP_OK) {
-            ESP_LOGI(TAG, "  Slot A (GUI) : %zu KB toplam, %zu KB kullanilan, %zu KB bos",
-                     sa_total / 1024, (sa_total - sa_free) / 1024, sa_free / 1024);
-        }
-    } else {
-        ESP_LOGW(TAG, "  Slot A (GUI) : Mount edilemedi!");
+    const esp_app_desc_t *app = esp_app_get_description();
+    ESP_LOGI(TAG, "=== LebensSpur Hazir === v%s | Cihaz: %s | AP SSID: %s | mDNS: %s.local | acilis #%lu (kisa: %lu)",
+             app->version, device_name, device_name, device_name,
+             (unsigned long)sys_log_boot_count(), (unsigned long)sys_log_short_boots());
+    sys_log_mark_event(SL_EV_BOOT, 0);
+    {
+        timer_state_t st = timer_manager_get_state();
+        sys_log_write("INFO", "sys", "Sistem hazir v%s (slot %c, geri sayim %s, kalan %ld sn)",
+                      app->version, ext_flash_get_active_slot(),
+                      st.enabled ? "aktif" : "pasif", (long)st.remaining_seconds);
     }
-
-    // Slot B (GUI OTA)
-    if (ext_flash_is_slot_b_mounted()) {
-        size_t sb_total = 0, sb_free = 0;
-        if (ext_flash_get_slot_b_info(&sb_total, &sb_free) == ESP_OK) {
-            ESP_LOGI(TAG, "  Slot B (OTA) : %zu KB toplam, %zu KB kullanilan, %zu KB bos",
-                     sb_total / 1024, (sb_total - sb_free) / 1024, sb_free / 1024);
-        }
-    } else {
-        ESP_LOGW(TAG, "  Slot B (OTA) : Mount edilemedi!");
-    }
-
-    // User Data
-    if (ext_flash_is_user_data_mounted()) {
-        size_t ud_total = 0, ud_free = 0;
-        if (ext_flash_get_info(&ud_total, &ud_free) == ESP_OK) {
-            ESP_LOGI(TAG, "  User Data    : %zu KB toplam, %zu KB kullanilan, %zu KB bos",
-                     ud_total / 1024, (ud_total - ud_free) / 1024, ud_free / 1024);
-        }
-    } else {
-        ESP_LOGW(TAG, "  User Data    : Mount edilemedi!");
-    }
-    ESP_LOGI(TAG, "=====================================");
-    ESP_LOGI(TAG, "");
-
-    ESP_LOGI(TAG, "=== LebensSpur Hazir ===");
-    ESP_LOGI(TAG, "Cihaz: %s", device_name);
-    ESP_LOGI(TAG, "AP SSID: %s (Sifresiz)", device_name);
-    ESP_LOGI(TAG, "mDNS: %s.local", device_name);
-    ESP_LOGI(TAG, "AP IP: 192.168.4.1");
 
     // Kayitli WiFi varsa otomatik baglan (tara -> en iyi aga baglan)
-    // Web server ve AP zaten hazir, bu blocking olsa bile sorun yok
     wifi_manager_auto_connect();
 }

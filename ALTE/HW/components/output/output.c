@@ -5,6 +5,7 @@
  */
 
 #include "output.h"
+#include "sys_log.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "driver/gpio.h"
@@ -124,6 +125,9 @@ evaluate:
                     }
                 } else if (press_count >= 3) {
                     ESP_LOGW(TAG, "3x basma -> Restart!");
+                    sys_log_set_restart_reason(SL_RST_USER_BUTTON);
+                    sys_log_write("INFO", "user", "Kullanici yeniden baslatma istedi (buton 3x)");
+                    vTaskDelay(pdMS_TO_TICKS(100));
                     esp_restart();
                 } else {
                     /* 1x veya 2x = normal callback */
@@ -293,7 +297,7 @@ esp_err_t output_init(void)
         return ESP_ERR_NO_MEM;
     }
 
-    xTaskCreate(button_task, "btn_task", 2048, NULL, 10, NULL);
+    xTaskCreate(button_task, "btn_task", 4096, NULL, 10, NULL);
 
     /* GPIO ISR service */
     ret = gpio_install_isr_service(0);
@@ -368,9 +372,12 @@ void output_relay_trigger(void)
 
     ESP_LOGI(TAG, "Relais tetikleniyor (dur=%d, pulse=%d, delay=%d, inv=%d)",
              s_relay_duration, s_relay_pulse, s_relay_delay, (int)s_inverted);
+    sys_log_mark_event(SL_EV_RELAY, s_relay_duration);
+    sys_log_write("INFO", "relay", "Role tetiklendi (sure %d sn, pulse %d sn, gecikme %d sn, ters %d)",
+                  s_relay_duration, s_relay_pulse, s_relay_delay, (int)s_inverted);
 
     /* Worker task baslat */
-    xTaskCreate(relay_worker_task, "relay_wrk", 2048, NULL, 5, &s_pulse_task_handle);
+    xTaskCreate(relay_worker_task, "relay_wrk", 3072, NULL, 5, &s_pulse_task_handle);
 }
 
 void output_relay_off(void)

@@ -11,7 +11,7 @@
 #include "timer_manager.h"
 #include "smtp_client.h"
 #include "system_info.h"
-#include "device_log.h"
+#include "sys_log.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -708,7 +708,8 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
 static esp_err_t api_device_restart_handler(httpd_req_t *req)
 {
     ESP_LOGW(TAG, "Yeniden baslatma istegi alindi (web)");
-    device_log_add(LOG_TYPE_RESTART, "Kullanici restart istegi (web)");
+    sys_log_set_restart_reason(SL_RST_USER_WEB);
+    sys_log_write("INFO", "user", "Kullanici yeniden baslatma istedi (web)");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
     vTaskDelay(pdMS_TO_TICKS(500));
@@ -720,6 +721,8 @@ static esp_err_t api_device_restart_handler(httpd_req_t *req)
 static esp_err_t api_device_factory_reset_handler(httpd_req_t *req)
 {
     ESP_LOGW(TAG, "Factory Reset istegi alindi (web)");
+    sys_log_set_restart_reason(SL_RST_FACTORY);
+    sys_log_write("WARN", "user", "Fabrika sifirlama (web)");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
 
@@ -808,22 +811,40 @@ static esp_err_t api_relay_test_handler(httpd_req_t *req)
     return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
 }
 
-// GET /api/logs - Son log kayitlari (kalici, max 100 kayit)
+// GET /api/logs - Kalici olay kayitlari (sys_log, en yeni once)
 static esp_err_t api_logs_handler(httpd_req_t *req)
 {
-    // 100 kayit * ~250 byte = ~25KB, chunked gonderim gereksiz
-    #define LOG_BUF_SIZE (28 * 1024)
-    char *buf = malloc(LOG_BUF_SIZE);
-    if (!buf) {
+    char *entries = sys_log_read_tail_json(150);
+    if (!entries) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Bellek yetersiz");
         return ESP_FAIL;
     }
-
-    device_log_to_json(buf, LOG_BUF_SIZE, 0);
+    char head[256];
+    int hl = snprintf(head, sizeof(head),
+                      "{\"boot_count\":%lu,\"short_boots\":%lu,\"boot_epoch\":%lu,"
+                      "\"last_cause\":\"%s\",\"last_cat\":\"%s\",\"prev_uptime\":%lu,\"logs\":",
+                      (unsigned long)sys_log_boot_count(), (unsigned long)sys_log_short_boots(),
+                      (unsigned long)sys_log_boot_epoch(), sys_log_last_cause(),
+                      sys_log_last_cause_cat(), (unsigned long)sys_log_prev_uptime());
     httpd_resp_set_type(req, "application/json");
-    esp_err_t ret = httpd_resp_send(req, buf, strlen(buf));
-    free(buf);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    esp_err_t ret = httpd_resp_send_chunk(req, head, hl);
+    if (ret == ESP_OK) ret = httpd_resp_send_chunk(req, entries, strlen(entries));
+    if (ret == ESP_OK) ret = httpd_resp_send_chunk(req, "}", 1);
+    if (ret == ESP_OK) httpd_resp_send_chunk(req, NULL, 0);
+    free(entries);
     return ret;
+}
+
+// POST /api/logs/clear - Kayitlari temizle
+static esp_err_t api_logs_clear_handler(httpd_req_t *req)
+{
+    esp_err_t err = sys_log_clear();
+    httpd_resp_set_type(req, "application/json");
+    if (err == ESP_OK) {
+        return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    }
+    return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Harici flash kullanilamiyor\"}", HTTPD_RESP_USE_STRLEN);
 }
 
 // ============================================================
@@ -2161,6 +2182,11 @@ esp_err_t web_server_start(void)
         .uri = "/api/logs", .method = HTTP_GET, .handler = api_logs_handler
     };
     httpd_register_uri_handler(s_server, &api_logs);
+
+    const httpd_uri_t api_logs_clear = {
+        .uri = "/api/logs/clear", .method = HTTP_POST, .handler = api_logs_clear_handler
+    };
+    httpd_register_uri_handler(s_server, &api_logs_clear);
 
     // --- Relay API ---
     const httpd_uri_t api_relay_get = {

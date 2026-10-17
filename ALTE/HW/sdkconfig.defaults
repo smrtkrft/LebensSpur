@@ -16,9 +16,6 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # --- OTA ---
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
-# --- SPI Flash (Harici 32MB - W25Q256) ---
-CONFIG_SPI_FLASH_SUPPORT_BIST=y
-
 # --- WiFi ---
 CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
 
@@ -34,6 +31,27 @@ CONFIG_ESP_TLS_USING_MBEDTLS=y
 
 # --- NVS ---
 CONFIG_NVS_ENCRYPTION=n
+
+# --- Watchdog / Panic (donma -> reset -> sys_log kaydi) ---
+# TWDT varsayilanda sadece uyari basar, cihaz donuk kalir. PANIC=y ile reset atar
+# ve sys_log bir sonraki acilista "task_wdt" olarak kaydeder.
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_INT_WDT=y
+CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+# Brownout dedektoru acik: besleme dususlerinde ESP_RST_BROWNOUT nedeni uretilir
+CONFIG_ESP_BROWNOUT_DET=y
+# WiFi event handler icinde loglama/dosya yazimi var: varsayilan 2304 yigin dar
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
+# --- Konsol: USB Serial/JTAG ---
+# UART0 TX/RX = GPIO16/17 = harici flash SCLK (D6) ve D7! UART konsolu acilista
+# SCLK hattina log basiyordu; flash cipi acilista cop saat darbeleri aliyordu.
+# XIAO ESP32-C6 USB-C uzerinden zaten USB Serial/JTAG ile izlenir.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
 # --- Log Level ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
