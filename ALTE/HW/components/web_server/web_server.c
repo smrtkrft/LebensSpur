@@ -81,62 +81,32 @@ typedef struct {
 } embedded_file_t;
 
 static const embedded_file_t s_embedded_files[] = {
-    { "/index.html",   NULL, NULL, "text/html" },
-    { "/style.css",    NULL, NULL, "text/css" },
-    { "/app.js",       NULL, NULL, "application/javascript" },
-    { "/config.json",  NULL, NULL, "application/json" },
-    { "/pic/logo.png",     NULL, NULL, "image/png" },
-    { "/pic/darklogo.png", NULL, NULL, "image/png" },
-    { "/lang/en.json",    NULL, NULL, "application/json" },
-    { "/lang/de.json",    NULL, NULL, "application/json" },
-    { "/lang/es.json",    NULL, NULL, "application/json" },
-    { "/lang/fr.json",    NULL, NULL, "application/json" },
-    { "/lang/it.json",    NULL, NULL, "application/json" },
-    { "/lang/tr.json",    NULL, NULL, "application/json" },
+    { "/index.html",       gui_index_html_start,   gui_index_html_end,   "text/html" },
+    { "/style.css",        gui_style_css_start,    gui_style_css_end,    "text/css" },
+    { "/app.js",           gui_app_js_start,       gui_app_js_end,       "application/javascript" },
+    { "/config.json",      gui_config_json_start,  gui_config_json_end,  "application/json" },
+    { "/pic/logo.png",     gui_logo_png_start,     gui_logo_png_end,     "image/png" },
+    { "/pic/darklogo.png", gui_darklogo_png_start, gui_darklogo_png_end, "image/png" },
+    { "/lang/en.json",     gui_lang_en_json_start, gui_lang_en_json_end, "application/json" },
+    { "/lang/de.json",     gui_lang_de_json_start, gui_lang_de_json_end, "application/json" },
+    { "/lang/es.json",     gui_lang_es_json_start, gui_lang_es_json_end, "application/json" },
+    { "/lang/fr.json",     gui_lang_fr_json_start, gui_lang_fr_json_end, "application/json" },
+    { "/lang/it.json",     gui_lang_it_json_start, gui_lang_it_json_end, "application/json" },
+    { "/lang/tr.json",     gui_lang_tr_json_start, gui_lang_tr_json_end, "application/json" },
 };
 #define EMBEDDED_FILES_COUNT (sizeof(s_embedded_files) / sizeof(s_embedded_files[0]))
-
-// Gomulu dosya bul - runtime init yapilmasi gerekiyor
-static const char *get_embedded_start(int idx) {
-    switch (idx) {
-        case 0: return gui_index_html_start;
-        case 1: return gui_style_css_start;
-        case 2: return gui_app_js_start;
-        case 3: return gui_config_json_start;
-        case 4: return gui_logo_png_start;
-        case 5: return gui_darklogo_png_start;
-        case 6: return gui_lang_en_json_start;
-        case 7: return gui_lang_de_json_start;
-        case 8: return gui_lang_es_json_start;
-        case 9: return gui_lang_fr_json_start;
-        case 10: return gui_lang_it_json_start;
-        case 11: return gui_lang_tr_json_start;
-        default: return NULL;
-    }
-}
-
-static const char *get_embedded_end(int idx) {
-    switch (idx) {
-        case 0: return gui_index_html_end;
-        case 1: return gui_style_css_end;
-        case 2: return gui_app_js_end;
-        case 3: return gui_config_json_end;
-        case 4: return gui_logo_png_end;
-        case 5: return gui_darklogo_png_end;
-        case 6: return gui_lang_en_json_end;
-        case 7: return gui_lang_de_json_end;
-        case 8: return gui_lang_es_json_end;
-        case 9: return gui_lang_fr_json_end;
-        case 10: return gui_lang_it_json_end;
-        case 11: return gui_lang_tr_json_end;
-        default: return NULL;
-    }
-}
 
 /* JSON alan okuma -> ls_util (cJSON): kacisli tirnak/yeni satir dogru cozulur,
  * eski strstr tabanli ayristirici sifre/metin icindeki '"' karakterinde kiriliyordu */
 #define parse_json_string(json, key, out, size) ls_json_get_str((json), (key), (out), (size))
 #define json_escape(src, dst, size)              ls_json_escape((src), (dst), (size))
+
+/* JSON govde gonder (tek satir: tip + govde) */
+static esp_err_t send_json(httpd_req_t *req, const char *body)
+{
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, body, HTTPD_RESP_USE_STRLEN);
+}
 
 /* Istek govdesini oku (content_len sinirli, timeout tekrarli). Donus: uzunluk, hata: <=0 */
 static int read_body(httpd_req_t *req, char *buf, size_t size)
@@ -259,8 +229,7 @@ static esp_err_t api_system_info_handler(httpd_req_t *req)
              user_total / 1024,
              user_free / 1024);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/connect - WiFi baglanti (ssid, password, static_ip)
@@ -289,8 +258,7 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
 
     if (strlen(ssid) == 0) {
         wifi_manager_clear_primary();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"WiFi ayarlari silindi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"message\":\"WiFi ayarlari silindi\"}");
     }
 
     esp_err_t err = wifi_manager_connect_sta(ssid, password, &st);
@@ -303,8 +271,7 @@ static esp_err_t api_wifi_connect_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Hata: %s\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/backup/save - Yedek WiFi kaydet
@@ -333,8 +300,7 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
 
     if (strlen(ssid) == 0) {
         wifi_manager_clear_backup();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"Yedek WiFi ayarlari silindi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"message\":\"Yedek WiFi ayarlari silindi\"}");
     }
 
     esp_err_t err = wifi_manager_save_backup(ssid, password, &st);
@@ -347,8 +313,7 @@ static esp_err_t api_wifi_backup_save_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Hata: %s\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/wifi/config - WiFi ayarlarini getir (primary + backup)
@@ -390,8 +355,7 @@ static esp_err_t api_wifi_config_handler(httpd_req_t *req)
              wifi_manager_get_tx_power_now(),
              wifi_manager_get_tx_adaptive() ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/ap/set - AP modunu ac/kapat
@@ -421,8 +385,7 @@ static esp_err_t api_wifi_ap_set_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"%s\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/wifi/txpower - TX gucu tavani ve uyarlanabilir mod {max_dbm, adaptive}
@@ -449,8 +412,7 @@ static esp_err_t api_wifi_txpower_handler(httpd_req_t *req)
     } else {
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Gecersiz deger (8-20 dBm)\"}");
     }
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/timer/get - Zamanlayici durumunu getir (ana + tatil + alarm)
@@ -471,8 +433,7 @@ static esp_err_t api_timer_get_handler(httpd_req_t *req)
              (long)state.vacation_total,
              state.alarm_count);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/timer/set - Zamanlayici ayarla veya iptal et
@@ -493,8 +454,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
         timer_manager_cancel();
         sys_log_write("INFO", "timer", "Geri sayim durduruldu (web)");
         web_server_send_timer_event();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"remaining_seconds\":0}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"remaining_seconds\":0}");
     }
     if (strcmp(action, "restart") == 0) {
         esp_err_t err = timer_manager_restart();
@@ -506,11 +466,9 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
             snprintf(rsp, sizeof(rsp),
                      "{\"status\":\"ok\",\"remaining_seconds\":%ld,\"total_seconds\":%ld}",
                      (long)st.remaining_seconds, (long)st.total_seconds);
-            httpd_resp_set_type(req, "application/json");
-            return httpd_resp_send(req, rsp, strlen(rsp));
+            return send_json(req, rsp);
         }
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Onceden ayarlanmis sure yok\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Onceden ayarlanmis sure yok\"}");
     }
 
     // Tatil modu baslat
@@ -527,11 +485,9 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
             snprintf(rsp, sizeof(rsp),
                      "{\"status\":\"ok\",\"vacation_remaining\":%ld,\"vacation_total\":%ld}",
                      (long)st.vacation_remaining, (long)st.vacation_total);
-            httpd_resp_set_type(req, "application/json");
-            return httpd_resp_send(req, rsp, strlen(rsp));
+            return send_json(req, rsp);
         }
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Tatil ayarlanamadi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Tatil ayarlanamadi\"}");
     }
 
     // Tatil modu iptal
@@ -539,8 +495,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
         timer_manager_cancel_vacation();
         sys_log_write("INFO", "timer", "Tatil modu iptal edildi");
         web_server_send_timer_event();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\"}");
     }
 
     // Alarm sayisi ayarla
@@ -551,11 +506,9 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
         esp_err_t err = timer_manager_set_alarm_count(count);
         if (err == ESP_OK) {
             web_server_send_timer_event();
-            httpd_resp_set_type(req, "application/json");
-            return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+            return send_json(req, "{\"status\":\"ok\"}");
         }
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz alarm sayisi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz alarm sayisi\"}");
     }
 
     // Normal timer ayarla
@@ -585,8 +538,7 @@ static esp_err_t api_timer_set_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Timer ayarlanamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/smtp/get - SMTP ayarlarini getir
@@ -605,8 +557,7 @@ static esp_err_t api_smtp_get_handler(httpd_req_t *req)
              has ? "true" : "false",
              e_srv, cfg.port, e_usr);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/smtp/save - SMTP ayarlarini kaydet
@@ -643,8 +594,7 @@ static esp_err_t api_smtp_save_handler(httpd_req_t *req)
     }
 
     if (strlen(cfg.server) == 0 || strlen(cfg.user) == 0) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Server ve email gerekli\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Server ve email gerekli\"}");
     }
 
     esp_err_t err = smtp_client_save_config(&cfg);
@@ -655,16 +605,14 @@ static esp_err_t api_smtp_save_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Kaydetme hatasi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/smtp/test - Test maili gonder
 static esp_err_t api_smtp_test_handler(httpd_req_t *req)
 {
     if (!smtp_client_has_config()) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"SMTP yapilandirilmamis\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"SMTP yapilandirilmamis\"}");
     }
 
     esp_err_t err = smtp_client_send_test();
@@ -677,8 +625,7 @@ static esp_err_t api_smtp_test_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baglanti hatasi - sunucu/port kontrol edin (%s)\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/system/detail - Detayli sistem bilgisi
@@ -754,8 +701,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              wifi_manager_get_ap_client_count(),
              (unsigned long)(ext_flash_get_chip_size() / (1024 * 1024)));
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/device/restart - Cihazi yeniden baslat
@@ -764,8 +710,7 @@ static esp_err_t api_device_restart_handler(httpd_req_t *req)
     ESP_LOGW(TAG, "Yeniden baslatma istegi alindi (web)");
     sys_log_set_restart_reason(SL_RST_USER_WEB);
     sys_log_write("INFO", "user", "Kullanici yeniden baslatma istedi (web)");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    send_json(req, "{\"status\":\"ok\"}");
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_restart();
     return ESP_OK;
@@ -777,8 +722,7 @@ static esp_err_t api_device_factory_reset_handler(httpd_req_t *req)
     ESP_LOGW(TAG, "Factory Reset istegi alindi (web)");
     sys_log_set_restart_reason(SL_RST_FACTORY);
     sys_log_write("WARN", "user", "Fabrika sifirlama (web)");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    send_json(req, "{\"status\":\"ok\"}");
 
     // NVS sil (WiFi, SMTP, timer, output ayarlari)
     nvs_flash_erase();
@@ -802,8 +746,7 @@ static esp_err_t api_relay_get_handler(httpd_req_t *req)
     snprintf(resp, sizeof(resp),
              "{\"duration\":%d,\"pulse\":%d,\"delay\":%d,\"inverted\":%s}",
              duration, pulse, delay_v, inverted ? "true" : "false");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/relay/set - Role ayarlarini kaydet
@@ -835,8 +778,7 @@ static esp_err_t api_relay_set_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "Role ayarlari kaydedildi: dur=%d pulse=%d delay=%d inv=%d",
              duration, pulse, delay_v, (int)output_get_inverted());
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // POST /api/relay/test - Roleyi test et (kisa pulse)
@@ -844,8 +786,7 @@ static esp_err_t api_relay_test_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "Role test tetiklendi (web)");
     output_relay_trigger();
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // GET /api/logs - Kalici olay kayitlari (sys_log, en yeni once)
@@ -1051,9 +992,8 @@ static esp_err_t ext_file_handler(httpd_req_t *req)
     // Harici flash'ta bulunamadi - gomulu dosyalardan ara
     for (int i = 0; i < (int)EMBEDDED_FILES_COUNT; i++) {
         if (strcmp(clean_path, s_embedded_files[i].path) == 0) {
-            const char *start = get_embedded_start(i);
-            const char *end = get_embedded_end(i);
-            size_t len = end - start;
+            const char *start = s_embedded_files[i].start;
+            size_t len = s_embedded_files[i].end - start;
             ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte)", file_path, len);
             httpd_resp_set_type(req, s_embedded_files[i].content_type);
             httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
@@ -1098,8 +1038,7 @@ static esp_err_t api_early_mail_get_handler(httpd_req_t *req)
              "{\"configured\":%s,\"email\":\"%s\",\"subject\":\"%s\",\"body\":\"%s\"}",
              configured ? "true" : "false", e_mail, e_subj, e_body);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/early-mail/save
@@ -1122,8 +1061,7 @@ static esp_err_t api_early_mail_save_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_ew_mail", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     nvs_set_str(nvs, "email", email);
@@ -1133,8 +1071,7 @@ static esp_err_t api_early_mail_save_handler(httpd_req_t *req)
     nvs_close(nvs);
 
     ESP_LOGI(TAG, "Erken uyari mail kaydedildi: %s", email);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // ============================================================
@@ -1195,8 +1132,7 @@ static esp_err_t api_trigger_mail_get_handler(httpd_req_t *req)
 
     pos += snprintf(resp + pos, cap - pos, "]}");
 
-    httpd_resp_set_type(req, "application/json");
-    esp_err_t r = httpd_resp_send(req, resp, strlen(resp));
+    esp_err_t r = send_json(req, resp);
     free(resp);
     return r;
 }
@@ -1229,8 +1165,7 @@ static esp_err_t api_trigger_mail_save_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_tg_mail", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     uint8_t count = 0;
@@ -1240,16 +1175,14 @@ static esp_err_t api_trigger_mail_save_handler(httpd_req_t *req)
         // Yeni grup olustur
         if (count >= 10) {
             nvs_close(nvs);
-            httpd_resp_set_type(req, "application/json");
-            return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Maksimum 10 grup\"}", HTTPD_RESP_USE_STRLEN);
+            return send_json(req, "{\"status\":\"error\",\"message\":\"Maksimum 10 grup\"}");
         }
         id = count;
         count++;
         nvs_set_u8(nvs, "count", count);
     } else if (id < 0 || id >= count) {
         nvs_close(nvs);
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz grup ID\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz grup ID\"}");
     }
 
     char key[20];
@@ -1268,8 +1201,7 @@ static esp_err_t api_trigger_mail_save_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "Tetikleme mail grubu kaydedildi: id=%d name=%s", id, name);
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"id\":%d}", id);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/trigger-mail/delete
@@ -1289,8 +1221,7 @@ static esp_err_t api_trigger_mail_delete_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_tg_mail", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     uint8_t count = 0;
@@ -1298,8 +1229,7 @@ static esp_err_t api_trigger_mail_delete_handler(httpd_req_t *req)
 
     if (id < 0 || id >= count) {
         nvs_close(nvs);
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz grup ID\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz grup ID\"}");
     }
 
     // Sonraki gruplari kaydir (id+1 -> id, id+2 -> id+1, ...)
@@ -1378,8 +1308,7 @@ static esp_err_t api_trigger_mail_delete_handler(httpd_req_t *req)
     }
 
     ESP_LOGI(TAG, "Tetikleme mail grubu silindi: id=%d, yeni count=%d", id, count);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // ============================================================
@@ -1414,8 +1343,7 @@ static esp_err_t api_actions_get_handler(httpd_req_t *req)
         trig_api ? "true" : "false",
         trig_relay ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/actions/save
@@ -1431,8 +1359,7 @@ static esp_err_t api_actions_save_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_actions", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     // Her alan icin: "key":"true" -> 1, yoksa veya "false" -> 0
@@ -1451,8 +1378,7 @@ static esp_err_t api_actions_save_handler(httpd_req_t *req)
     nvs_close(nvs);
 
     ESP_LOGI(TAG, "Action durumlar kaydedildi");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // ============================================================
@@ -1476,8 +1402,7 @@ static esp_err_t api_telegram_get_handler(httpd_req_t *req)
              "{\"configured\":%s,\"chat_id\":\"%s\",\"message\":\"%s\"}",
              has ? "true" : "false", esc_chat, esc_msg);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/telegram/save - Telegram ayarlarini kaydet
@@ -1506,8 +1431,7 @@ static esp_err_t api_telegram_save_handler(httpd_req_t *req)
     }
 
     if (strlen(cfg.chat_id) == 0) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Chat ID gerekli\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Chat ID gerekli\"}");
     }
 
     esp_err_t err = telegram_client_save_config(&cfg);
@@ -1518,16 +1442,14 @@ static esp_err_t api_telegram_save_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Kaydetme hatasi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/telegram/test - Test mesaji gonder
 static esp_err_t api_telegram_test_handler(httpd_req_t *req)
 {
     if (!telegram_client_has_config()) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Telegram yapilandirilmamis\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Telegram yapilandirilmamis\"}");
     }
 
     esp_err_t err = telegram_client_send("LebensSpur test mesaji basarili!");
@@ -1540,8 +1462,7 @@ static esp_err_t api_telegram_test_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Gonderim hatasi (%s)\"}", esp_err_to_name(err));
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // ============================================================
@@ -1582,8 +1503,7 @@ static esp_err_t api_reset_config_get_handler(httpd_req_t *req)
              has_key ? "true" : "false",
              masked);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/reset/config - Reset API durumu kaydet (enabled/disabled)
@@ -1610,8 +1530,7 @@ static esp_err_t api_reset_config_save_handler(httpd_req_t *req)
 
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"enabled\":%s}", enabled ? "true" : "false");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/reset/generate - Yeni API key uret
@@ -1625,8 +1544,7 @@ static esp_err_t api_reset_generate_handler(httpd_req_t *req)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("ls_reset", NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"NVS hatasi\"}");
     }
 
     nvs_set_str(nvs, "api_key", api_key);
@@ -1637,8 +1555,7 @@ static esp_err_t api_reset_generate_handler(httpd_req_t *req)
 
     char resp[64];
     snprintf(resp, sizeof(resp), "{\"status\":\"ok\",\"api_key\":\"%s\"}", api_key);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/reset?key=xxx - Timer'i sifirla (dis erisim)
@@ -1658,8 +1575,7 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
 
     if (!enabled) {
         httpd_resp_set_status(req, "403 Forbidden");
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Uzaktan sifirlama devre disi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Uzaktan sifirlama devre disi\"}");
     }
 
     // Query param: key
@@ -1677,8 +1593,7 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
     }
     if (!key_ok) {
         httpd_resp_set_status(req, "401 Unauthorized");
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz API anahtari\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz API anahtari\"}");
     }
 
     // Timer'i sifirla (restart butonu simule)
@@ -1686,12 +1601,10 @@ static esp_err_t api_reset_handler(httpd_req_t *req)
     if (err == ESP_OK) {
         sys_log_write("INFO", "api", "Uzaktan sifirlama API: geri sayim sifirlandi");
         web_server_send_timer_event();
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\",\"message\":\"Timer sifirlandi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\",\"message\":\"Timer sifirlandi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Timer sifirlanamadi\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"error\",\"message\":\"Timer sifirlanamadi\"}");
 }
 
 // ============================================================
@@ -1729,8 +1642,7 @@ static esp_err_t api_trigger_mail_upload_handler(httpd_req_t *req)
     }
 
     if (!ext_flash_is_user_data_mounted()) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Harici flash kullanilamiyor\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Harici flash kullanilamiyor\"}");
     }
 
     // Dizin olustur
@@ -1746,8 +1658,7 @@ static esp_err_t api_trigger_mail_upload_handler(httpd_req_t *req)
     FILE *f = fopen(file_path, "wb");
     if (!f) {
         ESP_LOGE(TAG, "Dosya acilamadi: %s", file_path);
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Dosya olusturulamadi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Dosya olusturulamadi\"}");
     }
 
     // Chunk'lar halinde al ve yaz
@@ -1783,13 +1694,11 @@ static esp_err_t api_trigger_mail_upload_handler(httpd_req_t *req)
 
     if (!write_ok) {
         remove(file_path);
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Dosya yazma hatasi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Dosya yazma hatasi\"}");
     }
 
     ESP_LOGI(TAG, "Dosya yuklendi: %s (%d byte)", file_path, req->content_len);
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"ok\"}");
 }
 
 // GET /api/trigger-mail/files?group=X - Grup dosyalarini listele
@@ -1837,8 +1746,7 @@ static esp_err_t api_trigger_mail_files_handler(httpd_req_t *req)
 
     pos += snprintf(resp + pos, 2048 - pos, "]}");
 
-    httpd_resp_set_type(req, "application/json");
-    esp_err_t r = httpd_resp_send(req, resp, strlen(resp));
+    esp_err_t r = send_json(req, resp);
     free(resp);
     return r;
 }
@@ -1862,8 +1770,7 @@ static esp_err_t api_trigger_mail_file_delete_handler(httpd_req_t *req)
 
     // Path traversal engelle
     if (strchr(filename, '/') || strchr(filename, '\\') || strstr(filename, "..")) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Gecersiz dosya adi\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"Gecersiz dosya adi\"}");
     }
 
     char file_path[128];
@@ -1871,12 +1778,10 @@ static esp_err_t api_trigger_mail_file_delete_handler(httpd_req_t *req)
 
     if (remove(file_path) == 0) {
         ESP_LOGI(TAG, "Dosya silindi: %s", file_path);
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"ok\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"Dosya silinemedi\"}", HTTPD_RESP_USE_STRLEN);
+    return send_json(req, "{\"status\":\"error\",\"message\":\"Dosya silinemedi\"}");
 }
 
 // ============================================================
@@ -1937,16 +1842,14 @@ static esp_err_t api_gui_ota_info_handler(httpd_req_t *req)
              ext_flash_is_slot_b_mounted() ? "true" : "false",
              gui_ota_is_busy() ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/gui-ota/start - OTA baslatir
 static esp_err_t api_gui_ota_start_handler(httpd_req_t *req)
 {
     if (gui_ota_is_busy()) {
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}", HTTPD_RESP_USE_STRLEN);
+        return send_json(req, "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}");
     }
 
     // Body'den parametreleri oku (opsiyonel)
@@ -1973,8 +1876,7 @@ static esp_err_t api_gui_ota_start_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"OTA baslatilamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/gui-ota/status - Polling: durum, ilerleme, mesaj
@@ -2004,8 +1906,7 @@ static esp_err_t api_gui_ota_status_handler(httpd_req_t *req)
              st.remote_version,
              st.current_version);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/gui-ota/rollback - Onceki slot'a geri don
@@ -2029,8 +1930,7 @@ static esp_err_t api_gui_ota_rollback_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Rollback basarisiz\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // ============================================================
@@ -2061,8 +1961,7 @@ static esp_err_t api_fw_ota_info_handler(httpd_req_t *req)
              rollback_ver ? rollback_ver : "",
              busy ? "true" : "false");
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/fw-ota/check
@@ -2070,8 +1969,7 @@ static esp_err_t api_fw_ota_check_handler(httpd_req_t *req)
 {
     if (fw_ota_is_busy()) {
         const char *resp = "{\"status\":\"error\",\"message\":\"OTA zaten calisiyor\"}";
-        httpd_resp_set_type(req, "application/json");
-        return httpd_resp_send(req, resp, strlen(resp));
+        return send_json(req, resp);
     }
 
     // Body oku (opsiyonel custom URL)
@@ -2101,8 +1999,7 @@ static esp_err_t api_fw_ota_check_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baslatilamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/fw-ota/start
@@ -2119,8 +2016,7 @@ static esp_err_t api_fw_ota_start_handler(httpd_req_t *req)
         snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"Baslatilamadi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // GET /api/fw-ota/status
@@ -2146,8 +2042,7 @@ static esp_err_t api_fw_ota_status_handler(httpd_req_t *req)
              st.remote_version,
              st.current_version);
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
 
 // POST /api/fw-ota/rollback
@@ -2166,9 +2061,70 @@ static esp_err_t api_fw_ota_rollback_handler(httpd_req_t *req)
                  "{\"status\":\"error\",\"message\":\"Rollback hatasi\"}");
     }
 
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, resp, strlen(resp));
+    return send_json(req, resp);
 }
+
+// ============================================================
+// Rota tablosu
+// ============================================================
+
+typedef struct {
+    const char *uri;
+    httpd_method_t method;
+    esp_err_t (*handler)(httpd_req_t *);
+} route_t;
+
+/* Tum uclar tek tabloda; sira onemli: joker yol (ext) en sonda */
+static const route_t s_routes[] = {
+    { "/", HTTP_GET, root_handler },
+    { "/api/system/info", HTTP_GET, api_system_info_handler },
+    { "/api/wifi/connect", HTTP_POST, api_wifi_connect_handler },
+    { "/api/wifi/backup/save", HTTP_POST, api_wifi_backup_save_handler },
+    { "/api/wifi/config", HTTP_GET, api_wifi_config_handler },
+    { "/api/wifi/ap/set", HTTP_POST, api_wifi_ap_set_handler },
+    { "/api/wifi/txpower", HTTP_POST, api_wifi_txpower_handler },
+    { "/api/timer/get", HTTP_GET, api_timer_get_handler },
+    { "/api/timer/set", HTTP_POST, api_timer_set_handler },
+    { "/api/smtp/get", HTTP_GET, api_smtp_get_handler },
+    { "/api/smtp/save", HTTP_POST, api_smtp_save_handler },
+    { "/api/smtp/test", HTTP_POST, api_smtp_test_handler },
+    { "/api/system/detail", HTTP_GET, api_system_detail_handler },
+    { "/api/logs", HTTP_GET, api_logs_handler },
+    { "/api/logs/clear", HTTP_POST, api_logs_clear_handler },
+    { "/api/relay/get", HTTP_GET, api_relay_get_handler },
+    { "/api/relay/set", HTTP_POST, api_relay_set_handler },
+    { "/api/relay/test", HTTP_POST, api_relay_test_handler },
+    { "/api/device/restart", HTTP_POST, api_device_restart_handler },
+    { "/api/device/factory-reset", HTTP_POST, api_device_factory_reset_handler },
+    { "/api/early-mail/get", HTTP_GET, api_early_mail_get_handler },
+    { "/api/early-mail/save", HTTP_POST, api_early_mail_save_handler },
+    { "/api/trigger-mail/get", HTTP_GET, api_trigger_mail_get_handler },
+    { "/api/trigger-mail/save", HTTP_POST, api_trigger_mail_save_handler },
+    { "/api/trigger-mail/delete", HTTP_POST, api_trigger_mail_delete_handler },
+    { "/api/trigger-mail/upload", HTTP_POST, api_trigger_mail_upload_handler },
+    { "/api/trigger-mail/files", HTTP_GET, api_trigger_mail_files_handler },
+    { "/api/trigger-mail/file-delete", HTTP_POST, api_trigger_mail_file_delete_handler },
+    { "/api/actions/get", HTTP_GET, api_actions_get_handler },
+    { "/api/actions/save", HTTP_POST, api_actions_save_handler },
+    { "/api/telegram/get", HTTP_GET, api_telegram_get_handler },
+    { "/api/telegram/save", HTTP_POST, api_telegram_save_handler },
+    { "/api/telegram/test", HTTP_POST, api_telegram_test_handler },
+    { "/api/reset/config", HTTP_GET, api_reset_config_get_handler },
+    { "/api/reset/config", HTTP_POST, api_reset_config_save_handler },
+    { "/api/reset/generate", HTTP_POST, api_reset_generate_handler },
+    { "/api/reset", HTTP_GET, api_reset_handler },
+    { "/api/gui-ota/info", HTTP_GET, api_gui_ota_info_handler },
+    { "/api/gui-ota/start", HTTP_POST, api_gui_ota_start_handler },
+    { "/api/gui-ota/status", HTTP_GET, api_gui_ota_status_handler },
+    { "/api/gui-ota/rollback", HTTP_POST, api_gui_ota_rollback_handler },
+    { "/api/fw-ota/info", HTTP_GET, api_fw_ota_info_handler },
+    { "/api/fw-ota/check", HTTP_POST, api_fw_ota_check_handler },
+    { "/api/fw-ota/start", HTTP_POST, api_fw_ota_start_handler },
+    { "/api/fw-ota/status", HTTP_GET, api_fw_ota_status_handler },
+    { "/api/fw-ota/rollback", HTTP_POST, api_fw_ota_rollback_handler },
+    { "/api/events", HTTP_GET, api_events_handler },
+    { "/ext/*", HTTP_GET, ext_file_handler },
+};
 
 // ============================================================
 // Server Yonetim
@@ -2183,7 +2139,7 @@ esp_err_t web_server_start(void)
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 50;
+    config.max_uri_handlers = sizeof(s_routes) / sizeof(s_routes[0]) + 4;
     config.stack_size = 8192;
     config.max_open_sockets = 7;    // LWIP varsayilan max (lru_purge ile yeterli)
     config.lru_purge_enable = true;  // soket dolunca en eski idle baglantiyi kapat
@@ -2195,262 +2151,15 @@ esp_err_t web_server_start(void)
         return ret;
     }
 
-    // --- Ana sayfa ---
-    const httpd_uri_t root = {
-        .uri = "/", .method = HTTP_GET, .handler = root_handler
-    };
-    httpd_register_uri_handler(s_server, &root);
-
-    // --- API endpointleri ---
-    const httpd_uri_t api_info = {
-        .uri = "/api/system/info", .method = HTTP_GET, .handler = api_system_info_handler
-    };
-    httpd_register_uri_handler(s_server, &api_info);
-
-    const httpd_uri_t api_wifi = {
-        .uri = "/api/wifi/connect", .method = HTTP_POST, .handler = api_wifi_connect_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi);
-
-    const httpd_uri_t api_wifi_backup = {
-        .uri = "/api/wifi/backup/save", .method = HTTP_POST, .handler = api_wifi_backup_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_backup);
-
-    const httpd_uri_t api_wifi_cfg = {
-        .uri = "/api/wifi/config", .method = HTTP_GET, .handler = api_wifi_config_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_cfg);
-
-    const httpd_uri_t api_wifi_ap = {
-        .uri = "/api/wifi/ap/set", .method = HTTP_POST, .handler = api_wifi_ap_set_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_ap);
-
-    const httpd_uri_t api_wifi_txp = {
-        .uri = "/api/wifi/txpower", .method = HTTP_POST, .handler = api_wifi_txpower_handler
-    };
-    httpd_register_uri_handler(s_server, &api_wifi_txp);
-
-    // --- Timer API ---
-    const httpd_uri_t api_timer_get = {
-        .uri = "/api/timer/get", .method = HTTP_GET, .handler = api_timer_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_timer_get);
-
-    const httpd_uri_t api_timer_set = {
-        .uri = "/api/timer/set", .method = HTTP_POST, .handler = api_timer_set_handler
-    };
-    httpd_register_uri_handler(s_server, &api_timer_set);
-
-    // --- SMTP API ---
-    const httpd_uri_t api_smtp_get = {
-        .uri = "/api/smtp/get", .method = HTTP_GET, .handler = api_smtp_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_smtp_get);
-
-    const httpd_uri_t api_smtp_save = {
-        .uri = "/api/smtp/save", .method = HTTP_POST, .handler = api_smtp_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_smtp_save);
-
-    const httpd_uri_t api_smtp_test = {
-        .uri = "/api/smtp/test", .method = HTTP_POST, .handler = api_smtp_test_handler
-    };
-    httpd_register_uri_handler(s_server, &api_smtp_test);
-
-    // --- System Detail + Logs API ---
-    const httpd_uri_t api_sys_detail = {
-        .uri = "/api/system/detail", .method = HTTP_GET, .handler = api_system_detail_handler
-    };
-    httpd_register_uri_handler(s_server, &api_sys_detail);
-
-    const httpd_uri_t api_logs = {
-        .uri = "/api/logs", .method = HTTP_GET, .handler = api_logs_handler
-    };
-    httpd_register_uri_handler(s_server, &api_logs);
-
-    const httpd_uri_t api_logs_clear = {
-        .uri = "/api/logs/clear", .method = HTTP_POST, .handler = api_logs_clear_handler
-    };
-    httpd_register_uri_handler(s_server, &api_logs_clear);
-
-    // --- Relay API ---
-    const httpd_uri_t api_relay_get = {
-        .uri = "/api/relay/get", .method = HTTP_GET, .handler = api_relay_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_relay_get);
-
-    const httpd_uri_t api_relay_set = {
-        .uri = "/api/relay/set", .method = HTTP_POST, .handler = api_relay_set_handler
-    };
-    httpd_register_uri_handler(s_server, &api_relay_set);
-
-    const httpd_uri_t api_relay_test = {
-        .uri = "/api/relay/test", .method = HTTP_POST, .handler = api_relay_test_handler
-    };
-    httpd_register_uri_handler(s_server, &api_relay_test);
-
-    // --- Device Control API ---
-    const httpd_uri_t api_restart = {
-        .uri = "/api/device/restart", .method = HTTP_POST, .handler = api_device_restart_handler
-    };
-    httpd_register_uri_handler(s_server, &api_restart);
-
-    const httpd_uri_t api_factory_reset = {
-        .uri = "/api/device/factory-reset", .method = HTTP_POST, .handler = api_device_factory_reset_handler
-    };
-    httpd_register_uri_handler(s_server, &api_factory_reset);
-
-    // --- Early Mail API ---
-    const httpd_uri_t api_early_mail_get = {
-        .uri = "/api/early-mail/get", .method = HTTP_GET, .handler = api_early_mail_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_early_mail_get);
-
-    const httpd_uri_t api_early_mail_save = {
-        .uri = "/api/early-mail/save", .method = HTTP_POST, .handler = api_early_mail_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_early_mail_save);
-
-    // --- Trigger Mail API ---
-    const httpd_uri_t api_trig_mail_get = {
-        .uri = "/api/trigger-mail/get", .method = HTTP_GET, .handler = api_trigger_mail_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_trig_mail_get);
-
-    const httpd_uri_t api_trig_mail_save = {
-        .uri = "/api/trigger-mail/save", .method = HTTP_POST, .handler = api_trigger_mail_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_trig_mail_save);
-
-    const httpd_uri_t api_trig_mail_del = {
-        .uri = "/api/trigger-mail/delete", .method = HTTP_POST, .handler = api_trigger_mail_delete_handler
-    };
-    httpd_register_uri_handler(s_server, &api_trig_mail_del);
-
-    // --- Trigger Mail File API ---
-    const httpd_uri_t api_trig_mail_upload = {
-        .uri = "/api/trigger-mail/upload", .method = HTTP_POST, .handler = api_trigger_mail_upload_handler
-    };
-    httpd_register_uri_handler(s_server, &api_trig_mail_upload);
-
-    const httpd_uri_t api_trig_mail_files = {
-        .uri = "/api/trigger-mail/files", .method = HTTP_GET, .handler = api_trigger_mail_files_handler
-    };
-    httpd_register_uri_handler(s_server, &api_trig_mail_files);
-
-    const httpd_uri_t api_trig_mail_file_del = {
-        .uri = "/api/trigger-mail/file-delete", .method = HTTP_POST, .handler = api_trigger_mail_file_delete_handler
-    };
-    httpd_register_uri_handler(s_server, &api_trig_mail_file_del);
-
-    // --- Actions API ---
-    const httpd_uri_t api_actions_get = {
-        .uri = "/api/actions/get", .method = HTTP_GET, .handler = api_actions_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_actions_get);
-
-    const httpd_uri_t api_actions_save = {
-        .uri = "/api/actions/save", .method = HTTP_POST, .handler = api_actions_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_actions_save);
-
-    // --- Telegram API ---
-    const httpd_uri_t api_telegram_get = {
-        .uri = "/api/telegram/get", .method = HTTP_GET, .handler = api_telegram_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_telegram_get);
-
-    const httpd_uri_t api_telegram_save = {
-        .uri = "/api/telegram/save", .method = HTTP_POST, .handler = api_telegram_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_telegram_save);
-
-    const httpd_uri_t api_telegram_test = {
-        .uri = "/api/telegram/test", .method = HTTP_POST, .handler = api_telegram_test_handler
-    };
-    httpd_register_uri_handler(s_server, &api_telegram_test);
-
-    // --- Reset API ---
-    const httpd_uri_t api_reset_cfg_get = {
-        .uri = "/api/reset/config", .method = HTTP_GET, .handler = api_reset_config_get_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset_cfg_get);
-
-    const httpd_uri_t api_reset_cfg_save = {
-        .uri = "/api/reset/config", .method = HTTP_POST, .handler = api_reset_config_save_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset_cfg_save);
-
-    const httpd_uri_t api_reset_generate = {
-        .uri = "/api/reset/generate", .method = HTTP_POST, .handler = api_reset_generate_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset_generate);
-
-    const httpd_uri_t api_reset = {
-        .uri = "/api/reset", .method = HTTP_GET, .handler = api_reset_handler
-    };
-    httpd_register_uri_handler(s_server, &api_reset);
-
-    // --- GUI OTA API ---
-    const httpd_uri_t api_gui_ota_info = {
-        .uri = "/api/gui-ota/info", .method = HTTP_GET, .handler = api_gui_ota_info_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_info);
-
-    const httpd_uri_t api_gui_ota_start = {
-        .uri = "/api/gui-ota/start", .method = HTTP_POST, .handler = api_gui_ota_start_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_start);
-
-    const httpd_uri_t api_gui_ota_status = {
-        .uri = "/api/gui-ota/status", .method = HTTP_GET, .handler = api_gui_ota_status_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_status);
-
-    const httpd_uri_t api_gui_ota_rollback = {
-        .uri = "/api/gui-ota/rollback", .method = HTTP_POST, .handler = api_gui_ota_rollback_handler
-    };
-    httpd_register_uri_handler(s_server, &api_gui_ota_rollback);
-
-    // --- Firmware OTA API ---
-    const httpd_uri_t api_fw_ota_info = {
-        .uri = "/api/fw-ota/info", .method = HTTP_GET, .handler = api_fw_ota_info_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_info);
-
-    const httpd_uri_t api_fw_ota_check = {
-        .uri = "/api/fw-ota/check", .method = HTTP_POST, .handler = api_fw_ota_check_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_check);
-
-    const httpd_uri_t api_fw_ota_start = {
-        .uri = "/api/fw-ota/start", .method = HTTP_POST, .handler = api_fw_ota_start_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_start);
-
-    const httpd_uri_t api_fw_ota_status = {
-        .uri = "/api/fw-ota/status", .method = HTTP_GET, .handler = api_fw_ota_status_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_status);
-
-    const httpd_uri_t api_fw_ota_rollback = {
-        .uri = "/api/fw-ota/rollback", .method = HTTP_POST, .handler = api_fw_ota_rollback_handler
-    };
-    httpd_register_uri_handler(s_server, &api_fw_ota_rollback);
-
-    // --- SSE Events ---
-    const httpd_uri_t api_events = {
-        .uri = "/api/events", .method = HTTP_GET, .handler = api_events_handler
-    };
-    httpd_register_uri_handler(s_server, &api_events);
-
-    // --- Statik dosyalar (harici flash + gomulu fallback) ---
-    const httpd_uri_t ext_files = {
-        .uri = "/ext/*", .method = HTTP_GET, .handler = ext_file_handler
-    };
-    httpd_register_uri_handler(s_server, &ext_files);
+    for (size_t i = 0; i < sizeof(s_routes) / sizeof(s_routes[0]); i++) {
+        const httpd_uri_t u = {
+            .uri = s_routes[i].uri, .method = s_routes[i].method, .handler = s_routes[i].handler
+        };
+        esp_err_t r = httpd_register_uri_handler(s_server, &u);
+        if (r != ESP_OK) {
+            ESP_LOGE(TAG, "Rota kaydedilemedi: %s (%s)", s_routes[i].uri, esp_err_to_name(r));
+        }
+    }
 
     // SSE gonderim task'i olustur (thread-safe SSE icin)
     if (!s_sse_task_handle) {
