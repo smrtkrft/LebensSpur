@@ -56,3 +56,40 @@ CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 # --- Log Level ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_LOG_DEFAULT_LEVEL=3
+
+# ============================================
+# Boyut: dahili flash (uygulama bolumu 1984 KB). Teshis ozellikleri (assert metinleri,
+# mbedTLS hata metinleri, esp_err_to_name) BILEREK aciktir; WPA3 de korunur.
+# ============================================
+# Derleyici: -Og (varsayilan, hata ayiklama) yerine -Os. Islevsel fark yok.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+# Sertifika paketi: yalnizca yaygin kok CA'lar (~%50 kucuk, ~%99 kapsama). Gmail/Outlook/
+# Proton, Telegram, GitHub, Let's Encrypt, Amazon, DigiCert, GlobalSign, Sectigo dahil.
+# SMTP dogrulamasi zaten OPTIONAL (teslimat oncelikli); webhook/mqtts icin nadir bir
+# bolgesel CA gerekirse CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE ile eklenir.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+# IPv6 kullanilmiyor (SMTP AF_INET, tum servisler IPv4). mDNS A kaydiyla calisir.
+CONFIG_LWIP_IPV6=n
+# TLS sunucu yok (HTTPS server kullanilmiyor); mbedTLS yalnizca istemci
+CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y
+CONFIG_MBEDTLS_SERVER_SSL_SESSION_TICKETS=n
+# Kullanilmayan mbedTLS ozellikleri
+CONFIG_MBEDTLS_SSL_RENEGOTIATION=n
+CONFIG_MBEDTLS_PEM_WRITE_C=n
+CONFIG_MBEDTLS_X509_CRL_PARSE_C=n
+CONFIG_MBEDTLS_X509_CSR_PARSE_C=n
+# Acik web PKI yalnizca P-256/P-384 (P-521 ve X25519 korunur); Brainpool/Koblitz/192-224 bit kapali
+CONFIG_MBEDTLS_ECP_DP_SECP192R1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_SECP224R1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_SECP192K1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_SECP224K1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_SECP256K1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_BP256R1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_BP384R1_ENABLED=n
+CONFIG_MBEDTLS_ECP_DP_BP512R1_ENABLED=n
+# MQTT yalnizca mqtt:// ve mqtts:// (WebSocket tasima yok)
+CONFIG_WS_TRANSPORT=n
+# mDNS: yalnizca duyuru (tarama, konsol CLI, coklu ornek kullanilmiyor)
+CONFIG_MDNS_ENABLE_BROWSE=n
+CONFIG_MDNS_ENABLE_CONSOLE_CLI=n
+CONFIG_MDNS_MULTIPLE_INSTANCE=n

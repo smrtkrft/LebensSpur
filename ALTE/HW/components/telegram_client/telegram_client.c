@@ -9,6 +9,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "ls_util.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -18,33 +19,7 @@ static const char *TAG = "TELEGRAM";
 static telegram_config_t s_config;
 static bool s_initialized = false;
 
-/* JSON string icindeki ozel karakterleri escape'le (" \ \n \r \t) */
-static size_t json_escape(const char *src, char *dst, size_t dst_size)
-{
-    size_t si = 0, di = 0;
-    while (src[si] && di < dst_size - 1) {
-        char c = src[si++];
-        const char *esc = NULL;
-        switch (c) {
-            case '"':  esc = "\\\""; break;
-            case '\\': esc = "\\\\"; break;
-            case '\n': esc = "\\n";  break;
-            case '\r': esc = "\\r";  break;
-            case '\t': esc = "\\t";  break;
-            default: break;
-        }
-        if (esc) {
-            size_t el = strlen(esc);
-            if (di + el > dst_size - 1) break;
-            memcpy(&dst[di], esc, el);
-            di += el;
-        } else if ((unsigned char)c >= 0x20) {
-            dst[di++] = c;
-        }
-    }
-    dst[di] = '\0';
-    return di;
-}
+#define json_escape(src, dst, size) ls_json_escape((src), (dst), (size))
 
 esp_err_t telegram_client_init(void)
 {

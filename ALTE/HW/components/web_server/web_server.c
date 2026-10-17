@@ -499,9 +499,8 @@ static esp_err_t api_apicfg_save_handler(httpd_req_t *req)
     if (c.wh_url[0] && strncmp(c.wh_url, "http://", 7) != 0 && strncmp(c.wh_url, "https://", 8) != 0) {
         return send_json(req, "{\"status\":\"error\",\"message\":\"Webhook URL http:// veya https:// ile baslamali\"}");
     }
-    if (c.mq_url[0] && strncmp(c.mq_url, "mqtt://", 7) != 0 && strncmp(c.mq_url, "mqtts://", 8) != 0 &&
-        strncmp(c.mq_url, "ws://", 5) != 0 && strncmp(c.mq_url, "wss://", 6) != 0) {
-        return send_json(req, "{\"status\":\"error\",\"message\":\"MQTT URL mqtt:// ile baslamali\"}");
+    if (c.mq_url[0] && strncmp(c.mq_url, "mqtt://", 7) != 0 && strncmp(c.mq_url, "mqtts://", 8) != 0) {
+        return send_json(req, "{\"status\":\"error\",\"message\":\"MQTT URL mqtt:// veya mqtts:// ile baslamali\"}");
     }
     if (api_client_save_config(&c) != ESP_OK) {
         return send_json(req, "{\"status\":\"error\",\"message\":\"Kaydedilemedi\"}");
