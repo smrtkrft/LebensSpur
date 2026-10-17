@@ -3,9 +3,9 @@
  * SPI Flash (W25Q128 16 MB veya W25Q256 32 MB) - 3 Partition Yapisi
  *
  * Partition Haritasi (User Data boyutu cipin gercek boyutundan turetilir):
- *   Slot A    : 0x000000 - 0x1FFFFF  (2 MB)  - GUI Web Arayuzu (LittleFS)
- *   Slot B    : 0x200000 - 0x3FFFFF  (2 MB)  - Yedek / OTA slot
- *   User Data : 0x400000 - cip sonu  (12 MB @16MB cip, 28 MB @32MB cip) - Kullanici verileri
+ *   Slot A    : 0x000000 - 0x0FFFFF  (1 MB)  - GUI Web Arayuzu (LittleFS)
+ *   Slot B    : 0x100000 - 0x1FFFFF  (1 MB)  - Yedek / OTA slot
+ *   User Data : 0x200000 - cip sonu  (14 MB @16MB cip, 30 MB @32MB cip) - Kullanici verileri
  *
  * Pin Baglantilari:
  *   CS   = D3 = GPIO21
@@ -40,16 +40,16 @@ static const char *TAG = "EXT_FLASH";
 // Partition Haritasi (32MB = 0x2000000)
 // ============================================================
 #define SLOT_A_OFFSET        0x000000
-#define SLOT_A_SIZE          (2 * 1024 * 1024)    // 2 MB
+#define SLOT_A_SIZE          (1 * 1024 * 1024)    // 1 MB (gzip GUI ~110 KB, duz GUI ~480 KB)
 #define SLOT_A_LABEL         "slot_a"
 #define SLOT_A_MOUNT         "/slot_a"
 
-#define SLOT_B_OFFSET        0x200000
-#define SLOT_B_SIZE          (2 * 1024 * 1024)    // 2 MB
+#define SLOT_B_OFFSET        0x100000
+#define SLOT_B_SIZE          (1 * 1024 * 1024)    // 1 MB
 #define SLOT_B_LABEL         "slot_b"
 #define SLOT_B_MOUNT         "/slot_b"
 
-#define USER_DATA_OFFSET     0x400000
+#define USER_DATA_OFFSET     0x200000
 #define USER_DATA_LABEL      "user_data"
 #define USER_DATA_MOUNT      "/ext"
 #define MIN_CHIP_SIZE        (USER_DATA_OFFSET + 1 * 1024 * 1024)   // en az 5 MB
@@ -63,6 +63,28 @@ static bool s_user_data_mounted = false;
 static char s_active_slot = 'a';  // NVS'den yuklenir
 
 #define NVS_GUI_OTA_NS "ls_gui_ota"
+
+/* Bolum haritasi degistiginde (orn. 2 MB -> 1 MB slotlar) yeni bolumun basinda eski bir
+ * LittleFS superblogu kalabilir; LittleFS onu eski (kucuk) boyutuyla sorunsuz mount eder ve
+ * kapasite sessizce kucuk kalir. Dosya sistemi boyutu bolumun yarisindan kucukse yeniden
+ * bicimlendir. Donus: mount edilmis ve boyutu dogru ise true. */
+static bool verify_fs_size_or_format(const char *label, size_t expected)
+{
+    size_t total = 0, used = 0;
+    if (esp_littlefs_info(label, &total, &used) != ESP_OK) return true;   /* bilgi yoksa dokunma */
+    if (total >= expected / 2) return true;
+    ESP_LOGW(TAG, "%s: dosya sistemi %u KB, bolum %u KB -> eski harita, yeniden bicimlendiriliyor",
+             label, (unsigned)(total / 1024), (unsigned)(expected / 1024));
+    esp_err_t err = esp_littlefs_format(label);    /* mount ediliyse ayirir, bicimler, geri baglar */
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "%s: bicimlendirme hatasi: %s", label, esp_err_to_name(err));
+        return false;
+    }
+    if (esp_littlefs_info(label, &total, &used) == ESP_OK) {
+        ESP_LOGI(TAG, "%s: yeni boyut %u KB", label, (unsigned)(total / 1024));
+    }
+    return true;
+}
 
 // NVS'den aktif slot bilgisini yukle
 static void load_active_slot(void)
@@ -138,7 +160,7 @@ esp_err_t ext_flash_init(void)
         return ESP_ERR_INVALID_SIZE;
     }
     s_chip_size = flash_size;
-    s_user_data_size = flash_size - USER_DATA_OFFSET;   // 16 MB cip: 12 MB, 32 MB cip: 28 MB
+    s_user_data_size = flash_size - USER_DATA_OFFSET;   // 16 MB cip: 14 MB, 32 MB cip: 30 MB
 
     // ============================================================
     // 3 Partition Kaydi
@@ -196,8 +218,8 @@ esp_err_t ext_flash_init(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Slot A LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
-        s_slot_a_mounted = true;
-        ESP_LOGI(TAG, "Slot A mount edildi: %s (LittleFS, 2MB, GUI)", SLOT_A_MOUNT);
+        s_slot_a_mounted = verify_fs_size_or_format(SLOT_A_LABEL, SLOT_A_SIZE);
+        ESP_LOGI(TAG, "Slot A mount edildi: %s (LittleFS, 1MB, GUI)", SLOT_A_MOUNT);
     }
 
     // ============================================================
@@ -214,8 +236,8 @@ esp_err_t ext_flash_init(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Slot B LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
-        s_slot_b_mounted = true;
-        ESP_LOGI(TAG, "Slot B mount edildi: %s (LittleFS, 2MB, OTA)", SLOT_B_MOUNT);
+        s_slot_b_mounted = verify_fs_size_or_format(SLOT_B_LABEL, SLOT_B_SIZE);
+        ESP_LOGI(TAG, "Slot B mount edildi: %s (LittleFS, 1MB, OTA)", SLOT_B_MOUNT);
     }
 
     // ============================================================
@@ -232,7 +254,7 @@ esp_err_t ext_flash_init(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "User Data LittleFS mount hatasi: %s", esp_err_to_name(ret));
     } else {
-        s_user_data_mounted = true;
+        s_user_data_mounted = verify_fs_size_or_format(USER_DATA_LABEL, s_user_data_size);
         ESP_LOGI(TAG, "User Data mount edildi: %s (LittleFS, %lu MB)", USER_DATA_MOUNT,
                  (unsigned long)(s_user_data_size / (1024 * 1024)));
     }
@@ -517,30 +539,33 @@ esp_err_t ext_flash_get_slot_b_info(size_t *total, size_t *free_space)
 // Slot A'ya yazilir
 // ============================================================
 
-extern const char gui_index_html_start[] asm("_binary_index_html_start");
-extern const char gui_index_html_end[]   asm("_binary_index_html_end");
-extern const char gui_style_css_start[]  asm("_binary_style_css_start");
-extern const char gui_style_css_end[]    asm("_binary_style_css_end");
-extern const char gui_app_js_start[]     asm("_binary_app_js_start");
-extern const char gui_app_js_end[]       asm("_binary_app_js_end");
-extern const char gui_config_json_start[] asm("_binary_config_json_start");
-extern const char gui_config_json_end[]   asm("_binary_config_json_end");
+/* index/style/app ve dil dosyalari derleme aninda gzip'lenir (CMakeLists.txt + gzip_gui.py).
+ * Slot A'ya .gz olarak yazilir; web_server once .gz'yi arar, Content-Encoding: gzip ile sunar.
+ * config.json duz kalir (surum kontrolu). */
+extern const char gui_index_html_gz_start[] asm("_binary_index_html_gz_start");
+extern const char gui_index_html_gz_end[]   asm("_binary_index_html_gz_end");
+extern const char gui_style_css_gz_start[]  asm("_binary_style_css_gz_start");
+extern const char gui_style_css_gz_end[]    asm("_binary_style_css_gz_end");
+extern const char gui_app_js_gz_start[]     asm("_binary_app_js_gz_start");
+extern const char gui_app_js_gz_end[]       asm("_binary_app_js_gz_end");
+extern const char gui_config_json_start[]   asm("_binary_config_json_start");
+extern const char gui_config_json_end[]     asm("_binary_config_json_end");
 extern const char gui_logo_png_start[]      asm("_binary_logo_png_start");
 extern const char gui_logo_png_end[]        asm("_binary_logo_png_end");
 extern const char gui_darklogo_png_start[]  asm("_binary_darklogo_png_start");
 extern const char gui_darklogo_png_end[]    asm("_binary_darklogo_png_end");
-extern const char gui_lang_en_json_start[]  asm("_binary_en_json_start");
-extern const char gui_lang_en_json_end[]    asm("_binary_en_json_end");
-extern const char gui_lang_de_json_start[]  asm("_binary_de_json_start");
-extern const char gui_lang_de_json_end[]    asm("_binary_de_json_end");
-extern const char gui_lang_es_json_start[]  asm("_binary_es_json_start");
-extern const char gui_lang_es_json_end[]    asm("_binary_es_json_end");
-extern const char gui_lang_fr_json_start[]  asm("_binary_fr_json_start");
-extern const char gui_lang_fr_json_end[]    asm("_binary_fr_json_end");
-extern const char gui_lang_it_json_start[]  asm("_binary_it_json_start");
-extern const char gui_lang_it_json_end[]    asm("_binary_it_json_end");
-extern const char gui_lang_tr_json_start[]  asm("_binary_tr_json_start");
-extern const char gui_lang_tr_json_end[]    asm("_binary_tr_json_end");
+extern const char gui_lang_en_gz_start[]    asm("_binary_en_json_gz_start");
+extern const char gui_lang_en_gz_end[]      asm("_binary_en_json_gz_end");
+extern const char gui_lang_de_gz_start[]    asm("_binary_de_json_gz_start");
+extern const char gui_lang_de_gz_end[]      asm("_binary_de_json_gz_end");
+extern const char gui_lang_es_gz_start[]    asm("_binary_es_json_gz_start");
+extern const char gui_lang_es_gz_end[]      asm("_binary_es_json_gz_end");
+extern const char gui_lang_fr_gz_start[]    asm("_binary_fr_json_gz_start");
+extern const char gui_lang_fr_gz_end[]      asm("_binary_fr_json_gz_end");
+extern const char gui_lang_it_gz_start[]    asm("_binary_it_json_gz_start");
+extern const char gui_lang_it_gz_end[]      asm("_binary_it_json_gz_end");
+extern const char gui_lang_tr_gz_start[]    asm("_binary_tr_json_gz_start");
+extern const char gui_lang_tr_gz_end[]      asm("_binary_tr_json_gz_end");
 
 #define WEB_FILES_VERSION "0.0.70"   /* ALTE/GUI/config.json ve PROJECT_VER ile ayni tutulur */
 
@@ -687,25 +712,23 @@ esp_err_t ext_flash_create_default_files(void)
     ESP_LOGI(TAG, "Slot A eski dosyalar siliniyor...");
     delete_dir_contents(SLOT_A_MOUNT);
 
-    // Yeni dosyalari Slot A'ya yaz
-    write_file_to_slot_a("index.html", gui_index_html_start, strlen(gui_index_html_start));
-    write_file_to_slot_a("style.css",  gui_style_css_start,  strlen(gui_style_css_start));
-    write_file_to_slot_a("app.js",     gui_app_js_start,     strlen(gui_app_js_start));
-    write_file_to_slot_a("config.json", gui_config_json_start, strlen(gui_config_json_start));
+    // Yeni dosyalari Slot A'ya yaz (metin dosyalari gzip'li, EMBED_FILES: end-start)
+    write_file_to_slot_a("index.html.gz", gui_index_html_gz_start, gui_index_html_gz_end - gui_index_html_gz_start);
+    write_file_to_slot_a("style.css.gz",  gui_style_css_gz_start,  gui_style_css_gz_end - gui_style_css_gz_start);
+    write_file_to_slot_a("app.js.gz",     gui_app_js_gz_start,     gui_app_js_gz_end - gui_app_js_gz_start);
+    write_file_to_slot_a("config.json",   gui_config_json_start,   strlen(gui_config_json_start));
 
-    // EMBED_FILES (binary) - null terminator yok, end-start dogru
     ensure_dir_slot_a("pic");
     write_file_to_slot_a("pic/logo.png", gui_logo_png_start, gui_logo_png_end - gui_logo_png_start);
     write_file_to_slot_a("pic/darklogo.png", gui_darklogo_png_start, gui_darklogo_png_end - gui_darklogo_png_start);
 
-    // Dil dosyalari
     ensure_dir_slot_a("lang");
-    write_file_to_slot_a("lang/en.json", gui_lang_en_json_start, strlen(gui_lang_en_json_start));
-    write_file_to_slot_a("lang/de.json", gui_lang_de_json_start, strlen(gui_lang_de_json_start));
-    write_file_to_slot_a("lang/es.json", gui_lang_es_json_start, strlen(gui_lang_es_json_start));
-    write_file_to_slot_a("lang/fr.json", gui_lang_fr_json_start, strlen(gui_lang_fr_json_start));
-    write_file_to_slot_a("lang/it.json", gui_lang_it_json_start, strlen(gui_lang_it_json_start));
-    write_file_to_slot_a("lang/tr.json", gui_lang_tr_json_start, strlen(gui_lang_tr_json_start));
+    write_file_to_slot_a("lang/en.json.gz", gui_lang_en_gz_start, gui_lang_en_gz_end - gui_lang_en_gz_start);
+    write_file_to_slot_a("lang/de.json.gz", gui_lang_de_gz_start, gui_lang_de_gz_end - gui_lang_de_gz_start);
+    write_file_to_slot_a("lang/es.json.gz", gui_lang_es_gz_start, gui_lang_es_gz_end - gui_lang_es_gz_start);
+    write_file_to_slot_a("lang/fr.json.gz", gui_lang_fr_gz_start, gui_lang_fr_gz_end - gui_lang_fr_gz_start);
+    write_file_to_slot_a("lang/it.json.gz", gui_lang_it_gz_start, gui_lang_it_gz_end - gui_lang_it_gz_start);
+    write_file_to_slot_a("lang/tr.json.gz", gui_lang_tr_gz_start, gui_lang_tr_gz_end - gui_lang_tr_gz_start);
 
     ESP_LOGI(TAG, "Web dosyalari Slot A'ya yazildi");
 

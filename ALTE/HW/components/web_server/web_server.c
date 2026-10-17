@@ -50,31 +50,32 @@ static TaskHandle_t s_sse_task_handle = NULL;
 
 // ============================================================
 // Gomulu (embedded) GUI dosyalari - firmware icinden
+// index/style/app ve dil dosyalari gzip'li (Content-Encoding: gzip ile sunulur)
 // ============================================================
-extern const char gui_index_html_start[] asm("_binary_index_html_start");
-extern const char gui_index_html_end[]   asm("_binary_index_html_end");
-extern const char gui_style_css_start[]  asm("_binary_style_css_start");
-extern const char gui_style_css_end[]    asm("_binary_style_css_end");
-extern const char gui_app_js_start[]     asm("_binary_app_js_start");
-extern const char gui_app_js_end[]       asm("_binary_app_js_end");
-extern const char gui_config_json_start[] asm("_binary_config_json_start");
-extern const char gui_config_json_end[]   asm("_binary_config_json_end");
+extern const char gui_index_html_gz_start[] asm("_binary_index_html_gz_start");
+extern const char gui_index_html_gz_end[]   asm("_binary_index_html_gz_end");
+extern const char gui_style_css_gz_start[]  asm("_binary_style_css_gz_start");
+extern const char gui_style_css_gz_end[]    asm("_binary_style_css_gz_end");
+extern const char gui_app_js_gz_start[]     asm("_binary_app_js_gz_start");
+extern const char gui_app_js_gz_end[]       asm("_binary_app_js_gz_end");
+extern const char gui_config_json_start[]   asm("_binary_config_json_start");
+extern const char gui_config_json_end[]     asm("_binary_config_json_end");
 extern const char gui_logo_png_start[]      asm("_binary_logo_png_start");
 extern const char gui_logo_png_end[]        asm("_binary_logo_png_end");
 extern const char gui_darklogo_png_start[]  asm("_binary_darklogo_png_start");
 extern const char gui_darklogo_png_end[]    asm("_binary_darklogo_png_end");
-extern const char gui_lang_en_json_start[]  asm("_binary_en_json_start");
-extern const char gui_lang_en_json_end[]    asm("_binary_en_json_end");
-extern const char gui_lang_de_json_start[]  asm("_binary_de_json_start");
-extern const char gui_lang_de_json_end[]    asm("_binary_de_json_end");
-extern const char gui_lang_es_json_start[]  asm("_binary_es_json_start");
-extern const char gui_lang_es_json_end[]    asm("_binary_es_json_end");
-extern const char gui_lang_fr_json_start[]  asm("_binary_fr_json_start");
-extern const char gui_lang_fr_json_end[]    asm("_binary_fr_json_end");
-extern const char gui_lang_it_json_start[]  asm("_binary_it_json_start");
-extern const char gui_lang_it_json_end[]    asm("_binary_it_json_end");
-extern const char gui_lang_tr_json_start[]  asm("_binary_tr_json_start");
-extern const char gui_lang_tr_json_end[]    asm("_binary_tr_json_end");
+extern const char gui_lang_en_gz_start[]    asm("_binary_en_json_gz_start");
+extern const char gui_lang_en_gz_end[]      asm("_binary_en_json_gz_end");
+extern const char gui_lang_de_gz_start[]    asm("_binary_de_json_gz_start");
+extern const char gui_lang_de_gz_end[]      asm("_binary_de_json_gz_end");
+extern const char gui_lang_es_gz_start[]    asm("_binary_es_json_gz_start");
+extern const char gui_lang_es_gz_end[]      asm("_binary_es_json_gz_end");
+extern const char gui_lang_fr_gz_start[]    asm("_binary_fr_json_gz_start");
+extern const char gui_lang_fr_gz_end[]      asm("_binary_fr_json_gz_end");
+extern const char gui_lang_it_gz_start[]    asm("_binary_it_json_gz_start");
+extern const char gui_lang_it_gz_end[]      asm("_binary_it_json_gz_end");
+extern const char gui_lang_tr_gz_start[]    asm("_binary_tr_json_gz_start");
+extern const char gui_lang_tr_gz_end[]      asm("_binary_tr_json_gz_end");
 
 // Gomulu dosya arama tablosu
 typedef struct {
@@ -82,21 +83,22 @@ typedef struct {
     const char *start;
     const char *end;
     const char *content_type;
+    bool gzip;              /* icerik gzip'li: Content-Encoding: gzip basligi gerekir */
 } embedded_file_t;
 
 static const embedded_file_t s_embedded_files[] = {
-    { "/index.html",       gui_index_html_start,   gui_index_html_end,   "text/html" },
-    { "/style.css",        gui_style_css_start,    gui_style_css_end,    "text/css" },
-    { "/app.js",           gui_app_js_start,       gui_app_js_end,       "application/javascript" },
-    { "/config.json",      gui_config_json_start,  gui_config_json_end,  "application/json" },
-    { "/pic/logo.png",     gui_logo_png_start,     gui_logo_png_end,     "image/png" },
-    { "/pic/darklogo.png", gui_darklogo_png_start, gui_darklogo_png_end, "image/png" },
-    { "/lang/en.json",     gui_lang_en_json_start, gui_lang_en_json_end, "application/json" },
-    { "/lang/de.json",     gui_lang_de_json_start, gui_lang_de_json_end, "application/json" },
-    { "/lang/es.json",     gui_lang_es_json_start, gui_lang_es_json_end, "application/json" },
-    { "/lang/fr.json",     gui_lang_fr_json_start, gui_lang_fr_json_end, "application/json" },
-    { "/lang/it.json",     gui_lang_it_json_start, gui_lang_it_json_end, "application/json" },
-    { "/lang/tr.json",     gui_lang_tr_json_start, gui_lang_tr_json_end, "application/json" },
+    { "/index.html",       gui_index_html_gz_start, gui_index_html_gz_end, "text/html",              true  },
+    { "/style.css",        gui_style_css_gz_start,  gui_style_css_gz_end,  "text/css",               true  },
+    { "/app.js",           gui_app_js_gz_start,     gui_app_js_gz_end,     "application/javascript", true  },
+    { "/config.json",      gui_config_json_start,   gui_config_json_end,   "application/json",       false },
+    { "/pic/logo.png",     gui_logo_png_start,      gui_logo_png_end,      "image/png",              false },
+    { "/pic/darklogo.png", gui_darklogo_png_start,  gui_darklogo_png_end,  "image/png",              false },
+    { "/lang/en.json",     gui_lang_en_gz_start,    gui_lang_en_gz_end,    "application/json",       true  },
+    { "/lang/de.json",     gui_lang_de_gz_start,    gui_lang_de_gz_end,    "application/json",       true  },
+    { "/lang/es.json",     gui_lang_es_gz_start,    gui_lang_es_gz_end,    "application/json",       true  },
+    { "/lang/fr.json",     gui_lang_fr_gz_start,    gui_lang_fr_gz_end,    "application/json",       true  },
+    { "/lang/it.json",     gui_lang_it_gz_start,    gui_lang_it_gz_end,    "application/json",       true  },
+    { "/lang/tr.json",     gui_lang_tr_gz_start,    gui_lang_tr_gz_end,    "application/json",       true  },
 };
 #define EMBEDDED_FILES_COUNT (sizeof(s_embedded_files) / sizeof(s_embedded_files[0]))
 
@@ -588,24 +590,97 @@ static esp_err_t send_active_slot_file_chunked(httpd_req_t *req, const char *pat
     return result;
 }
 
-// GET / - Ana sayfa (aktif slot veya gomulu)
-static esp_err_t root_handler(httpd_req_t *req)
+/* Uzantiya gore Content-Type ve cache politikasi. clean_path uzantisi .gz OLMAMALI. */
+static void set_static_headers(httpd_req_t *req, const char *clean_path, bool gzip)
 {
-    // Once aktif slot'tan dene (GUI web arayuzu)
+    const char *ext = strrchr(clean_path, '.');
+    bool cacheable = false;
+    if (ext) {
+        if (strcmp(ext, ".html") == 0) httpd_resp_set_type(req, "text/html");
+        else if (strcmp(ext, ".css") == 0)  { httpd_resp_set_type(req, "text/css"); cacheable = true; }
+        else if (strcmp(ext, ".js") == 0)   { httpd_resp_set_type(req, "application/javascript"); cacheable = true; }
+        else if (strcmp(ext, ".json") == 0) httpd_resp_set_type(req, "application/json");
+        else if (strcmp(ext, ".png") == 0)  { httpd_resp_set_type(req, "image/png"); cacheable = true; }
+        else if (strcmp(ext, ".ico") == 0)  { httpd_resp_set_type(req, "image/x-icon"); cacheable = true; }
+        else httpd_resp_set_type(req, "text/plain");
+    } else {
+        httpd_resp_set_type(req, "text/plain");
+    }
+    httpd_resp_set_hdr(req, "Cache-Control",
+                       cacheable ? "public, max-age=31536000, immutable" : "no-cache");
+    if (gzip) {
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+        httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+    }
+}
+
+/* Statik servis beyaz listesi: yalnizca GUI dosyalari; ".." iceren yollar reddedilir. */
+static bool static_path_allowed(const char *p)
+{
+    if (!p || p[0] != '/' || strstr(p, "..") || strchr(p, '\\')) return false;
+    static const char *exact[] = { "/index.html", "/style.css", "/app.js", "/config.json", "/favicon.ico", NULL };
+    for (int i = 0; exact[i]; i++) if (strcmp(p, exact[i]) == 0) return true;
+    if (strncmp(p, "/pic/", 5) == 0 || strncmp(p, "/lang/", 6) == 0) {
+        return strchr(p + 1, '/') == strrchr(p, '/');   /* tek seviye alt dizin */
+    }
+    return false;
+}
+
+static bool client_accepts_gzip(httpd_req_t *req)
+{
+    char ae[128];
+    if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", ae, sizeof(ae)) != ESP_OK) return false;
+    return strstr(ae, "gzip") != NULL;
+}
+
+/*
+ * Statik dosya sun: once aktif slot'ta "<yol>.gz", sonra "<yol>", en son gomulu.
+ * GUI OTA ile GitHub'dan indirilen duz dosyalar da (gz yoksa) aynen sunulur;
+ * gui_ota hedef slotu tamamen temizledigi icin eski .gz dosyalari yeni duz
+ * dosyalari golgeleyemez. Gomulu kopya gzip'li: tum tarayicilar gzip kabul eder.
+ */
+static esp_err_t serve_static_path(httpd_req_t *req, const char *clean_path)
+{
+    if (!static_path_allowed(clean_path)) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Dosya bulunamadi");
+        return ESP_FAIL;
+    }
+    bool gz_ok = client_accepts_gzip(req);   /* curl/eski istemciler: duz dosya varsa o */
     if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
-        httpd_resp_set_type(req, "text/html");
-        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-        if (send_active_slot_file_chunked(req, "/index.html") == ESP_OK) {
-            return ESP_OK;
+        char gz_path[140];
+        snprintf(gz_path, sizeof(gz_path), "%s.gz", clean_path);
+        if (gz_ok && ext_flash_active_get_file_size(gz_path) > 0) {
+            set_static_headers(req, clean_path, true);
+            return send_active_slot_file_chunked(req, gz_path);
+        }
+        if (ext_flash_active_get_file_size(clean_path) > 0) {
+            set_static_headers(req, clean_path, false);
+            return send_active_slot_file_chunked(req, clean_path);
         }
     }
 
-    // Gomulu index.html sun
-    size_t len = gui_index_html_end - gui_index_html_start;
-    ESP_LOGI(TAG, "index.html gomulu veriden sunuluyor (%zu byte)", len);
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    return httpd_resp_send(req, gui_index_html_start, len);
+    // Harici flash'ta yok: gomulu kopya
+    for (int i = 0; i < (int)EMBEDDED_FILES_COUNT; i++) {
+        if (strcmp(clean_path, s_embedded_files[i].path) == 0) {
+            const char *start = s_embedded_files[i].start;
+            size_t len = s_embedded_files[i].end - start;
+            ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte%s)", clean_path, len,
+                     s_embedded_files[i].gzip ? ", gzip" : "");
+            sys_log_mark_event(SL_EV_GUI_SERVE, (int32_t)len);
+            set_static_headers(req, clean_path, s_embedded_files[i].gzip);
+            httpd_resp_set_type(req, s_embedded_files[i].content_type);
+            return httpd_resp_send(req, start, len);
+        }
+    }
+
+    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Dosya bulunamadi");
+    return ESP_FAIL;
+}
+
+// GET / - Ana sayfa (aktif slot veya gomulu)
+static esp_err_t root_handler(httpd_req_t *req)
+{
+    return serve_static_path(req, "/index.html");
 }
 
 // GET /api/system/info - Sistem bilgisi (cihaz adi, AP, STA, mDNS, flash)
@@ -1083,7 +1158,7 @@ static esp_err_t api_system_detail_handler(httpd_req_t *req)
              "\"mdns\":\"%s.local\","
              "\"slot_a_total\":%zu,"
              "\"slot_a_free\":%zu,"
-             "\"slot_b_kb\":2048,"
+             "\"slot_b_kb\":1024,"
              "\"user_total\":%zu,"
              "\"user_free\":%zu,"
              "\"boot_count\":%lu,"
@@ -1365,66 +1440,20 @@ void web_server_send_timer_event(void)
     xTaskNotifyGive(s_sse_task_handle);
 }
 
-// GET /ext/* - Statik dosya sun (Slot A veya gomulu fallback)
+// GET /ext/* - Statik dosya sun (aktif slot: .gz veya duz; gomulu fallback)
 static esp_err_t ext_file_handler(httpd_req_t *req)
 {
-    const char *uri = req->uri;
-    // /ext/ prefix'ini atla -> dosya yolu
-    const char *file_path = uri + 4;
+    const char *file_path = req->uri + 4;     // "/ext" prefix'ini atla
     if (strlen(file_path) == 0 || strcmp(file_path, "/") == 0) {
         file_path = "/index.html";
     }
-
-    // Query string'i (?v=0.0.40 gibi) dosya yolundan ayir
+    // Query string'i (?v=0.0.70 gibi) dosya yolundan ayir
     char clean_path[128];
     strncpy(clean_path, file_path, sizeof(clean_path) - 1);
     clean_path[sizeof(clean_path) - 1] = '\0';
     char *qmark = strchr(clean_path, '?');
     if (qmark) *qmark = '\0';
-    if (strstr(clean_path, "..") || strchr(clean_path, '\\')) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Gecersiz yol");
-        return ESP_FAIL;
-    }
-
-    // Once aktif slot'tan dene (GUI web arayuzu)
-    if (ext_flash_is_slot_a_mounted() || ext_flash_is_slot_b_mounted()) {
-        long fsize = ext_flash_active_get_file_size(clean_path);
-        if (fsize > 0) {
-            // Content-Type + Cache-Control belirle
-            const char *ext = strrchr(clean_path, '.');
-            bool cacheable = false;
-            if (ext) {
-                if (strcmp(ext, ".html") == 0) httpd_resp_set_type(req, "text/html");
-                else if (strcmp(ext, ".css") == 0)  { httpd_resp_set_type(req, "text/css"); cacheable = true; }
-                else if (strcmp(ext, ".js") == 0)   { httpd_resp_set_type(req, "application/javascript"); cacheable = true; }
-                else if (strcmp(ext, ".json") == 0) httpd_resp_set_type(req, "application/json");
-                else if (strcmp(ext, ".png") == 0)  { httpd_resp_set_type(req, "image/png"); cacheable = true; }
-                else if (strcmp(ext, ".ico") == 0)  { httpd_resp_set_type(req, "image/x-icon"); cacheable = true; }
-                else httpd_resp_set_type(req, "text/plain");
-            }
-            if (cacheable) {
-                httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
-            } else {
-                httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-            }
-            return send_active_slot_file_chunked(req, clean_path);
-        }
-    }
-
-    // Harici flash'ta bulunamadi - gomulu dosyalardan ara
-    for (int i = 0; i < (int)EMBEDDED_FILES_COUNT; i++) {
-        if (strcmp(clean_path, s_embedded_files[i].path) == 0) {
-            const char *start = s_embedded_files[i].start;
-            size_t len = s_embedded_files[i].end - start;
-            ESP_LOGI(TAG, "%s gomulu veriden sunuluyor (%zu byte)", file_path, len);
-            httpd_resp_set_type(req, s_embedded_files[i].content_type);
-            httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-            return httpd_resp_send(req, start, len);
-        }
-    }
-
-    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Dosya bulunamadi");
-    return ESP_FAIL;
+    return serve_static_path(req, clean_path);
 }
 
 // ============================================================

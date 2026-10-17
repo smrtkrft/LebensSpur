@@ -8,9 +8,9 @@
 /**
  * Harici SPI flash baslatma (16 MB veya 32 MB cip; boyut calisma aninda okunur)
  * 3 Partition Yapisi:
- *   Slot A    : 0x000000 (2 MB)      - GUI Web Arayuzu (LittleFS, /slot_a)
- *   Slot B    : 0x200000 (2 MB)      - GUI OTA slot (LittleFS, /slot_b)
- *   User Data : 0x400000 (cip sonu)  - Kullanici verileri (LittleFS, /ext)
+ *   Slot A    : 0x000000 (1 MB)      - GUI Web Arayuzu (LittleFS, /slot_a)
+ *   Slot B    : 0x100000 (1 MB)      - GUI OTA slot (LittleFS, /slot_b)
+ *   User Data : 0x200000 (cip sonu)  - Kullanici verileri (LittleFS, /ext)
  */
 esp_err_t ext_flash_init(void);
 
