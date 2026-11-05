@@ -8,6 +8,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "http.h"
+#include "cfg.h"
 
 static const char *TAG = "main";
 
@@ -26,6 +27,10 @@ void app_main(void)
     const esp_app_desc_t *d = esp_app_get_description();
     ESP_LOGI(TAG, "%s v%s (IDF %s)", d->project_name, d->version, d->idf_ver);
     log_heap("acilis");
+
+    esp_err_t r = cfg_init();
+    ESP_LOGI(TAG, "cfg_init: %s, not=%s, seq=%u", esp_err_to_name(r),
+             cfg_boot_note() ? cfg_boot_note() : "-", (unsigned)cfg_seq());
 
     size_t n; const char *hash; size_t total = 0;
     const http_embedded_t *f = http_embedded_files(&n, &hash);
