@@ -41,7 +41,7 @@ static void log_tail(void)
 {
     int n = 0; uint32_t next;
     vTaskDelay(pdMS_TO_TICKS(200));
-    evlog_read(0, 4, print_line, &n, &next);
+    evlog_read(0, 16, print_line, &n, &next);
     ESP_LOGI(TAG, "gunluk: %d satir, sonraki imlec %lu", n, (unsigned long)next);
 }
 

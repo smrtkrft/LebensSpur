@@ -133,6 +133,19 @@ static void test_persistence_roundtrip(void)
     TEST_ASSERT_EQUAL_UINT8(1, j->attempt);
 }
 
+static void test_summary_only_current_trigger(void)
+{
+    ob_channels_t wh = { false, false, true, false };
+    outbox_plan_trigger(&o, &wh, 0, 0);
+    ob_job_t *j = outbox_take_next(&o, 0, true);
+    outbox_on_result(&o, j->seq, CR_OK, 0, 0);
+    TEST_ASSERT_EQUAL_UINT8(1, outbox_trigger_summary(&o).done);
+    outbox_plan_trigger(&o, &wh, 0, 10 * S);             /* yeni tetikleme: eski sayılmaz */
+    ob_summary_t s = outbox_trigger_summary(&o);
+    TEST_ASSERT_EQUAL_UINT8(0, s.done);
+    TEST_ASSERT_EQUAL_UINT8(1, s.pending);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -143,5 +156,6 @@ int main(void)
     RUN_TEST(test_config_error_waits_without_attempt);
     RUN_TEST(test_checkin_cancels_unstarted_trigger);
     RUN_TEST(test_persistence_roundtrip);
+    RUN_TEST(test_summary_only_current_trigger);
     return UNITY_END();
 }

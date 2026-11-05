@@ -39,6 +39,10 @@ static int add(outbox_t *o, job_kind_t k, channel_t ch, uint8_t group, uint8_t w
 
 int outbox_plan_trigger(outbox_t *o, const ob_channels_t *c, uint16_t mask, int64_t now)
 {
+    for (int i = 0; i < OUTBOX_MAX; i++) {          /* özet yalnız bu tetiklemeyi göstersin */
+        ob_job_t *j = &o->jobs[i];
+        if (j->kind == JK_TRIGGER && j->state >= JS_DONE) j->state = JS_FREE;
+    }
     o->trigger_seq++;
     o->trigger_active = true;
     o->trigger_at_us = now;
