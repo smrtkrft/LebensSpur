@@ -18,7 +18,7 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | # | Adım | Durum | Çıktı |
 |---|------|-------|-------|
 | 1 | Kod ve cihaz işlevini anla, haritala, not çıkar | tamam (2026-11-05) | `docs/01-harita/01…07.md` — 6 harita + bulgu kaydı (46 bulgu, 11 ilke, 10 ürün sorusu) |
-| 2 | İlk plan | sürüyor | `docs/02-plan-ilk.md` |
+| 2 | İlk plan | tamam (2026-11-05), kullanıcı incelemesi bekleniyor | `docs/02-plan-ilk.md` — A–D bölümleri onaylı, 22 ürün kararı, 15 araştırma sorusu |
 | 3 | Plandaki özelliklerin daha iyisi var mı araştır | bekliyor | `docs/03-arastirma.md` |
 | 4 | Son plan | bekliyor | `docs/04-plan-son.md` |
 | 5 | Uygulama (adım adım, her adım derleme + flash + commit) | bekliyor | `2611/HW`, `2611/GUI` |
@@ -29,6 +29,30 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | Tarih | Karar | Gerekçe |
 |-------|-------|---------|
 | 2026-11-05 | Yalnızca dahili flash; harici flash sadece veri | GUI dört kopya tutuluyordu (ota_0, ota_1, Slot A, Slot B); tek sürüm, tek OTA kanalı; harici flash'ın tamamı depolamaya kalır |
+| 2026-11-05 | Kapalı süre sayaçtan **düşmez** (bugünkü davranış korunur) | Kullanıcı kararı; duvar saati bağımlılığı istenmedi |
+| 2026-11-05 | Tetikleme + teslimat sonrası sayaç **durur**; erteleme yeni tur başlatır | TETİKLENDİ kalıcı durum, GUI'de belirgin |
+| 2026-11-05 | **Her erteleme** (düğme/web/API) röleyi söndürür | Tek erteleme kapısı; kaynak fark etmez |
+| 2026-11-05 | Alarm sayısı/aralığı mantığı **bugünkü haliyle** taşınır, izole edilir; yeniden tasarım ayrı oturum | bkz. `2611/yapilacaklar.md` |
+| 2026-11-05 | Telegram **yalnızca erken uyarıda** (bugünkü davranış) | Kullanıcı kararı: Telegram sahibine uyarı kanalı |
+| 2026-11-05 | SMTP sertifika doğrulaması **varsayılan açık**, kullanıcı kapatabilir (uyarılı, günlüklü) | MITM ile parola ele geçirme riski kapanır; özel sunucular için kaçış yolu kalır |
+| 2026-11-05 | Yapılandırılıp testi geçen kanal **otomatik açık** gelir; röle açık gelir | "Ayarı girdim ama gitmedi" tuzağı kalkar |
+| 2026-11-05 | Ek okunamazsa metin yine gider, eksik ek alıcıya + günlüğe + GUI'ye bildirilir | Teslimat önceliği, sessiz kayıp yok |
+| 2026-11-05 | **Temiz kurulum**: ALTE NVS'den taşıma yok; ilk açılışta eski NVS silinir, günlüğe düşer | Saha cihazı az; taşıma kodu/test yükü yok |
+| 2026-11-05 | Kurulum AP'si **parolasız** kalır, GUI'den parola konabilir | Kullanıcı kararı: kolay kurulum. Tasarım gereği: parola yokken GUI'de belirgin uyarı; OTA özel URL yalnız https |
+| 2026-11-05 | Fabrika sıfırlama **iki kademeli / seçimli**: (1) cihaz ayarlarını ilk kurulum haline getir; (2) buna ek olarak harici flash'ı da (günlük, ekler, kullanıcı dosyaları) temizle | Kullanıcı isterse yalnız cihazı, isterse verileriyle birlikte sıfırlar |
+| 2026-11-05 | `/api/reset?key=` anahtarı 128 bit base32 (26 kr) + hız sınırı (5 hatalı/dk → 1 dk kilit); uç ve parametre adı aynı | Kaba kuvvet kapanır, dış otomasyon sözleşmesi korunur |
+| 2026-11-05 | **Mimari:** iki katman (sistem altyapısı / uygulama), üç görev: `app_core` (asla beklemez, tek olay kuyruğu), `delivery` (seri mesaj gönderimi), `sys_worker` (OTA, depolama işleri). Çalışma anında görev yaratılmaz. OTA sırasında tetikleme → OTA iptal | Kullanıcının "iki çekirdek" fikri + bloklayan/bloklamayan ayrımı |
+| 2026-11-05 | **GUI:** vanilla JS, modüler kaynak, esbuild ile bundle + minify, i18n derlemede doğrulanır, sürüm tek kaynaktan | ≤80 KB gz hedefi, çerçeve yok |
+| 2026-11-05 | **Yapılandırma:** şema tablosu; asıl kopya dahili NVS (64 KB), her kayıtta JSON yedeği `/data/config/`; NVS boşsa yedekten geri yükleme teklifi | Harici flash olmadan cihaz çalışır; sırlar ileride şifrelenebilir; "sonradan yapılandırmalar harici" ilkesi yedekle karşılanır |
+| 2026-11-05 | TETİKLENDİ'de erteleme, başlamamış tetikleme mesajlarını iptal eder | Kullanıcı hayatta; gönderimi süren tamamlanır |
+| 2026-11-05 | Fiziksel 5× basma = fabrika **kademe 1**; kademe 2 yalnız GUI'den onaylı | Veri kaybı fiziksel erişimle tetiklenmez |
+| 2026-11-05 | Mesaj sınırları konu 128 / gövde 2048 / alıcı 512 | 256 baytlık "kritik mesaj" çok dar |
+| 2026-11-05 | JSON yedeği **sırları içerir** | Tam geri yükleme; NVS ile aynı güvenlik sınıfı; NVS şifrelemesi açılınca gözden geçirilir |
+| 2026-11-05 | AP kapalıyken STA 10 dk bağlanamazsa AP **otomatik açılır** | Erişilebilirlik; STA dönünce kullanıcı ayarına döner |
+| 2026-11-05 | Yedek ağdayken **30 dk'da bir birincil** denenir | Birincile dönüş |
+| 2026-11-05 | `build.sh` varsayılan **2611**, `--alte` eski ağaç | Aktif hat 2611 |
+| 2026-11-05 | Ek yükleme `PUT /api/groups/<i>/files/<ad>` ham gövde | Cihazda multipart yok |
+| 2026-11-05 | 128 KB `coredump` bölümü | Teşhis; kullanıcı itiraz etmedi |
 
 ## Çalışma kuralları
 
