@@ -15,6 +15,8 @@
 #include "evlog.h"
 #include "storage.h"
 #include "sys_worker.h"
+#include "core.h"
+#include "io.h"
 
 static const char *TAG = "main";
 
@@ -40,6 +42,7 @@ static void log_tail(void)
 
 void app_main(void)
 {
+    io_relay_early_init();                       /* ilk iş: röle güvenli seviyede (NVS'ten önce) */
     const esp_app_desc_t *d = esp_app_get_description();
     ESP_LOGI(TAG, "%s v%s (IDF %s)", d->project_name, d->version, d->idf_ver);
     log_heap("acilis");
@@ -62,6 +65,10 @@ void app_main(void)
     sys_worker_start();
     evlog_file_start();
     log_tail();
+
+    r = core_start();
+    if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "core_start: %s", esp_err_to_name(r));
+
 
 
     size_t n; const char *hash; size_t total = 0;

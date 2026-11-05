@@ -49,6 +49,7 @@ esp_err_t cfg_group_get(int idx, cfg_group_t *out);   /* kullanılmıyorsa ESP_E
 esp_err_t cfg_group_set_json(int idx, const cJSON *obj, char *err, size_t errlen, const char **errfield);
 esp_err_t cfg_group_delete(int idx);
 int       cfg_group_count(void);                      /* used=true olanlar */
+uint16_t  cfg_group_mask(void);                       /* bit i: grup i kullanımda */
 
 esp_err_t cfg_factory_reset(void);                    /* kademe 1: cfg + rt silinir, meta yeniden */
 

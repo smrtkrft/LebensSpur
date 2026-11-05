@@ -98,8 +98,13 @@ static void ring_push(const char *line)
 {
     portENTER_CRITICAL(&s_mux);
     if (s_count == RING_LINES) {
-        s_dropped++;                      /* en eski korunur: açılış kaydı kaybolmasın */
-    } else {
+        /* dolu: dosyaya boşaltılamıyor (/log yok ya da yavaş). En yeni olaylar daha değerli:
+         * en eskinin üzerine yaz (açılış kaydı en eski olsa da RTC'de ve /api/device'ta özeti var). */
+        s_head = (uint8_t)((s_head + 1) % RING_LINES);
+        s_count--;
+        s_dropped++;
+    }
+    {
         uint8_t idx = (uint8_t)((s_head + s_count) % RING_LINES);
         strlcpy(s_ring[idx], line, EVLOG_LINE_MAX);
         s_count++;
@@ -155,7 +160,7 @@ static size_t json_escape(char *dst, size_t cap, const char *src)
 void evlog_write(evlog_level_t lvl, const char *cat, const char *fmt, ...)
 {
     static const char *const lv[] = { "INFO", "WARN", "ERR" };
-    char msg[200], esc[240], line[EVLOG_LINE_MAX];
+    char msg[160], esc[200], line[EVLOG_LINE_MAX];   /* ~680 B: esp_timer görevinde (3,5 KB) güvenli */
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(msg, sizeof msg, fmt, ap);

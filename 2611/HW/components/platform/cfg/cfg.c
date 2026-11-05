@@ -80,6 +80,7 @@ esp_err_t cfg_init(void)
 {
     if (!s_lock) s_lock = xSemaphoreCreateMutex();
     if (!s_lock) return ESP_ERR_NO_MEM;
+    cfg_priv_backup_init();
 
     esp_err_t r = nvs_flash_init();
     if (r == ESP_ERR_NVS_NO_FREE_PAGES || r == ESP_ERR_NVS_NEW_VERSION_FOUND || r == ESP_FAIL) {
@@ -239,6 +240,7 @@ esp_err_t cfg_group_delete(int idx)
 }
 
 int cfg_group_count(void) { return __builtin_popcount(s_group_used); }
+uint16_t cfg_group_mask(void) { return s_group_used; }
 
 esp_err_t cfg_factory_reset(void)
 {

@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "cJSON.h"
 #include "esp_app_desc.h"
 #include "esp_log.h"
@@ -30,6 +31,11 @@ static const char *TAG = "cfg_backup";
 #define LINE_CAP 6144
 
 static atomic_bool s_pending;
+/* s_line/s_grp/tmp statik tamponları: yazma (sys_worker) ile bilgi/geri yükleme (httpd) aynı anda olabilir */
+static SemaphoreHandle_t s_bk_lock;
+void cfg_priv_backup_init(void) { if (!s_bk_lock) s_bk_lock = xSemaphoreCreateMutex(); }
+static void bk_lock(void) { xSemaphoreTake(s_bk_lock, portMAX_DELAY); }
+static void bk_unlock(void) { xSemaphoreGive(s_bk_lock); }
 static char s_line[LINE_CAP];
 static cfg_group_t s_grp;
 
@@ -53,7 +59,16 @@ static cJSON *wrap(const char *k, cJSON *v, const char *k2, cJSON *v2)
     return o;
 }
 
+static esp_err_t backup_write_locked(void);
 esp_err_t cfg_backup_write(void)
+{
+    bk_lock();
+    esp_err_t r = backup_write_locked();
+    bk_unlock();
+    return r;
+}
+
+static esp_err_t backup_write_locked(void)
 {
     if (!storage_acquire(STG_DATA)) return ESP_ERR_INVALID_STATE;
     mkdir(DIR, 0775);
@@ -179,8 +194,10 @@ static esp_err_t process(const char *path, bool apply, uint32_t *seq_out)
 esp_err_t cfg_backup_info(uint32_t *seq)
 {
     if (!storage_acquire(STG_DATA)) return ESP_ERR_INVALID_STATE;
+    bk_lock();
     esp_err_t r = process(F_CUR, false, seq);
     if (r != ESP_OK) r = process(F_PRV, false, seq);
+    bk_unlock();
     storage_release(STG_DATA);
     return r;
 }
@@ -188,9 +205,15 @@ esp_err_t cfg_backup_info(uint32_t *seq)
 esp_err_t cfg_backup_restore(void)
 {
     if (!storage_acquire(STG_DATA)) return ESP_ERR_INVALID_STATE;
+    bk_lock();
     const char *src = process(F_CUR, false, NULL) == ESP_OK ? F_CUR :
                       process(F_PRV, false, NULL) == ESP_OK ? F_PRV : NULL;
-    esp_err_t r = src ? process(src, true, NULL) : ESP_ERR_NOT_FOUND;
+    esp_err_t r = ESP_ERR_NOT_FOUND;
+    if (src) {
+        for (int i = 0; i < CFG_GROUP_COUNT; i++) cfg_group_delete(i);   /* yedekte olmayan gruplar kalmasın */
+        r = process(src, true, NULL);
+    }
+    bk_unlock();
     storage_release(STG_DATA);
     ESP_LOGI(TAG, "geri yukleme: %s (%s)", esp_err_to_name(r), src ? src : "-");
     return r;
