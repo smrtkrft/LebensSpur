@@ -4,6 +4,7 @@
  * İskelet aşaması: sürüm ve bellek ölçümü.
  */
 #include <inttypes.h>
+#include <string.h>
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -19,6 +20,7 @@
 #include "io.h"
 #include "net_wifi.h"
 #include "api.h"
+#include "cJSON.h"
 
 static const char *TAG = "main";
 
@@ -73,6 +75,16 @@ void app_main(void)
     r = core_start();
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "core_start: %s", esp_err_to_name(r));
 
+#ifdef LS_DEV_WIFI_SSID
+    if (strcmp(cfg_get()->wifi_p.ssid, LS_DEV_WIFI_SSID) != 0) {   /* geliştirme kancası: farklıysa bir kez yaz */
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddStringToObject(o, "ssid", LS_DEV_WIFI_SSID);
+        cJSON_AddStringToObject(o, "pass", LS_DEV_WIFI_PASS);
+        esp_err_t w = cfg_set_section_json(CFG_SEC_WIFI_P, o, NULL, 0, NULL);
+        cJSON_Delete(o);
+        evlog_write(EVL_WARN, "sys", "gelistirme: birincil WiFi derlemeden yazildi (%s)", esp_err_to_name(w));
+    }
+#endif
     r = net_wifi_start(on_link);
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "wifi: %s", esp_err_to_name(r));
 

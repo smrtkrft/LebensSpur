@@ -126,41 +126,46 @@ static bool host_allowed(const char *host)
     return strncasecmp(h, "ls-", 3) == 0 && strlen(h) == 13;   /* cihaz adı (mDNS) */
 }
 
-static esp_err_t check_csrf(http_req_t *r)
+/* Geçerse NULL; geçmezse ret nedeni (çağıran 403 gönderir ve İŞLEYİCİYİ ÇAĞIRMAZ). */
+static const char *csrf_reject(http_req_t *r)
 {
     char host[64] = "", origin[96] = "", x[8] = "";
-    if (httpd_req_get_hdr_value_str(r->req, "Host", host, sizeof host) != ESP_OK || !host_allowed(host)) {
-        return http_fail(r, 403, "forbidden", "host", NULL);
-    }
+    if (httpd_req_get_hdr_value_str(r->req, "Host", host, sizeof host) != ESP_OK || !host_allowed(host)) return "host";
     if (httpd_req_get_hdr_value_str(r->req, "X-LS-Request", x, sizeof x) != ESP_OK || strcmp(x, "1") != 0) {
-        return http_fail(r, 403, "forbidden", "csrf", NULL);
+        return "csrf";
     }
-    if (httpd_req_get_hdr_value_str(r->req, "Origin", origin, sizeof origin) == ESP_OK) {
-        if (strncmp(origin, "http://", 7) != 0 || strcasecmp(origin + 7, host) != 0) {
-            return http_fail(r, 403, "forbidden", "origin", NULL);
-        }
+    if (httpd_req_get_hdr_value_str(r->req, "Origin", origin, sizeof origin) == ESP_OK &&
+        (strncmp(origin, "http://", 7) != 0 || strcasecmp(origin + 7, host) != 0)) {
+        return "origin";
     }
-    return ESP_OK;
+    return NULL;
 }
 
-static esp_err_t read_body(http_req_t *r)
+typedef enum { BODY_OK, BODY_REJECTED, BODY_SOCKET_ERR } body_res_t;
+
+/* BODY_REJECTED: hata yanıtı gönderildi; BODY_SOCKET_ERR: bağlantı kapatılmalı. İkisinde de işleyici çağrılmaz. */
+static body_res_t read_body(http_req_t *r)
 {
     size_t len = r->req->content_len;
-    if (len > HTTP_BODY_MAX) return http_fail(r, 413, "too_large", "en cok 2048 bayt", NULL);
+    if (len > HTTP_BODY_MAX) { http_fail(r, 413, "too_large", "en cok 2048 bayt", NULL); return BODY_REJECTED; }
     char ct[48] = "";
     httpd_req_get_hdr_value_str(r->req, "Content-Type", ct, sizeof ct);
-    if (strncasecmp(ct, "application/json", 16) != 0) return http_fail(r, 400, "bad_request", "json bekleniyor", NULL);
+    if (strncasecmp(ct, "application/json", 16) != 0) {
+        http_fail(r, 400, "bad_request", "json bekleniyor", NULL);
+        return BODY_REJECTED;
+    }
     size_t got = 0;
+    int timeouts = 0;
     while (got < len) {
         int n = httpd_req_recv(r->req, s_body + got, len - got);
-        if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
-        if (n <= 0) return ESP_FAIL;
+        if (n == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) continue;
+        if (n <= 0) return BODY_SOCKET_ERR;
         got += (size_t)n;
     }
     s_body[got] = 0;
     r->body = cJSON_ParseWithLength(s_body, got);
-    if (!r->body) return http_fail(r, 400, "bad_request", "gecersiz json", NULL);
-    return ESP_OK;
+    if (!r->body) { http_fail(r, 400, "bad_request", "gecersiz json", NULL); return BODY_REJECTED; }
+    return BODY_OK;
 }
 
 /* ---------- yönlendirme ---------- */
@@ -236,10 +241,16 @@ static esp_err_t dispatch(httpd_req_t *req)
     if ((hit->flags & HR_AUTH) && http_auth_enabled() && !http_auth_session_valid(r)) {
         return http_fail(r, 401, "auth_required", "", NULL);
     }
-    esp_err_t e;
-    if ((hit->flags & HR_CSRF) && (e = check_csrf(r)) != ESP_OK) return ESP_OK;   /* yanıt gönderildi */
-    if ((hit->flags & HR_BODY) && (e = read_body(r)) != ESP_OK) return e == ESP_FAIL ? ESP_FAIL : ESP_OK;
-    e = hit->fn(r);
+    if (hit->flags & HR_CSRF) {
+        const char *why = csrf_reject(r);
+        if (why) return http_fail(r, 403, "forbidden", why, NULL);          /* işleyici ÇAĞRILMAZ */
+    }
+    if (hit->flags & HR_BODY) {
+        body_res_t b = read_body(r);
+        if (b == BODY_SOCKET_ERR) return ESP_FAIL;
+        if (b == BODY_REJECTED) return ESP_OK;                               /* işleyici ÇAĞRILMAZ */
+    }
+    esp_err_t e = hit->fn(r);
     cJSON_Delete(r->body);
     r->body = NULL;
     return e;

@@ -32,7 +32,7 @@ void timer_sm_init(timer_sm_t *s, const timer_rt_t *rt, uint8_t n, uint32_t firs
     s->state = (timer_state_t)rt->state;
     switch (s->state) {
     case TS_RUNNING:
-        if (rt->remaining_s == 0) { s->state = TS_TRIGGERED; break; }
+        if (rt->remaining_s == 0) { s->state = TS_TRIGGERED; s->warn_fired = s->plan.n; break; }
         s->deadline_us = now + (int64_t)rt->remaining_s * US;
         /* geçilmiş eşikler ateşlenmeden sayılır (teslim edilmeyen son uyarıyı outbox taşır) */
         s->warn_fired = warn_passed(&s->plan, rt->remaining_s);
@@ -40,6 +40,9 @@ void timer_sm_init(timer_sm_t *s, const timer_rt_t *rt, uint8_t n, uint32_t firs
         break;
     case TS_STOPPED:
         s->frozen_s = rt->remaining_s;
+        break;
+    case TS_TRIGGERED:
+        s->warn_fired = s->plan.n;                    /* tetiklenmiş: tüm uyarılar geçti */
         break;
     case TS_VACATION:
         s->vac_total_s = rt->vac_total_s;
