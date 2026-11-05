@@ -17,7 +17,6 @@
 #include "evlog.h"
 #include "io.h"
 
-static const char *TAG = "core";
 
 #define Q_LEN        32
 #define CKPT_US      (60LL * 1000000LL)

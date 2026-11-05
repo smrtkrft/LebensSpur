@@ -17,6 +17,7 @@
 #include "sys_worker.h"
 #include "core.h"
 #include "io.h"
+#include "net_wifi.h"
 
 static const char *TAG = "main";
 
@@ -39,6 +40,8 @@ static void log_tail(void)
     evlog_read(0, 4, print_line, &n, &next);
     ESP_LOGI(TAG, "gunluk: %d satir, sonraki imlec %lu", n, (unsigned long)next);
 }
+
+static void on_link(bool up) { core_post(&(core_event_t){ .type = EV_NET_LINK, .u.link.up = up }); }
 
 void app_main(void)
 {
@@ -68,6 +71,9 @@ void app_main(void)
 
     r = core_start();
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "core_start: %s", esp_err_to_name(r));
+
+    r = net_wifi_start(on_link);
+    if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "wifi: %s", esp_err_to_name(r));
 
 
 

@@ -9,5 +9,6 @@ idf_build_set_property(COMPILE_DEFINITIONS "CJSON_NESTING_LIMIT=16" APPEND)
 function(ls_strict_warnings target)
     target_compile_options(${target} PRIVATE
         -Wall -Wextra -Werror -Wshadow -Wpointer-arith -Wcast-align
+        -Werror=unused-variable -Werror=unused-function -Werror=unused-but-set-variable
         -Wno-error=deprecated-declarations)
 endfunction()
