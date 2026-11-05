@@ -9,11 +9,89 @@
 </head>
 <body data-ver="{{VER}}" data-hash="{{HASH}}">
 <!--SPRITE-->
-<main id="app">
+<section id="login" class="center" hidden>
   <svg class="logo" aria-hidden="true"><use href="#i-logo"/></svg>
-  <h1>LebensSpur</h1>
-  <p data-i18n="logs.loading">Loading</p>
+  <p data-i18n="auth.login_desc"></p>
+  <form id="login-form">
+    <label for="login-pass" class="sr" data-i18n="auth.password_ph"></label>
+    <input id="login-pass" type="password" autocomplete="current-password" data-i18n-ph="auth.password_ph" required>
+    <button class="primary" data-i18n="auth.login_btn"></button>
+    <p id="login-err" class="err" role="alert"></p>
+  </form>
+</section>
+<main id="app">
+  <header>
+    <span id="wifi-dot" class="dot" aria-hidden="true"></span>
+    <span id="device"></span>
+    <span class="grow"></span>
+    <select id="lang" aria-label="Language"></select>
+    <button id="theme" class="icon" data-i18n-title="home.settings"><svg><use href="#i-theme"/></svg></button>
+    <button id="btn-settings" class="icon" data-i18n-title="home.settings"><svg><use href="#i-settings"/></svg></button>
+  </header>
+  <p id="auth-warn" class="warn" data-i18n="auth.no_password" hidden></p>
+  <section id="home" class="center">
+    <div class="ring">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="54" class="ring-bg"/>
+        <circle id="ring-fg" cx="60" cy="60" r="54" class="ring-fg"/>
+      </svg>
+      <div class="ring-text">
+        <div id="remain" class="remain">—</div>
+        <div id="state" class="state"></div>
+      </div>
+    </div>
+    <p id="next-warn" class="muted"></p>
+    <p id="delivery" class="muted"></p>
+    <div class="row">
+      <button id="btn-checkin" class="primary big" data-i18n="home.checkin"></button>
+      <button id="btn-stop" data-i18n="home.stop"></button>
+    </div>
+  </section>
+  <footer class="muted">LebensSpur v{{VER}}</footer>
 </main>
+<dialog id="settings" aria-labelledby="settings-title">
+  <form id="timer-form">
+    <h2 id="settings-title" data-i18n="timer.title"></h2>
+    <p class="muted" data-i18n="timer.desc"></p>
+    <div class="row">
+      <label for="t-value" class="sr" data-i18n="timer.title"></label>
+      <input id="t-value" type="number" min="1" max="60" required>
+      <label for="t-unit" class="sr" data-i18n="timer.title"></label>
+      <select id="t-unit">
+        <option value="min" data-i18n="timer.unit_minute"></option>
+        <option value="hour" data-i18n="timer.unit_hour"></option>
+        <option value="day" data-i18n="timer.unit_day"></option>
+      </select>
+    </div>
+    <h3 data-i18n="warn.title"></h3>
+    <p class="muted small" data-i18n="warn.desc"></p>
+    <label for="t-warn"><span data-i18n="warn.count"></span>: <output id="t-warn-out"></output></label>
+    <input id="t-warn" type="range" min="1" max="10">
+    <label class="check"><input id="t-first-auto" type="checkbox"> <span data-i18n="warn.first"></span>: <span data-i18n="warn.first_auto"></span></label>
+    <div id="t-first-row" class="row">
+      <label for="t-first" class="sr" data-i18n="warn.first"></label>
+      <input id="t-first" type="number" min="1" max="60" value="1">
+      <select id="t-first-unit" aria-label="unit">
+        <option value="min" data-i18n="timer.unit_minute"></option>
+        <option value="hour" data-i18n="timer.unit_hour"></option>
+        <option value="day" data-i18n="timer.unit_day"></option>
+      </select>
+      <span data-i18n="warn.first_before"></span>
+    </div>
+    <p id="t-preview" class="preview" aria-live="polite"></p>
+    <div class="row end">
+      <button type="button" id="settings-close" data-i18n="footer.cancel"></button>
+      <button id="t-save" class="primary" data-i18n="footer.save"></button>
+    </div>
+  </form>
+</dialog>
+<dialog id="confirm">
+  <p id="confirm-text"></p>
+  <div class="row end">
+    <button id="confirm-cancel" data-i18n="footer.cancel"></button>
+    <button id="confirm-ok" class="danger" data-i18n="home.stop"></button>
+  </div>
+</dialog>
 <script src="/s/{{HASH}}/app.js" defer></script>
 </body>
 </html>

@@ -1,7 +1,52 @@
 /* LebensSpur 2611 — tema değişkenleri; açık tema yalnız değişken setini değiştirir. */
-:root { --bg: #0f1115; --fg: #e8eaed; --muted: #8a8f98; --accent: #e5484d; --radius: 12px; }
-[data-theme="light"] { --bg: #f7f7f8; --fg: #16181d; --muted: #5d6470; }
+:root {
+  --bg: #0f1115; --card: #181b21; --fg: #e8eaed; --muted: #8a8f98; --line: #2a2f37;
+  --accent: #e5484d; --ok: #30a46c; --warn: #f5a524; --radius: 12px;
+}
+[data-theme="light"] { --bg: #f5f5f7; --card: #fff; --fg: #16181d; --muted: #5d6470; --line: #d9dce1; }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
-#app { max-width: 480px; margin: 0 auto; padding: 24px 16px; text-align: center; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, -apple-system, sans-serif; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+main, #login { max-width: 480px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: center; gap: 8px; }
+.grow { flex: 1; }
+.center { text-align: center; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 12px 0; }
+.row.end { justify-content: flex-end; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); border-radius: var(--radius); padding: 8px 12px; font-size: 14px; }
+.err { color: var(--accent); min-height: 1.4em; }
 .logo { width: 96px; height: 96px; color: var(--fg); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.dot[data-on="true"] { background: var(--ok); }
+button, select, input { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--accent); }
+button.big { padding: 14px 28px; font-size: 18px; }
+button:disabled { opacity: .45; cursor: default; }
+button.icon { padding: 6px; display: inline-flex; }
+button.icon svg { width: 22px; height: 22px; }
+input[type="number"] { width: 6em; }
+input[type="range"] { width: 100%; }
+label.check { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.ring { position: relative; width: 240px; height: 240px; margin: 24px auto 8px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--line); stroke-width: 8; }
+.ring-fg { fill: none; stroke: var(--ok); stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+#home[data-state="triggered"] .ring-fg, #home[data-state="triggered"] .state { stroke: var(--accent); color: var(--accent); }
+#home[data-state="vacation"] .ring-fg { stroke: var(--warn); }
+.ring-text { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; }
+.remain { font-size: 34px; font-weight: 600; }
+.state { color: var(--muted); letter-spacing: .04em; }
+dialog { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: var(--radius); max-width: 440px; width: calc(100% - 32px); }
+dialog::backdrop { background: rgb(0 0 0 / .55); }
+.preview { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.preview.bad { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 10px; padding: 10px 16px; }
+.toast.err { border-left-color: var(--accent); }
+footer { text-align: center; margin-top: 32px; font-size: 13px; }
+@media (max-width: 400px) { .ring { width: 200px; height: 200px; } .remain { font-size: 28px; } }

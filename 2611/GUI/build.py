@@ -103,7 +103,8 @@ def check_langs(data, used_keys):
 
 def used_i18n_keys(html, js):
     keys = set(re.findall(r'data-i18n(?:-[a-z]+)?="([^"]+)"', html))
-    keys |= set(re.findall(r"""\bt\(\s*['"]([a-z0-9_.]+)['"]""", js))
+    # yalnız tam sabit anahtarlar: t('a.b', …) / t('a.b'); t('state.' + x) gibi dinamikler hariç
+    keys |= set(re.findall(r"""\bt\(\s*['"]([a-z0-9_]+(?:\.[a-z0-9_]+)+)['"]\s*[,)]""", js))
     return keys
 
 
