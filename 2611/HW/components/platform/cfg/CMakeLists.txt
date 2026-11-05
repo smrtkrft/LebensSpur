@@ -1,5 +1,9 @@
 # cfg — tek yapilandirma semasi (cfg_schema.json -> uretilen C + GUI semasi).
 # Uretilen dosyalar derleme dizinine yazilir; 2611/ altina hicbir sey uretilmez.
+if(CMAKE_BUILD_EARLY_EXPANSION)
+    idf_component_register(INCLUDE_DIRS "include")
+    return()
+endif()
 idf_build_get_property(_python PYTHON)
 idf_build_get_property(_build_dir BUILD_DIR)
 set(CFG_GEN_DIR "${_build_dir}/gen/cfg")
@@ -11,7 +15,6 @@ execute_process(COMMAND ${_python} "${_gen}" "${_schema}" "${CFG_GEN_DIR}"
 if(NOT _res EQUAL 0)
     message(FATAL_ERROR "cfg semasi uretilemedi: ${_err}")
 endif()
-idf_build_set_property(LS_GUI_SCHEMA "${CFG_GEN_DIR}/schema.gen.json")
 
 idf_component_register(SRCS "${CFG_GEN_DIR}/cfg_schema.gen.c"
                        INCLUDE_DIRS "include" "${CFG_GEN_DIR}")

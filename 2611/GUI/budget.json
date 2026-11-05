@@ -1,0 +1,10 @@
+{
+  "_doc": "gzip'li azami boyutlar (bayt). Asimda build.py derlemeyi durdurur. Adim 5.3'te kalibre edilip sabitlenir.",
+  "index.html": 13312,
+  "app.js": 14336,
+  "app.css": 6144,
+  "schema.json": 3072,
+  "lang_total": 33792,
+  "favicon": 1229,
+  "total": 81920
+}

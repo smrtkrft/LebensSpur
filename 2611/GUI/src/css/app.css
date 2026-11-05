@@ -1,0 +1,7 @@
+/* LebensSpur 2611 — tema değişkenleri; açık tema yalnız değişken setini değiştirir. */
+:root { --bg: #0f1115; --fg: #e8eaed; --muted: #8a8f98; --accent: #e5484d; --radius: 12px; }
+[data-theme="light"] { --bg: #f7f7f8; --fg: #16181d; --muted: #5d6470; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+#app { max-width: 480px; margin: 0 auto; padding: 24px 16px; text-align: center; }
+.logo { width: 96px; height: 96px; color: var(--fg); }

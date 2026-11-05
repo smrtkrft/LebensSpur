@@ -7,6 +7,7 @@
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "http.h"
 
 static const char *TAG = "main";
 
@@ -25,4 +26,9 @@ void app_main(void)
     const esp_app_desc_t *d = esp_app_get_description();
     ESP_LOGI(TAG, "%s v%s (IDF %s)", d->project_name, d->version, d->idf_ver);
     log_heap("acilis");
+
+    size_t n; const char *hash; size_t total = 0;
+    const http_embedded_t *f = http_embedded_files(&n, &hash);
+    for (size_t i = 0; i < n; i++) total += f[i].len;
+    ESP_LOGI(TAG, "GUI: %u dosya, %u bayt gz, hash %s", (unsigned)n, (unsigned)total, hash);
 }
