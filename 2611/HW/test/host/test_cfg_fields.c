@@ -96,6 +96,10 @@ static void test_secret_kept_when_empty_and_masked(void)
     TEST_ASSERT_EQUAL_STRING("geheim", c.smtp.pass);
     TEST_ASSERT_EQUAL(ESP_OK, apply(CFG_SEC_SMTP, "{\"pass\":\"***\"}"));             /* maske geri gelirse koru */
     TEST_ASSERT_EQUAL_STRING("geheim", c.smtp.pass);
+    TEST_ASSERT_EQUAL(ESP_OK, apply(CFG_SEC_SMTP, "{\"pass\":null}"));               /* null = açıkça temizle */
+    TEST_ASSERT_EQUAL_STRING("", c.smtp.pass);
+    TEST_ASSERT_NOT_EQUAL(ESP_OK, apply(CFG_SEC_SMTP, "{\"user\":null}"));           /* gizli olmayan alanda null yok */
+    TEST_ASSERT_EQUAL(ESP_OK, apply(CFG_SEC_SMTP, "{\"pass\":\"geheim\"}"));
 
     cJSON *o = cfg_fields_to_json(&cfg_sections[CFG_SEC_SMTP], &c.smtp, CFG_EXPORT_API);
     TEST_ASSERT_EQUAL_STRING("***", cJSON_GetObjectItem(o, "pass")->valuestring);

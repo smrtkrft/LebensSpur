@@ -30,6 +30,7 @@ async function saveSecurity() {
     if (!nxt && !(await ask(t('security.remove_confirm'), { danger: true }))) return changed;
     await api('PUT', '/api/auth/password', { current: cur, next: nxt });
     toast(t(nxt ? 'security.changed' : 'security.removed'));
+    if (nxt) window.dispatchEvent(new Event('ls-auth-required'));   // tüm oturumlar düştü: hemen yeni parolayla giriş
     changed = true;
   }
   return changed;
@@ -128,9 +129,16 @@ async function factory() {
   if (!level) return;
   if (!(await ask(t('confirm.factory2'), { ok: t('system.factory_btn'), danger: true }))) return;
   try {
-    await api('POST', '/api/device/factory-reset', { level: +level });
+    const { job_id } = await api('POST', '/api/device/factory-reset', { level: +level });
     toast(t('alert.factory_ok'));
-    reloadWhenBack(level === '2' ? 30000 : 8000);
+    // kademe 2'de /data silinirken cihaz yanıt vermeye devam eder: iş bitene kadar bekle
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const j = await api('GET', '/api/jobs/' + job_id).catch(() => null);
+      if (!j || j.state === 'done' || j.state === 'failed') break;
+      byId('askText').textContent = t('alert.factory_ok') + ' ' + j.pct + '%';
+    }
+    reloadWhenBack(6000);
   } catch (e) { toast(t('alert.factory_err') + ': ' + errText(e), 'err'); }
 }
 

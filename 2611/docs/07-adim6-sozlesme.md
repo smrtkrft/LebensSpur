@@ -1,6 +1,8 @@
 # Adım 6 — arayüzün beklediği sunucu uçları
 
-Adım 5'te arayüz (ALTE tasarımı) bu uçlara göre yazıldı; adım 6'da sunucu tarafı bu biçimle uygulanır.
+Adım 5'te arayüz (ALTE tasarımı) bu uçlara göre yazıldı.
+
+**Durum (2026-11-06):** OTA dışındaki tüm uçlar uygulandı (`components/app/api/api_sys.c`) ve tam denetimden geçti; `GET /api/ota` yalnız bilgi verir. Kalan (adım 6): `POST /api/ota/check`, `/start`, `/rollback`. Aşağıdaki üç doğrulama da sunucuya taşındı; gizli alan `null` ile temizlenir.
 Zarf her yerde `{"ok":true,"data":…}` / `{"ok":false,"error":{code,message,field}}`. Yazma uçları `X-LS-Request: 1` ister.
 
 | Uç | Gövde | Yanıt `data` | Arayüzde |

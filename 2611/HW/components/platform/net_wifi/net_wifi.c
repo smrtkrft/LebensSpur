@@ -38,6 +38,9 @@ static char s_name[16];
 static net_wifi_link_cb_t s_link_cb;
 static esp_netif_t *s_sta, *s_ap;
 static esp_timer_handle_t s_t_retry, s_t_scan, s_t_primary, s_t_ap, s_t_tx, s_t_kick;
+/* ayar değişince uygulama gecikmesi: HTTP yanıtı bağlantı kesilmeden gitsin (2026-11-06, cihazda yanıt kayboluyordu) */
+static esp_timer_handle_t s_t_reconn, s_t_apply_ap;
+#define APPLY_DELAY_US (500LL * 1000LL)
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
 /* olay döngüsünde sahip olunan durum */
@@ -517,6 +520,8 @@ esp_err_t net_wifi_start(net_wifi_link_cb_t cb)
     s_t_ap = mk_timer(EVT_AP_FALLBACK, "w_apfb");
     s_t_tx = mk_timer(EVT_TX_EVAL, "w_tx");
     s_t_kick = mk_timer(EVT_TX_KICK, "w_kick");
+    s_t_reconn = mk_timer(EVT_RECONNECT, "w_reconn");
+    s_t_apply_ap = mk_timer(EVT_APPLY_AP, "w_apply_ap");
 
     bool sta = have_cred(0) || have_cred(1);
     bool ap = s_dev.ap_enabled || !sta;               /* kimlik yoksa AP her zaman */
@@ -552,7 +557,12 @@ void net_wifi_get_status(wifi_status_t *out)
     portEXIT_CRITICAL(&s_mux);
 }
 
-esp_err_t net_wifi_reconnect(void) { return esp_event_post(LS_WIFI, EVT_RECONNECT, NULL, 0, 0); }
+esp_err_t net_wifi_reconnect(void)
+{
+    if (!s_t_reconn) return ESP_ERR_INVALID_STATE;
+    once(s_t_reconn, APPLY_DELAY_US);
+    return ESP_OK;
+}
 
 esp_err_t net_wifi_apply_ap(void)
 {
@@ -561,7 +571,9 @@ esp_err_t net_wifi_apply_ap(void)
     wifi_status_t st;
     net_wifi_get_status(&st);
     if (!d.ap_enabled && st.state != WST_CONNECTED) return ESP_ERR_INVALID_STATE;
-    return esp_event_post(LS_WIFI, EVT_APPLY_AP, NULL, 0, 0);
+    if (!s_t_apply_ap) return ESP_ERR_INVALID_STATE;
+    once(s_t_apply_ap, APPLY_DELAY_US);
+    return ESP_OK;
 }
 
 esp_err_t net_wifi_apply_tx(void) { return esp_event_post(LS_WIFI, EVT_APPLY_TX, NULL, 0, 0); }

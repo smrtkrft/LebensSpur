@@ -103,7 +103,27 @@ s, j, _ = req("GET", "/api/wifi"); check("wifi", s == 200 and j["data"]["state"]
 
 print("== kimlik")
 s, j, _ = req("PUT", "/api/auth/password", {"current": "", "next": "abc"}); check("kısa parola → 400", s == 400, (s, j))
+import socket, time as _t
+sse = socket.create_connection((HOST, 80), timeout=5)
+sse.sendall(f"GET /api/events HTTP/1.1\r\nHost: {HOST}\r\n\r\n".encode())
+first = sse.recv(4096)
+check("SSE akışı açıldı (parolasız)", b"200" in first.split(b"\r\n")[0], first[:60])
 s, j, _ = req("PUT", "/api/auth/password", {"current": "", "next": "test1234"}); check("parola koy", s == 200, (s, j))
+closed = False
+t0 = _t.time()
+while _t.time() - t0 < 10:
+    try:
+        d = sse.recv(4096)
+        if not d:
+            closed = True
+            break
+    except socket.timeout:
+        pass
+    except OSError:
+        closed = True
+        break
+sse.close()
+check("parola konunca açık SSE akışı kapandı", closed, f"{_t.time() - t0:.1f} s")
 s, j, _ = req("GET", "/api/status"); check("oturumsuz → 401", s == 401 and j["error"]["code"] == "auth_required", (s, j))
 s, j, _ = req("POST", "/api/auth/login", {"password": "yanlis"}); check("yanlış parola → 401", s == 401, (s, j))
 s, j, r = req("POST", "/api/auth/login", {"password": "test1234"})
@@ -114,6 +134,16 @@ s, j, _ = req("GET", "/api/status"); check("oturumla status", s == 200, (s, j))
 s, j, _ = req("PUT", "/api/auth/password", {"current": "test1234", "next": ""}); check("parola kaldır", s == 200, (s, j))
 cookie = None
 s, j, _ = req("GET", "/api/status"); check("parolasız tekrar açık", s == 200, (s, j))
+
+print("== WiFi kaydı yanıtı")
+t0 = _t.time()
+s, j, _ = req("PUT", "/api/config/wifi_b", {"hidden": False})
+check("WiFi bölümü kaydı yanıt döndürdü (yeniden bağlanmadan önce)", s == 200, (s, j, f"{_t.time() - t0:.1f} s"))
+_t.sleep(10)
+t0 = _t.time()
+s, j, _ = req("PUT", "/api/config/device", {"ap_enabled": True})
+check("AP bölümü kaydı yanıt döndürdü", s == 200, (s, j, f"{_t.time() - t0:.1f} s"))
+_t.sleep(5)
 
 print("== mail grupları ve ekler")
 import time

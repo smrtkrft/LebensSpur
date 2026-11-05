@@ -2,6 +2,7 @@
  * api — ilk uç kümesi: kimlik, durum/SSE, sayaç, WiFi, yapılandırma bölümleri.
  * Kalan uçlar (gruplar, testler, OTA, cihaz, uzaktan) adım 4–6'da ayrı dosyalarda.
  */
+#include <assert.h>
 #include <string.h>
 #include "cJSON.h"
 #include "esp_app_desc.h"
@@ -193,6 +194,21 @@ static esp_err_t h_cfg_put(http_req_t *r)
     cfg_section_t s = (cfg_section_t)(d - cfg_sections);
     const cJSON *body = http_body(r);
     if (s == CFG_SEC_TIMER) return save_timer(r, body);
+    if (s == CFG_SEC_DEVICE) {                         /* AP parolası WPA2 kuralı: boş ya da ≥ 8 */
+        const cJSON *pw = cJSON_GetObjectItem(body, "ap_pass");
+        if (cJSON_IsString(pw) && pw->valuestring[0] && strcmp(pw->valuestring, "***") != 0 && strlen(pw->valuestring) < 8) {
+            return http_fail(r, 400, "validation", "en az 8 karakter", "ap_pass");
+        }
+    }
+    if (s == CFG_SEC_WEBHOOK) {                        /* başlıklar JSON nesnesi (ch_http.c böyle ayrıştırır) */
+        const cJSON *hd = cJSON_GetObjectItem(body, "headers");
+        if (cJSON_IsString(hd) && hd->valuestring[0]) {
+            cJSON *p = cJSON_Parse(hd->valuestring);
+            bool ok = cJSON_IsObject(p);
+            cJSON_Delete(p);
+            if (!ok) return http_fail(r, 400, "validation", "JSON nesnesi", "headers");
+        }
+    }
     if (s == CFG_SEC_DEVICE) {                         /* AP, STA bağlı değilken kapatılamaz */
         const cJSON *ap = cJSON_GetObjectItem(body, "ap_enabled");
         wifi_status_t w;
@@ -274,13 +290,15 @@ static const http_route_t s_routes[] = {
 };
 
 /* alt tablolar tek tabloda birleştirilir (http katmanı tek dizi bekler) */
-static http_route_t s_all[sizeof s_routes / sizeof s_routes[0] + 16];
+static http_route_t s_all[sizeof s_routes / sizeof s_routes[0] + 32];
 
 const http_route_t *api_routes(size_t *count)
 {
     size_t n = 0;
     for (size_t i = 0; i < sizeof s_routes / sizeof s_routes[0]; i++) s_all[n++] = s_routes[i];
     for (size_t i = 0; i < api_group_routes_n && n < sizeof s_all / sizeof s_all[0]; i++) s_all[n++] = api_group_routes[i];
+    for (size_t i = 0; i < api_sys_routes_n && n < sizeof s_all / sizeof s_all[0]; i++) s_all[n++] = api_sys_routes[i];
+    assert(n == sizeof s_routes / sizeof s_routes[0] + api_group_routes_n + api_sys_routes_n);
     *count = n;
     return s_all;
 }

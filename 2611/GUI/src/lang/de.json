@@ -431,7 +431,7 @@
   "common.working": "Wird ausgeführt…",
   "common.no_change": "Keine Änderungen",
   "factory.level1": "Einstellungen zurücksetzen: WLAN, Mail, Timer, Aktionen und Passwort kehren zu den Werten der Ersteinrichtung zurück. Anhänge und Protokolle bleiben erhalten.",
-  "factory.level2": "Einstellungen + externer Flash: zusätzlich wird der externe Flash vollständig gelöscht (Anhänge, Protokolle, Sicherungen). Das kann einige Minuten dauern.",
+  "factory.level2": "Einstellungen + Benutzerdaten: zusätzlich wird /data im externen Flash vollständig gelöscht (Anhänge, Konfigurationssicherungen). Das Ereignisprotokoll bleibt erhalten. Das kann einige Minuten dauern.",
   "home.checked_in": "Countdown neu gestartet",
   "home.exit": "Beenden",
   "ap.pass_ph": "Leer = offenes Netz (ohne Passwort)",
@@ -469,5 +469,6 @@
   "time.hour": "Stunde",
   "time.hours": "Stunden",
   "time.min": "Min",
-  "time.sec": "Sek"
+  "time.sec": "Sek",
+  "common.secret_cleared": "Wird beim Speichern entfernt"
 }

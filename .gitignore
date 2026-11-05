@@ -34,3 +34,4 @@ esp_bin/2611/sdkconfig.old
 esp_bin/2611/managed_components/
 esp_bin/test-build/
 esp_bin/firmware/*.elf
+__pycache__/

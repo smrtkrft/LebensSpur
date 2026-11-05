@@ -6,6 +6,25 @@ import { byId } from './ui.js';
 
 const SECRET = '***';
 
+// kayıtlı gizli alanın yanında "Kaldır": boş kutu "koru" demek olduğundan silmenin tek yolu budur
+function clearBtn(el) {
+  let b = el.nextElementSibling;
+  if (!b || !b.classList.contains('secret-clear')) {
+    b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn-cancel secret-clear';
+    b.onclick = () => {
+      el.dataset.clear = '1';
+      el.value = '';
+      el.placeholder = t('common.secret_cleared');
+      b.hidden = true;
+    };
+    el.after(b);
+  }
+  b.textContent = t('mail_group.remove');
+  b.hidden = !el.dataset.secret;
+}
+
 export class Section {
   // fields: { anahtar: 'elemanId' | { get(), set(v, data) } }
   constructor(name, fields) {
@@ -24,11 +43,13 @@ export class Section {
       if (!el) { this.fields[k].set(v, d); continue; }
       if (el.type === 'checkbox') { el.checked = !!v; continue; }
       if (el.dataset.ph0 === undefined) el.dataset.ph0 = el.placeholder;
+      delete el.dataset.clear;
       if (v === SECRET) { el.value = ''; el.placeholder = t('common.secret_set'); el.dataset.secret = '1'; }
       else {
         el.value = v === undefined ? '' : v;
         if (el.dataset.secret) { delete el.dataset.secret; el.placeholder = el.dataset.ph0; }
       }
+      clearBtn(el);
     }
     this.base = this.read();
   }
@@ -44,12 +65,14 @@ export class Section {
     return o;
   }
 
+  // diff(): kutu boşsa ve sır kayıtlıysa alan gönderilmez; "Kaldır"a basıldıysa null gider
   diff() {
     if (!this.base) return {};                                   // hiç yüklenmedi: varsayılanları yazma
     const now = this.read(), o = {};
     for (const k in now) {
-      if (JSON.stringify(now[k]) === JSON.stringify(this.base[k])) continue;
       const el = this.el(k);
+      if (el && el.dataset.clear) { o[k] = null; continue; }      // "Kaldır": kutu boş olsa da silme gönderilir
+      if (JSON.stringify(now[k]) === JSON.stringify(this.base[k])) continue;
       if (el && el.dataset.secret && now[k] === '') continue;      // kayıtlı sır korunur
       o[k] = now[k];
     }

@@ -3129,3 +3129,4 @@ body.light-theme .ls-dialog::backdrop { background: rgba(255,255,255,.85); }
 body.light-theme .toast { background: #fff; color: #111827; border-color: #d1d5db; }
 body.light-theme .toast.err { color: #991b1b; }
 .ap-auto-note { margin-top: 8px; }
+.secret-clear { width: auto !important; margin-top: 6px !important; padding: 4px 10px !important; font-size: 12px; }

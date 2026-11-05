@@ -431,7 +431,7 @@
   "common.working": "Procesando…",
   "common.no_change": "Sin cambios",
   "factory.level1": "Restablecer ajustes: WiFi, correo, temporizador, acciones y contraseña vuelven a los valores iniciales. Se conservan los adjuntos y los registros.",
-  "factory.level2": "Ajustes + flash externa: además, la flash externa se borra por completo (adjuntos, registros, copias de seguridad). Puede tardar unos minutos.",
+  "factory.level2": "Ajustes + datos de usuario: además, /data en la flash externa se borra por completo (adjuntos, copias de la configuración). El registro de eventos se conserva. Puede tardar unos minutos.",
   "home.checked_in": "Cuenta atrás reiniciada",
   "home.exit": "Salir",
   "ap.pass_ph": "Vacío = red abierta (sin contraseña)",
@@ -469,5 +469,6 @@
   "time.hour": "hora",
   "time.hours": "horas",
   "time.min": "min",
-  "time.sec": "s"
+  "time.sec": "s",
+  "common.secret_cleared": "Se eliminará al guardar"
 }

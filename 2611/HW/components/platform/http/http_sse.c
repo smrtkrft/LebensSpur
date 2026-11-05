@@ -14,6 +14,7 @@
 
 static httpd_handle_t s_h;
 static httpd_req_t *s_slot[SLOTS];          /* yalnız httpd görevinde erişilir */
+static char s_tok[SLOTS][33];               /* akışı açan oturum; geçersizleşince akış kapanır */
 static http_sse_source_t s_source;
 static atomic_bool s_pending;
 static esp_timer_handle_t s_hb;
@@ -23,8 +24,11 @@ void http_sse_set_source(http_sse_source_t fn) { s_source = fn; }
 
 static void drop(int i)
 {
+    int fd = httpd_req_to_sockfd(s_slot[i]);
     httpd_req_async_handler_complete(s_slot[i]);
+    httpd_sess_trigger_close(s_h, fd);                /* soketi de kapat: istemci yeniden bağlanıp 401 alsın */
     s_slot[i] = NULL;
+    s_tok[i][0] = 0;
 }
 
 static bool alive(httpd_req_t *r)
@@ -48,7 +52,7 @@ static void send_all(void *arg)
     strcat(s_buf, "\n\n");
     for (int i = 0; i < SLOTS; i++) {
         if (!s_slot[i]) continue;
-        if (!alive(s_slot[i]) || httpd_resp_send_chunk(s_slot[i], s_buf, (ssize_t)strlen(s_buf)) != ESP_OK) drop(i);
+        if (!alive(s_slot[i]) || !http_auth_token_alive(s_tok[i]) || httpd_resp_send_chunk(s_slot[i], s_buf, (ssize_t)strlen(s_buf)) != ESP_OK) drop(i);
     }
 }
 
@@ -85,6 +89,7 @@ esp_err_t http_sse_handler(http_req_t *r)
         httpd_req_async_handler_complete(async);
         return ESP_OK;
     }
+    http_auth_cookie(r, s_tok[free_i]);
     s_slot[free_i] = async;
     http_sse_broadcast();                           /* ilk durum hemen */
     return ESP_OK;

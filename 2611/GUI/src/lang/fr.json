@@ -431,7 +431,7 @@
   "common.working": "En cours…",
   "common.no_change": "Aucune modification",
   "factory.level1": "Réinitialiser les réglages : WiFi, e-mail, minuteur, actions et mot de passe reviennent aux valeurs initiales. Les pièces jointes et les journaux sont conservés.",
-  "factory.level2": "Réglages + flash externe : en plus, la flash externe est entièrement effacée (pièces jointes, journaux, sauvegardes). Cela peut prendre quelques minutes.",
+  "factory.level2": "Réglages + données utilisateur : en plus, /data sur la flash externe est entièrement effacé (pièces jointes, sauvegardes de configuration). Le journal d'événements est conservé. Cela peut prendre quelques minutes.",
   "home.checked_in": "Compte à rebours relancé",
   "home.exit": "Quitter",
   "ap.pass_ph": "Vide = réseau ouvert (sans mot de passe)",
@@ -469,5 +469,6 @@
   "time.hour": "heure",
   "time.hours": "heures",
   "time.min": "min",
-  "time.sec": "s"
+  "time.sec": "s",
+  "common.secret_cleared": "Sera supprimé à l'enregistrement"
 }

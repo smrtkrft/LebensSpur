@@ -431,7 +431,7 @@
   "common.working": "Çalışıyor…",
   "common.no_change": "Değişiklik yok",
   "factory.level1": "Ayarları sıfırla: WiFi, e-posta, sayaç, eylemler ve parola ilk kurulum değerlerine döner. Ekler ve günlükler kalır.",
-  "factory.level2": "Ayarlar + harici flash: ek olarak harici flash tamamen silinir (ekler, günlükler, yedekler). Birkaç dakika sürebilir.",
+  "factory.level2": "Ayarlar + kullanıcı verileri: ek olarak harici flash'taki /data tamamen silinir (ekler, yapılandırma yedekleri). Olay günlüğü kalır. Birkaç dakika sürebilir.",
   "home.checked_in": "Sayaç yeniden başladı",
   "home.exit": "Çıkış",
   "ap.pass_ph": "Boş = açık ağ (şifresiz)",
@@ -469,5 +469,6 @@
   "time.hour": "saat",
   "time.hours": "saat",
   "time.min": "dk",
-  "time.sec": "sn"
+  "time.sec": "sn",
+  "common.secret_cleared": "Kaydedince silinecek"
 }

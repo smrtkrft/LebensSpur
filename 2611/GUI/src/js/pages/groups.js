@@ -112,7 +112,7 @@ async function upload(files) {
     if (f.size > FILE_MAX) { toast(t('alert.file_too_large', { name: f.name }), 'err'); continue; }
     try {
       const r = await fetch('/api/groups/' + gid + '/files/' + encodeURIComponent(safeName(f.name)), {
-        method: 'PUT', body: f, credentials: 'same-origin',
+        method: 'PUT', body: f, credentials: 'same-origin', signal: AbortSignal.timeout(120000),
         headers: { 'X-LS-Request': '1', 'Content-Type': 'application/octet-stream' },
       });
       const j = await r.json().catch(() => null);

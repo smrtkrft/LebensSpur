@@ -23,7 +23,7 @@ const causeLabel = (c, cat) => tr('cause.' + c, c) + (cat ? ' (' + tr('cat.' + c
 async function loadDevice() {
   const [d, s] = await Promise.all([api('GET', '/api/device'), api('GET', '/api/status')]);
   set('sysDeviceId', s.device);
-  set('sysChip', d.chip + (d.rev ? ' rev ' + d.rev : ''));
+  set('sysChip', d.chip + ' v' + Math.floor(d.rev / 100) + '.' + (d.rev % 100));
   set('sysCores', d.cores);
   set('sysCpuFreq', d.cpu_mhz + ' MHz');
   set('sysFlashSize', Math.round(d.flash_kb / 1024) + ' MB');

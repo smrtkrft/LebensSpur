@@ -18,7 +18,9 @@
 #define MAX_FAILS  5
 #define COOKIE     "ls_sess"
 
-typedef struct { char token[33]; int64_t expires_us; } sess_t;
+/* last_us: son kullanım. Geçerlilik her denetimde GÜNCEL ttl ile hesaplanır → ttl kısaltılınca açık oturumlar da
+ * hemen yeni süreye tabi olur (2026-11-06 güvenlik testi: eski 'bitiş zamanı' saklamak bunu kaçırıyordu). */
+typedef struct { char token[33]; int64_t last_us; } sess_t;
 typedef struct { char ip[16]; uint8_t fails; int64_t until_us; int64_t last_us; } lock_t;
 
 static sess_t s_sess[SESSIONS];
@@ -68,12 +70,30 @@ bool http_auth_session_valid(http_req_t *r)
     int64_t now = esp_timer_get_time();
     int64_t ttl = (int64_t)auth_cfg().ttl_min * 60 * 1000000LL;
     for (int i = 0; i < SESSIONS; i++) {
-        if (s_sess[i].token[0] && now < s_sess[i].expires_us && ct_equal(s_sess[i].token, t)) {
-            s_sess[i].expires_us = now + ttl;                  /* kayan süre */
+        if (s_sess[i].token[0] && now - s_sess[i].last_us < ttl && ct_equal(s_sess[i].token, t)) {
+            s_sess[i].last_us = now;                           /* kayan süre */
             return true;
         }
     }
     return false;
+}
+
+/* SSE: akışı açan oturum hâlâ geçerli mi (süreyi uzatmaz: açık sekme oturumu canlı tutmasın) */
+bool http_auth_token_alive(const char *tok)
+{
+    if (!http_auth_enabled()) return true;
+    if (!tok || !tok[0]) return false;
+    int64_t now = esp_timer_get_time();
+    int64_t ttl = (int64_t)auth_cfg().ttl_min * 60 * 1000000LL;
+    for (int i = 0; i < SESSIONS; i++) {
+        if (s_sess[i].token[0] && now - s_sess[i].last_us < ttl && ct_equal(s_sess[i].token, tok)) return true;
+    }
+    return false;
+}
+
+void http_auth_cookie(http_req_t *r, char out[33])
+{
+    if (!cookie_token(r, out)) out[0] = 0;
 }
 
 static lock_t *lock_slot(const char *ip, bool create)
@@ -116,11 +136,11 @@ esp_err_t http_auth_login(http_req_t *r, const char *password)
     }
     l->fails = 0;
     sess_t *s = &s_sess[0];
-    for (int i = 0; i < SESSIONS; i++) if (s_sess[i].expires_us < s->expires_us) s = &s_sess[i];
+    for (int i = 0; i < SESSIONS; i++) if (s_sess[i].last_us < s->last_us) s = &s_sess[i];   /* en eski yuva */
     uint8_t rnd[16];
     esp_fill_random(rnd, sizeof rnd);
     for (int i = 0; i < 16; i++) sprintf(s->token + i * 2, "%02x", rnd[i]);
-    s->expires_us = now + (int64_t)a.ttl_min * 60 * 1000000LL;
+    s->last_us = now;
     char ck[96];
     snprintf(ck, sizeof ck, COOKIE "=%.32s; Path=/; HttpOnly; SameSite=Strict", s->token);
     http_set_header(r, "Set-Cookie", ck);                     /* değer istek bağlamına kopyalanır (W1) */
@@ -135,6 +155,7 @@ void http_auth_logout(http_req_t *r)
         for (int i = 0; i < SESSIONS; i++) if (ct_equal(s_sess[i].token, t)) memset(&s_sess[i], 0, sizeof s_sess[i]);
     }
     http_set_header(r, "Set-Cookie", COOKIE "=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+    http_sse_broadcast();                                     /* geçersiz oturumun akışı kapanır */
 }
 
 esp_err_t http_auth_set_password(const char *current, const char *next)
@@ -155,6 +176,7 @@ esp_err_t http_auth_set_password(const char *current, const char *next)
     cJSON_Delete(o);
     if (r == ESP_OK) {
         memset(s_sess, 0, sizeof s_sess);                     /* parola değişti: tüm oturumlar düşer */
+        http_sse_broadcast();                                 /* açık SSE akışları da kapanır */
         evlog_write(EVL_INFO, "user", "tarayici parolasi %s", nh[0] ? "ayarlandi" : "kaldirildi");
     }
     return r;

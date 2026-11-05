@@ -12,6 +12,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import socket
 import struct
 import subprocess
@@ -37,6 +38,7 @@ class WS:
         if b" 101 " not in resp.split(b"\r\n")[0]:
             raise RuntimeError(resp)
         self.buf = b""
+        self.s.settimeout(600)                    # uzun denetim adımları
 
     def send(self, text):
         data = text.encode()
@@ -107,6 +109,9 @@ class Page:
             if e.get("method") == "Runtime.exceptionThrown":
                 d = e["params"]["exceptionDetails"]
                 out.append("JS: " + d.get("exception", {}).get("description", d.get("text", "?")))
+            elif e.get("method") == "Log.entryAdded" and e["params"]["entry"]["level"] == "error":
+                en = e["params"]["entry"]
+                out.append(f"{en.get('source')}: {en.get('text', '')[:160]} {en.get('url', '')}")
             elif e.get("method") == "Runtime.consoleAPICalled" and e["params"]["type"] == "error":
                 out.append("console: " + " ".join(str(a.get("value", a.get("description", ""))) for a in e["params"]["args"]))
         self.events = []
@@ -141,6 +146,7 @@ def main():
     ap.add_argument("--height", type=int, default=860)
     ap.add_argument("--steps")
     ap.add_argument("--port", type=int, default=9333)
+    ap.add_argument("--allow-net", default="", help="beklenen ağ hatası deseni (regex), sayılmaz")
     a = ap.parse_args()
     steps = json.load(open(a.steps)) if a.steps else DEFAULT_STEPS
     os.makedirs(a.out, exist_ok=True)
@@ -161,6 +167,7 @@ def main():
         p = Page(WS(ws_url))
         p.call("Runtime.enable")
         p.call("Page.enable")
+        p.call("Log.enable")                      # CSP ihlali, ağ hatası (404/500) burada görünür
         p.call("Page.navigate", url=a.url)
         for _ in range(100):                      # sayfa + uygulama hazır
             time.sleep(0.2)
@@ -170,13 +177,28 @@ def main():
         bad = 0
         for i, (name, expr, wait) in enumerate(steps):
             if expr:
-                r = p.js("(()=>{" + expr + "})()")
+                try:
+                    r = p.js(expr if expr.startswith("(async") else "(()=>{" + expr + "})()")
+                except RuntimeError as e:          # sayfa yenilendi (ör. yeniden başlatma sonrası)
+                    if "navigated" not in str(e):
+                        raise
+                    r = f"sayfa yenilendi ({name})"
+                    time.sleep(3)
                 if isinstance(r, dict) and "__error" in r:
                     print(f"[{name}] adım JS hatası: {r['__error']}")
                     bad += 1
+                elif isinstance(r, list):              # denetim adımı: başarısız kontrollerin listesi
+                    for f in r:
+                        print(f"[{name}] HATA {f}")
+                    bad += len(r)
+                elif isinstance(r, str):
+                    print(f"[{name}] {r}")
             p.wait(wait)
             p.shot(os.path.join(a.out, f"{i:02d}-{name}.png"))
             for e in p.errors():
+                if a.allow_net and e.startswith("network:") and re.search(a.allow_net, e):
+                    print(f"[{name}] (beklenen) {e}")
+                    continue
                 print(f"[{name}] {e}")
                 bad += 1
         print(f"gui_check: {len(steps)} adım, {bad} hata")

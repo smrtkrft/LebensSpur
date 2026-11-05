@@ -31,8 +31,24 @@ void http_set_header(http_req_t *r, const char *name, const char *value)
     r->nhdr++;
 }
 
+/* Güvenlik başlıkları (test_security.py): gömülme yok (clickjacking), MIME tahmini yok, Referer sızmaz.
+ * CSP yalnız HTML'de: betik/bağlantı yalnız cihazın kendisi; satır içi stil ALTE düzeni için gerekli. */
+static void sec_headers(httpd_req_t *req, bool html)
+{
+    httpd_resp_set_hdr(req, "X-Frame-Options", "DENY");
+    httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
+    httpd_resp_set_hdr(req, "Referrer-Policy", "no-referrer");
+    if (html) {
+        httpd_resp_set_hdr(req, "Content-Security-Policy",
+                           "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                           "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+                           "form-action 'self'; object-src 'none'");
+    }
+}
+
 static esp_err_t send_json(http_req_t *r, const char *status, cJSON *o)
 {
+    sec_headers(r->req, false);
     httpd_resp_set_status(r->req, status);
     httpd_resp_set_type(r->req, "application/json");
     httpd_resp_set_hdr(r->req, "Cache-Control", "no-store");
@@ -214,6 +230,7 @@ static esp_err_t serve_static(httpd_req_t *req)
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
         httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
         httpd_resp_set_hdr(req, "Cache-Control", hashed ? "public, max-age=31536000, immutable" : "no-cache");
+        sec_headers(req, strncmp(f[i].ctype, "text/html", 9) == 0);
         if (strcmp(f[i].path, "/index.html") == 0) evlog_mark(EVM_GUI_SERVE, (int32_t)f[i].len);
         return httpd_resp_send(req, (const char *)f[i].start, (ssize_t)f[i].len);   /* flash'tan tek seferde */
     }
@@ -265,10 +282,11 @@ esp_err_t http_start(const http_route_t *routes, size_t n)
     httpd_config_t c = HTTPD_DEFAULT_CONFIG();
     c.stack_size = 8192;
     c.max_open_sockets = 10;
+    c.max_resp_headers = 12;                               /* güvenlik başlıkları + çerez */
     c.max_uri_handlers = 8;
     c.max_resp_headers = 10;
     c.lru_purge_enable = true;
-    c.recv_wait_timeout = 5;
+    c.recv_wait_timeout = 2;                               /* yarım istek (slowloris) tek httpd görevini kısa tutsun */
     c.send_wait_timeout = 5;
     c.uri_match_fn = httpd_uri_match_wildcard;
     esp_err_t r = httpd_start(&s_server, &c);

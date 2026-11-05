@@ -82,6 +82,7 @@ static esp_err_t validate_one(const cfg_field_t *f, const cJSON *it, char *err, 
 {
     switch (f->type) {
     case CFG_T_STR:
+        if ((f->flags & CFG_F_SECRET) && cJSON_IsNull(it)) return ESP_OK;     /* null = gizli alanı temizle */
         if (!cJSON_IsString(it)) FAIL(f->name, "metin bekleniyor");
         if (!str_ok(f, it->valuestring)) FAIL(f->name, "en çok %u karakter, kontrol karakteri yok", (unsigned)f->max);
         return ESP_OK;
@@ -110,6 +111,7 @@ static void store_one(const cfg_field_t *f, void *base, const cJSON *it)
     void *p = (char *)base + f->offset;
     switch (f->type) {
     case CFG_T_STR:
+        if (cJSON_IsNull(it)) { ((char *)p)[0] = 0; return; }       /* yalnız gizli alanda geçer (validate) */
         /* gizli alan: boş ya da maske geri geldiyse eski değer korunur */
         if ((f->flags & CFG_F_SECRET) && (it->valuestring[0] == 0 || strcmp(it->valuestring, MASK) == 0)) return;
         snprintf((char *)p, f->size, "%s", it->valuestring);

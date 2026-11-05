@@ -431,7 +431,7 @@
   "common.working": "Working…",
   "common.no_change": "No changes",
   "factory.level1": "Reset settings: WiFi, mail, timer, actions and password return to first-setup values. Attachments and logs are kept.",
-  "factory.level2": "Settings + external flash: in addition, the external flash is fully erased (attachments, logs, backups). This can take a few minutes.",
+  "factory.level2": "Settings + user data: in addition, /data on the external flash is fully erased (attachments, configuration backups). The event log is kept. This can take a few minutes.",
   "home.checked_in": "Countdown restarted",
   "home.exit": "Exit",
   "ap.pass_ph": "Empty = open network (no password)",
@@ -469,5 +469,6 @@
   "time.hour": "hour",
   "time.hours": "hours",
   "time.min": "min",
-  "time.sec": "sec"
+  "time.sec": "sec",
+  "common.secret_cleared": "Will be removed on save"
 }

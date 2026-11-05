@@ -431,7 +431,7 @@
   "common.working": "In corso…",
   "common.no_change": "Nessuna modifica",
   "factory.level1": "Ripristina impostazioni: WiFi, e-mail, timer, azioni e password tornano ai valori iniziali. Allegati e log vengono mantenuti.",
-  "factory.level2": "Impostazioni + flash esterna: inoltre la flash esterna viene cancellata completamente (allegati, log, backup). Può richiedere alcuni minuti.",
+  "factory.level2": "Impostazioni + dati utente: inoltre /data sulla flash esterna viene cancellata completamente (allegati, backup della configurazione). Il registro eventi viene mantenuto. Può richiedere alcuni minuti.",
   "home.checked_in": "Conto alla rovescia riavviato",
   "home.exit": "Esci",
   "ap.pass_ph": "Vuoto = rete aperta (senza password)",
@@ -469,5 +469,6 @@
   "time.hour": "ora",
   "time.hours": "ore",
   "time.min": "min",
-  "time.sec": "s"
+  "time.sec": "s",
+  "common.secret_cleared": "Verrà rimosso al salvataggio"
 }

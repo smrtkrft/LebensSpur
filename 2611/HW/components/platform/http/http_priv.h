@@ -20,5 +20,7 @@ struct http_req {
 };
 
 void http_auth_init(void);
+bool http_auth_token_alive(const char *tok);
+void http_auth_cookie(http_req_t *r, char out[33]);
 void http_sse_init(httpd_handle_t h);
 httpd_handle_t http_server(void);

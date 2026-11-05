@@ -6,8 +6,13 @@ export class ApiError extends Error {
   }
 }
 
+// Zaman aşımı: cihaz bağlantıyı sessizce düşürürse (WiFi/AP kipi değişimi) istek sonsuza dek beklemesin.
+const TIMEOUT_MS = 15000;
+
 export async function api(method, path, body) {
-  const opt = { method, headers: {}, credentials: 'same-origin' };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  const opt = { method, headers: {}, credentials: 'same-origin', signal: ctl.signal };
   if (method !== 'GET') opt.headers['X-LS-Request'] = '1';
   if (body !== undefined) {
     opt.headers['Content-Type'] = 'application/json';
@@ -17,10 +22,12 @@ export async function api(method, path, body) {
   try {
     res = await fetch(path, opt);
   } catch (e) {
+    clearTimeout(timer);
     throw new ApiError(0, 'offline', '');
   }
   let j = null;
-  try { j = await res.json(); } catch (e) { /* gövdesiz yanıt */ }
+  try { j = await res.json(); } catch (e) { /* gövdesiz ya da kesilen yanıt */ }
+  clearTimeout(timer);
   if (res.status === 401 && j && j.error && j.error.code === 'auth_required') {
     window.dispatchEvent(new Event('ls-auth-required'));
   }
