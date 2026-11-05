@@ -1,7 +1,7 @@
 # cfg — tek yapilandirma semasi (cfg_schema.json -> uretilen C + GUI semasi).
 # Uretilen dosyalar derleme dizinine yazilir; 2611/ altina hicbir sey uretilmez.
 if(CMAKE_BUILD_EARLY_EXPANSION)
-    idf_component_register(INCLUDE_DIRS "include" REQUIRES json PRIV_REQUIRES nvs_flash)
+    idf_component_register(INCLUDE_DIRS "include" REQUIRES json PRIV_REQUIRES nvs_flash storage sys_worker esp_app_format esp_rom)
     return()
 endif()
 idf_build_get_property(_python PYTHON)
@@ -16,8 +16,8 @@ if(NOT _res EQUAL 0)
     message(FATAL_ERROR "cfg semasi uretilemedi: ${_err}")
 endif()
 
-idf_component_register(SRCS "${CFG_GEN_DIR}/cfg_schema.gen.c" "cfg_fields.c" "cfg.c"
+idf_component_register(SRCS "${CFG_GEN_DIR}/cfg_schema.gen.c" "cfg_fields.c" "cfg.c" "cfg_backup.c"
                        INCLUDE_DIRS "include" "${CFG_GEN_DIR}"
                        REQUIRES json
-                       PRIV_REQUIRES nvs_flash)
+                       PRIV_REQUIRES nvs_flash storage sys_worker esp_app_format esp_rom)
 ls_strict_warnings(${COMPONENT_LIB})

@@ -8,10 +8,13 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "http.h"
 #include "cfg.h"
 #include "evlog.h"
 #include "storage.h"
+#include "sys_worker.h"
 
 static const char *TAG = "main";
 
@@ -23,6 +26,16 @@ static void log_heap(const char *when)
              (unsigned)i.total_free_bytes, (unsigned)i.largest_free_block,
              (unsigned)i.minimum_free_bytes,
              (unsigned)(i.total_free_bytes + i.total_allocated_bytes));
+}
+
+/* gecici teshis (adim 3.4'te API'ye tasinir): gunlugun son satirlari */
+static bool print_line(const char *l, void *ctx) { (*(int *)ctx)++; ESP_LOGI(TAG, "gunluk: %.150s", l); return true; }
+static void log_tail(void)
+{
+    int n = 0; uint32_t next;
+    vTaskDelay(pdMS_TO_TICKS(200));
+    evlog_read(0, 4, print_line, &n, &next);
+    ESP_LOGI(TAG, "gunluk: %d satir, sonraki imlec %lu", n, (unsigned long)next);
 }
 
 void app_main(void)
@@ -46,8 +59,10 @@ void app_main(void)
                 storage_state_name(storage_state(STG_DATA)), (unsigned)(used >> 10), (unsigned)(tot >> 10),
                 (esp_timer_get_time() - t0) / 1000, storage_note() ? " | " : "", storage_note() ? storage_note() : "");
 
-    char line[320];
-    while (evlog_pop_line(line, sizeof line)) ESP_LOGI(TAG, "halka: %s", line);   /* gecici: dosya 1.5'te */
+    sys_worker_start();
+    evlog_file_start();
+    log_tail();
+
 
     size_t n; const char *hash; size_t total = 0;
     const http_embedded_t *f = http_embedded_files(&n, &hash);

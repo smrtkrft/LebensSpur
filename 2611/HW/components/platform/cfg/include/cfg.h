@@ -54,3 +54,8 @@ esp_err_t cfg_factory_reset(void);                    /* kademe 1: cfg + rt sili
 
 typedef void (*cfg_change_cb_t)(cfg_section_t s);     /* grup değişimi: s = CFG_SEC__COUNT */
 void cfg_set_change_cb(cfg_change_cb_t cb);
+
+/* ---- yedek (cfg_backup.c): /data/config/config.jsonl (+ .prev), JSONL + CRC32, sırlar dahil ---- */
+esp_err_t cfg_backup_write(void);                     /* sys_worker'da; değişiklikte kendiliğinden planlanır */
+esp_err_t cfg_backup_info(uint32_t *seq);             /* geçerli yedek var mı (önce güncel, sonra önceki) */
+esp_err_t cfg_backup_restore(void);                   /* sys_worker'da; sonra yeniden başlatma önerilir */

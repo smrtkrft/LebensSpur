@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "esp_err.h"
 #include "evlog_classify.h"
 
 typedef enum { EVL_INFO, EVL_WARN, EVL_ERR } evlog_level_t;
@@ -37,3 +38,11 @@ typedef void (*evlog_flush_hook_t)(void);
 void   evlog_set_flush_hook(evlog_flush_hook_t hook);
 /* Halkadan en eski satırı alır (NUL sonlu); yoksa 0. Yalnız boşaltıcı görev çağırır. */
 size_t evlog_pop_line(char *out, size_t cap);
+
+/* ---- dosya (evlog_file.c): /log/events.jsonl, 256 KB'ta events.1.jsonl'e döndürülür ---- */
+/* storage ve sys_worker hazır olduktan sonra: boşaltma kancası, kontrol noktası, ertelenmiş açılış kaydı. */
+esp_err_t evlog_file_start(void);
+typedef bool (*evlog_line_cb_t)(const char *line, void *ctx);
+/* En yeniden eskiye `limit` satır. cursor 0 = en yeni; *next_cursor 0 = başka satır yok. */
+esp_err_t evlog_read(uint32_t cursor, int limit, evlog_line_cb_t cb, void *ctx, uint32_t *next_cursor);
+esp_err_t evlog_clear(void);

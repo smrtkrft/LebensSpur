@@ -11,6 +11,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "cfg.h"
+#include "cfg_priv.h"
 
 static const char *TAG = "cfg";
 #define NS        "cfg"
@@ -151,6 +152,7 @@ esp_err_t cfg_set_section_json(cfg_section_t s, const cJSON *obj, char *err, siz
     if (r == ESP_OK) r = persist(d->nvs_key, d, tmp);
     if (r == ESP_OK) memcpy(sec_ptr(d), tmp, d->size);
     xSemaphoreGive(s_lock);
+    if (r == ESP_OK) cfg_backup_schedule();
     if (r == ESP_OK && s_change_cb) s_change_cb(s);
     return r;
 }
@@ -210,6 +212,7 @@ esp_err_t cfg_group_set_json(int idx, const cJSON *obj, char *err, size_t errlen
     }
     if (r == ESP_OK) s_group_used |= (uint16_t)(1u << idx);
     xSemaphoreGive(s_lock);
+    if (r == ESP_OK) cfg_backup_schedule();
     if (r == ESP_OK && s_change_cb) s_change_cb(CFG_SEC__COUNT);
     return r;
 }
@@ -230,6 +233,7 @@ esp_err_t cfg_group_delete(int idx)
     }
     if (r == ESP_OK) s_group_used &= (uint16_t)~(1u << idx);
     xSemaphoreGive(s_lock);
+    if (r == ESP_OK) cfg_backup_schedule();
     if (r == ESP_OK && s_change_cb) s_change_cb(CFG_SEC__COUNT);
     return r;
 }
@@ -258,4 +262,19 @@ esp_err_t cfg_factory_reset(void)
     s_group_used = 0;
     xSemaphoreGive(s_lock);
     return r;
+}
+
+/* ---- iç arayüz (cfg_backup.c) ---- */
+void cfg_priv_lock(void) { xSemaphoreTake(s_lock, portMAX_DELAY); }
+void cfg_priv_unlock(void) { xSemaphoreGive(s_lock); }
+void *cfg_priv_section(const cfg_section_desc_t *d) { return sec_ptr(d); }
+esp_err_t cfg_priv_persist(const char *key, const cfg_section_desc_t *d, const void *data)
+{
+    return persist(key, d, data);
+}
+esp_err_t cfg_priv_group_read(int idx, cfg_group_t *out) { return group_get_locked(idx, out); }
+void cfg_priv_group_mark(int idx, bool used)
+{
+    if (used) s_group_used |= (uint16_t)(1u << idx);
+    else s_group_used &= (uint16_t)~(1u << idx);
 }

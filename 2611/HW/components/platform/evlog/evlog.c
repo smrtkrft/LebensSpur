@@ -12,6 +12,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "evlog.h"
+#include "evlog_priv.h"
 
 static const char *TAG = "evlog";
 
@@ -46,6 +47,8 @@ static uint32_t s_dropped;
 static evlog_flush_hook_t s_flush_hook;
 static evlog_boot_info_t s_boot;
 static esp_timer_handle_t s_tick;
+static evlog_restart_hook_t s_restart_hook;
+void evlog_set_restart_hook(evlog_restart_hook_t h) { s_restart_hook = h; }
 
 /* ---------- RTC ---------- */
 
@@ -206,7 +209,8 @@ void sys_restart(restart_reason_t r)
     rtc_commit();
     portEXIT_CRITICAL(&s_mux);
     ESP_LOGW(TAG, "yeniden baslatma (neden %d)", (int)r);
-    vTaskDelay(pdMS_TO_TICKS(100));       /* konsol ve boşaltıcıya kısa pay */
+    if (s_restart_hook) s_restart_hook();  /* halkadaki satırlar dosyaya */
+    vTaskDelay(pdMS_TO_TICKS(50));
     esp_restart();
 }
 
@@ -223,6 +227,28 @@ static void tick_cb(void *arg)
 }
 
 /* ---------- açılış ---------- */
+
+static bool s_boot_deferred;
+static evlog_cause_t s_cause;
+static rtc_rec_t s_prev;
+
+static void emit_boot(const rtc_rec_t *prev, evlog_cause_t c, bool ok, bool approx)
+{
+    uint32_t end_epoch = prev->boot_epoch ? prev->boot_epoch + prev->uptime_s : 0;
+    char line[EVLOG_LINE_MAX];
+    snprintf(line, sizeof line,
+             "{\"type\":\"boot\",\"n\":%lu,\"ts\":%lu,\"up\":%lu,\"approx\":%s,\"cat\":\"%s\",\"cause\":\"%s\","
+             "\"hint\":\"%s\",\"ev\":\"%s\",\"ev_dt\":%ld,\"ev_arg\":%ld,\"wifi\":\"%s\",\"cl\":%u,\"rssi\":%d,"
+             "\"tx\":%d,\"heap_free\":%lu,\"heap_min\":%lu,\"short\":%lu}",
+             (unsigned long)prev->boot_count, (unsigned long)end_epoch, (unsigned long)prev->uptime_s,
+             approx ? "true" : "false", c.cat, c.cause, c.hint,
+             ok ? evlog_mark_name((evlog_mark_t)prev->last_mark) : "NONE",
+             ok ? (long)(prev->uptime_s - prev->last_mark_up_s) : -1L, ok ? (long)prev->last_mark_arg : 0L,
+             ok ? wifi_mode_name(prev->wifi_mode) : "?", ok ? prev->ap_clients : 0, ok ? prev->sta_rssi : 0,
+             ok ? prev->tx_dbm : 0, (unsigned long)prev->heap_free, (unsigned long)prev->heap_min,
+             (unsigned long)s_rtc.short_boots);
+    ring_push(line);
+}
 
 void evlog_init(void)
 {
@@ -254,22 +280,42 @@ void evlog_init(void)
     const esp_timer_create_args_t ta = { .callback = tick_cb, .name = "evlog" };
     if (esp_timer_create(&ta, &s_tick) == ESP_OK) esp_timer_start_periodic(s_tick, 1000000);
 
-    if (prev.boot_count == 0) return;                                  /* ilk açılış: kayıt yok */
+    s_cause = c;
+    s_prev = prev;
+    if (!ok) {                    /* RTC silinmiş: tam güç kaybı ya da ilk açılış; kontrol noktası bekler */
+        s_boot_deferred = true;
+        return;
+    }
     if (short_run && !evlog_short_boot_should_log(c.cat, s_rtc.short_boots)) return;
+    emit_boot(&prev, c, true, false);
+}
 
-    uint32_t end_epoch = prev.boot_epoch ? prev.boot_epoch + prev.uptime_s : 0;
-    char line[EVLOG_LINE_MAX];
-    snprintf(line, sizeof line,
-             "{\"type\":\"boot\",\"n\":%lu,\"ts\":%lu,\"up\":%lu,\"approx\":false,\"cat\":\"%s\",\"cause\":\"%s\","
-             "\"hint\":\"%s\",\"ev\":\"%s\",\"ev_dt\":%ld,\"ev_arg\":%ld,\"wifi\":\"%s\",\"cl\":%u,\"rssi\":%d,"
-             "\"tx\":%d,\"heap_free\":%lu,\"heap_min\":%lu,\"short\":%lu}",
-             (unsigned long)prev.boot_count, (unsigned long)end_epoch, (unsigned long)prev.uptime_s,
-             c.cat, c.cause, c.hint, ok ? evlog_mark_name((evlog_mark_t)prev.last_mark) : "NONE",
-             ok ? (long)(prev.uptime_s - prev.last_mark_up_s) : -1L, ok ? (long)prev.last_mark_arg : 0L,
-             ok ? wifi_mode_name(prev.wifi_mode) : "?", ok ? prev.ap_clients : 0, ok ? prev.sta_rssi : 0,
-             ok ? prev.tx_dbm : 0, (unsigned long)prev.heap_free, (unsigned long)prev.heap_min,
-             (unsigned long)s_rtc.short_boots);
-    ring_push(line);
+void evlog_apply_checkpoint(bool have, uint32_t ck_boot, uint32_t ck_up, uint32_t ck_epoch, uint32_t ck_heap_min)
+{
+    if (!s_boot_deferred) return;
+    s_boot_deferred = false;
+    if (!have || ck_boot == 0) return;                 /* gerçekten ilk açılış */
+    s_prev.boot_count = ck_boot;
+    s_prev.uptime_s = ck_up;
+    s_prev.boot_epoch = ck_epoch;
+    s_prev.heap_min = ck_heap_min;
+    portENTER_CRITICAL(&s_mux);
+    s_rtc.boot_count = ck_boot + 1;
+    rtc_commit();
+    portEXIT_CRITICAL(&s_mux);
+    s_boot.boot_count = s_rtc.boot_count;
+    s_boot.prev_uptime_s = ck_up;
+    emit_boot(&s_prev, s_cause, false, true);
+}
+
+void evlog_checkpoint_values(uint32_t *boot, uint32_t *up, uint32_t *epoch, uint32_t *heap_min)
+{
+    portENTER_CRITICAL(&s_mux);
+    *boot = s_rtc.boot_count;
+    *up = s_rtc.uptime_s;
+    *epoch = s_rtc.boot_epoch;
+    *heap_min = s_rtc.heap_min;
+    portEXIT_CRITICAL(&s_mux);
 }
 
 void evlog_boot_info(evlog_boot_info_t *out) { *out = s_boot; }
