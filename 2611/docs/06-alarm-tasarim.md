@@ -14,39 +14,47 @@ Sahip, süre dolmadan önce zamanında ve artan aciliyetle uyarılsın; erken d�
 
 A eşit aralık/tüm süre (ALTE) · B eşit aralık/son pencere · **C sona doğru sıklaşan logaritmik pencere (seçildi)** · D elle tanımlı zamanlar · E hazır profiller (C üzerine arayüz katmanı; şimdilik yok).
 
-## Model C
+## Model C (son hali: F1 + L1 + geometrik, 2026-11-05)
+
+İlk ve son uyarı kurala bağlı, aradakiler geometrik dağıtılır. Seçim süreci: önce yarılanan pencere (ilk uyarı T/2) denendi; kullanıcı ilk uyarının çok erken olduğunu ve son uyarının sabit bir "son şans" olması gerektiğini belirtti (24 sa → 23. saat; 60 gün → son gün). Karşılaştırılan son uyarı kuralları: L1 oransal (seçildi), L2 kademe tablosu (sınırda sıçrar), L3 T/100 (60 günde 1 sa: geç), L4 sabit 1 sa. Dağılım: geometrik (seçildi), karesel (son iki uyarı üst üste), eşit (sıklaşma yok). Tamamen elle ayar süre değişince kırıldığı için seçilmedi.
 
 Girdiler (cfg `timer`):
 
 | Alan | Tip | Aralık | Varsayılan | Anlamı |
 |---|---|---|---|---|
 | `warn_count` | u8 | 1…10 | 3 | uyarı sayısı N |
-| `warn_first_s` | u32 | 0 ya da 60…toplam−60 | 0 | ilk uyarı süre dolmadan kaç sn önce; 0 = otomatik |
+| `warn_first_s` | u32 | 0 ya da > son uyarı | 0 | ilk uyarı kaç sn kala; 0 = otomatik (N=1'de kullanılmaz) |
 
-Hesap (`warn_sched.c`, saf C, masaüstü testli; tüm değerler saniye):
+Hesap (`components/app/core/warn_sched.c`, saf C; saniye):
 
 ```
-T  = toplam süre
-W  = warn_first_s ? warn_first_s : min(T/2, 3 gün)            ilk uyarı (kala)
-R  = clamp(T/100, 60, 3600)                                    tepki payı
-L  = N == 1 ? W : max(W / 2^(N−1), R)                          son uyarı (kala)
-k. uyarı (k = 0…N−1):  off_k = W × (L/W)^(k/(N−1))             (N = 1 → off_0 = W)
+T  = toplam süre (birimden bağımsız)
+F  = clamp(T/10, 15, 60)               en kısa uyarı ve iki uyarı arası en kısa süre
+W  = warn_first_s ? warn_first_s : T/4  ilk uyarı (F1: son çeyrek)
+L  = max(min(T/24, 1 gün), F)           son uyarı (L1: son şans)
+N = 1  → tek uyarı L
+N ≥ 2  → off_0 = W, off_{N-1} = L,
+         off_k = W·(L/W)^(k/(N−1))       (geometrik: her uyarıda kalan süre aynı oranda azalır)
+         sondan başa her aralık ≥ F'ye yaslanır; ilk uyarıya taşarsa aradakiler eşit aralığa düşer
 ```
 
-Doğrulama (kayıtta; sessiz kırpma yok):
-- `W < T` ve `L ≥ 60` olmalı.
-- Ardışık uyarılar arası `off_k − off_{k+1} ≥ 60 sn` olmalı.
-- Geçmezse kayıt reddedilir: `validation`, alan `warn_count`, mesajda bu süreye sığan **en çok N** (`warn_max_count(T, W)`).
+Doğrulama (sessiz kırpma yok): `L < T`; N ≥ 2 için `L < W < T` ve `W ≥ L + (N−1)·F`. Geçmezse `validation`, alan `warn_count` (ya da `warn_first_s`), yanıtta `max = warn_max_count(T, W)`.
 
-Örnekler:
+Örnekler (otomatik):
 
-| T | N | W | Uyarılar (kala) |
-|---|---|---|---|
-| 7 gün | 4 | 72 sa (oto) | 72 · 36 · 18 · 9 sa |
-| 24 sa | 3 | 12 sa (oto) | 12 · 6 · 3 sa |
-| 10 dk | 3 | 5 dk (oto) | 300 · 150 · 75 sn |
-| 60 gün | 10 | 72 sa (oto) | 72 · 45 · 28 · 17 · 11 · 6,7 · 4,2 · 2,6 · 1,6 · 1 sa |
-| 2 dk | 1 | 60 sn (oto) | 60 sn |
+| T | N | Uyarılar (kala) |
+|---|---|---|
+| 24 sa | 4 | 6 · 3,3 · 1,8 · 1 sa (18. ve 23. saat) |
+| 2 gün | 3 | 12 sa · 4,9 sa · 2 sa |
+| 7 gün | 4 | 42 · 23 · 12,7 · 7 sa |
+| 60 gün | 4 | 15 · 6,1 · 2,5 · 1 gün |
+| 60 gün | 10 | 15 · 11,1 · 8,2 · 6,1 · 4,5 · 3,3 · 2,5 · 1,8 · 1,4 · 1 gün |
+| 60 dk | 10 | 15 dk … 2,5 dk |
+| 1 dk | 1 | 15 sn |
+
+Kapasite: saat ve gün birimlerinde her değere 10 uyarı sığar; dakikada 1 dk → 1, 2–11 dk → 2, 12–43 dk → 3…9, 44 dk+ → 10.
+
+Doğrulama kanıtı: `test/host/explore_warn.c` 25.190 kombinasyon (3 birim × 1–60 × N 1–10 × otomatik + 13 elle W), kural ihlali 0; `test/host/test_warn_sched.c` kullanıcı örnekleri.
 
 ## Çalışma zamanı davranışı
 
