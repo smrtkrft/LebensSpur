@@ -111,5 +111,44 @@ s, j, _ = req("PUT", "/api/auth/password", {"current": "test1234", "next": ""});
 cookie = None
 s, j, _ = req("GET", "/api/status"); check("parolasız tekrar açık", s == 200, (s, j))
 
+print("== mail grupları ve ekler")
+import time
+s, j, _ = req("PUT", "/api/groups/0", {"name": "Aile", "subject": "Acil", "body": "Mesaj", "recipients": "a@b.ch, c@d.ch"})
+check("grup kaydet", s == 200 and j["data"]["name"] == "Aile", (s, j))
+s, j, _ = req("GET", "/api/groups"); check("grup listesi", s == 200 and j["data"][0]["recipients"] == 2, j)
+s, j, _ = req("PUT", "/api/groups/10", {"name": "x"}); check("grup 10 → 404", s == 404, (s, j))
+def upload(g, name, data):
+    c = http.client.HTTPConnection(HOST, 80, timeout=20)
+    c.request("PUT", f"/api/groups/{g}/files/{name}", body=data, headers={"X-LS-Request": "1", "Host": HOST})
+    r = c.getresponse(); b = r.read()
+    return r.status, json.loads(b) if b else None
+s, j = upload(0, "not%20a.txt", b"merhaba\n" * 1000); check("ek yükle (URL kodlu ad)", s == 200, (s, j))
+s, j = upload(0, "..%2Fka%C3%A7%C4%B1%C5%9F", b"x"); check("geçersiz ad → 400", s == 400, (s, j))
+s, j = upload(5, "a.txt", b"x"); check("kaydedilmemiş gruba → 409", s == 409, (s, j))
+s, j, _ = req("GET", "/api/groups/0/files"); check("ek listesi", s == 200 and j["data"]["files"][0]["name"] == "not a.txt" and j["data"]["files"][0]["size"] == 8000, j)
+s, j, _ = req("DELETE", "/api/groups/0/files/not%20a.txt", headers={"X-LS-Request": "1"}); check("ek sil", s == 200, (s, j))
+
+print("== kanal testleri (gerçek ağ)")
+def run_test(ch, wait=40):
+    s, j, _ = req("POST", f"/api/test/{ch}", headers={"X-LS-Request": "1"})
+    if s != 200: return s, j
+    jid = j["data"]["job_id"]
+    for _ in range(wait):
+        time.sleep(1)
+        s, j, _ = req("GET", f"/api/jobs/{jid}")
+        if j["data"]["state"] in ("done", "failed"): return s, j["data"]
+    return s, j["data"]
+s, d = run_test("smtp"); check("smtp ayarsız → ayar hatası", d["state"] == "failed", d)
+req("PUT", "/api/config/webhook", {"url": "https://httpbin.org/post", "method": "POST"})
+s, d = run_test("webhook"); check("webhook https (CA paketi)", d["state"] == "done", d)
+req("PUT", "/api/config/mqtt", {"url": "mqtt://broker.hivemq.com", "topic": "lebensspur/2611/test"})
+s, d = run_test("mqtt"); check("mqtt broker.hivemq.com (düz)", d["state"] == "done", d)
+req("PUT", "/api/config/mqtt", {"url": "mqtts://broker.hivemq.com:8883"})
+s, d = run_test("mqtt"); check("mqtts broker.hivemq.com:8883 (TLS)", d["state"] == "done", d)
+s, j, _ = req("GET", "/api/config/actions")
+check("testi geçen kanallar otomatik açıldı", j["data"]["early_webhook"] and j["data"]["trig_mqtt"], j["data"])
+s, j, _ = req("DELETE", "/api/groups/0", headers={"X-LS-Request": "1"}); check("grup sil", s == 200, (s, j))
+s, j, _ = req("GET", "/api/jobs/999"); check("bilinmeyen iş → 404", s == 404, (s, j))
+
 print(f"== sonuç: {fails} hata")
 sys.exit(1 if fails else 0)

@@ -8,7 +8,7 @@
 
 typedef enum { JK_TRIGGER, JK_EARLY_WARN, JK_TEST } job_kind_t;          /* öncelik sırası */
 typedef enum { CH_SMTP, CH_TELEGRAM, CH_WEBHOOK, CH_MQTT, CH__COUNT } channel_t;
-typedef enum { JS_FREE, JS_PENDING, JS_RUNNING, JS_DONE, JS_FAILED, JS_CANCELLED } job_state_t;
+typedef enum { JS_FREE, JS_PENDING, JS_RUNNING, JS_DONE, JS_FAILED, JS_CANCELLED } ob_state_t;
 typedef enum { CR_OK, CR_RETRY, CR_PERM, CR_CONFIG } channel_result_t;
 
 #define OUTBOX_MAX     24
@@ -20,6 +20,7 @@ typedef struct {
     uint16_t seq;
     uint8_t  kind, ch, group, warn_idx, attempt, state;
     bool     config_blocked;
+    uint16_t ext_id;                 /* TEST: jobs kimliği (GUI ilerleme sorgusu) */
     int64_t  not_before_us;
 } ob_job_t;
 
@@ -51,7 +52,7 @@ typedef struct { uint8_t pending, done, failed, cancelled; } ob_summary_t;
 void  outbox_init(outbox_t *o);
 int   outbox_plan_trigger(outbox_t *o, const ob_channels_t *c, uint16_t group_mask, int64_t now_us);
 int   outbox_plan_early(outbox_t *o, const ob_channels_t *c, uint8_t warn_idx, int64_t now_us);
-int   outbox_plan_test(outbox_t *o, channel_t ch, int64_t now_us);     /* iş seq'i, yer yoksa -1 */
+int   outbox_plan_test(outbox_t *o, channel_t ch, uint16_t ext_id, int64_t now_us);   /* iş seq'i, yer yoksa -1 */
 /* Sıradaki iş (ağ yoksa NULL). Seçilen iş RUNNING olur. */
 ob_job_t *outbox_take_next(outbox_t *o, int64_t now_us, bool link_up);
 void  outbox_on_result(outbox_t *o, uint16_t seq, channel_result_t r, int64_t now_us, uint32_t rnd);

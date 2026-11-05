@@ -67,9 +67,11 @@ int outbox_plan_early(outbox_t *o, const ob_channels_t *c, uint8_t widx, int64_t
     return n;
 }
 
-int outbox_plan_test(outbox_t *o, channel_t ch, int64_t now)
+int outbox_plan_test(outbox_t *o, channel_t ch, uint16_t ext_id, int64_t now)
 {
-    return add(o, JK_TEST, ch, ch == CH_SMTP ? OUTBOX_OWNER : 0, 0, now);
+    int seq = add(o, JK_TEST, ch, ch == CH_SMTP ? OUTBOX_OWNER : 0, 0, now);
+    if (seq > 0) ((ob_job_t *)outbox_find(o, (uint16_t)seq))->ext_id = ext_id;
+    return seq;
 }
 
 ob_job_t *outbox_take_next(outbox_t *o, int64_t now, bool link_up)

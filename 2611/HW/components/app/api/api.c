@@ -7,6 +7,7 @@
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "api.h"
+#include "api_priv.h"
 #include "cfg.h"
 #include "core.h"
 #include "evlog.h"
@@ -272,8 +273,14 @@ static const http_route_t s_routes[] = {
     { "/api/wifi/{}", HTTP_DELETE, HR_AUTH | HR_CSRF, h_wifi_delete },
 };
 
+/* alt tablolar tek tabloda birleştirilir (http katmanı tek dizi bekler) */
+static http_route_t s_all[sizeof s_routes / sizeof s_routes[0] + 16];
+
 const http_route_t *api_routes(size_t *count)
 {
-    *count = sizeof s_routes / sizeof s_routes[0];
-    return s_routes;
+    size_t n = 0;
+    for (size_t i = 0; i < sizeof s_routes / sizeof s_routes[0]; i++) s_all[n++] = s_routes[i];
+    for (size_t i = 0; i < api_group_routes_n && n < sizeof s_all / sizeof s_all[0]; i++) s_all[n++] = api_group_routes[i];
+    *count = n;
+    return s_all;
 }

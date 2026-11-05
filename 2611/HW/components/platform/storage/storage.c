@@ -44,6 +44,10 @@ static vol_t s_vol[2] = {
 static esp_flash_t *s_chip;
 static uint32_t s_chip_size;
 static SemaphoreHandle_t s_lock;
+/* Çip kilidi: /log ve /data aynı SPI flash çipinde. İki bölüme eşzamanlı erişim (ör. sys_worker /log'a
+ * yazarken httpd /data'da opendir) ~15 sn takılmaya yol açtı (2026-11-05, cihazda tekrarlandı).
+ * Her dosya işlemi storage_acquire..release arasında bu özyinelemeli kilidi tutar → erişimler sıralı. */
+static SemaphoreHandle_t s_chip_lock;
 static char s_note[96];
 
 static vol_t *vol(const char *mount)
@@ -136,7 +140,8 @@ static void mount_volume(vol_t *v)
 esp_err_t storage_init(void)
 {
     s_lock = xSemaphoreCreateMutex();
-    if (!s_lock) return ESP_ERR_NO_MEM;
+    s_chip_lock = xSemaphoreCreateRecursiveMutex();
+    if (!s_lock || !s_chip_lock) return ESP_ERR_NO_MEM;
     spi_bus_config_t bus = { .mosi_io_num = PIN_MOSI, .miso_io_num = PIN_MISO, .sclk_io_num = PIN_SCLK,
                              .quadwp_io_num = -1, .quadhd_io_num = -1 };
     esp_err_t r = spi_bus_initialize(HOST, &bus, SPI_DMA_DISABLED);
@@ -184,10 +189,12 @@ bool storage_acquire(const char *mount)
 {
     vol_t *v = vol(mount);
     if (!v || !s_lock) return false;
+    xSemaphoreTakeRecursive(s_chip_lock, portMAX_DELAY);
     xSemaphoreTake(s_lock, portMAX_DELAY);
     bool ok = v->state == STG_MOUNTED;
     if (ok) v->users++;
     xSemaphoreGive(s_lock);
+    if (!ok) xSemaphoreGiveRecursive(s_chip_lock);
     return ok;
 }
 
@@ -198,6 +205,7 @@ void storage_release(const char *mount)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     if (v->users > 0) v->users--;
     xSemaphoreGive(s_lock);
+    xSemaphoreGiveRecursive(s_chip_lock);
 }
 
 /* FORMATTING'e geçip kullanıcıların bitmesini bekler; kilit alınmış dönerse ESP_OK */
@@ -226,10 +234,13 @@ esp_err_t storage_format(const char *mount)
 {
     vol_t *v = vol(mount);
     if (!v || !v->part) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTakeRecursive(s_chip_lock, portMAX_DELAY);
     esp_err_t r = begin_exclusive(v);
-    if (r != ESP_OK) return r;
-    r = format_locked(v);
-    xSemaphoreGive(s_lock);
+    if (r == ESP_OK) {
+        r = format_locked(v);
+        xSemaphoreGive(s_lock);
+    }
+    xSemaphoreGiveRecursive(s_chip_lock);
     return r;
 }
 
@@ -237,8 +248,9 @@ esp_err_t storage_erase_data_full(void (*progress)(int pct))
 {
     vol_t *v = &s_vol[1];
     if (!v->part) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTakeRecursive(s_chip_lock, portMAX_DELAY);
     esp_err_t r = begin_exclusive(v);
-    if (r != ESP_OK) return r;
+    if (r != ESP_OK) { xSemaphoreGiveRecursive(s_chip_lock); return r; }
     if (esp_littlefs_mounted(v->label)) esp_vfs_littlefs_unregister(v->label);
     uint32_t size = (uint32_t)v->part->size;
     for (uint32_t off = 0; off < size && r == ESP_OK; off += ERASE_STEP) {
@@ -248,14 +260,16 @@ esp_err_t storage_erase_data_full(void (*progress)(int pct))
     if (r == ESP_OK) r = format_locked(v);
     else v->state = STG_ERROR;
     xSemaphoreGive(s_lock);
+    xSemaphoreGiveRecursive(s_chip_lock);
     return r;
 }
 
 esp_err_t storage_info(const char *mount, size_t *total, size_t *used)
 {
-    vol_t *v = vol(mount);
-    if (!v || v->state != STG_MOUNTED) return ESP_ERR_INVALID_STATE;
-    return esp_littlefs_info(v->label, total, used);
+    if (!storage_acquire(mount)) return ESP_ERR_INVALID_STATE;
+    esp_err_t r = esp_littlefs_info(vol(mount)->label, total, used);
+    storage_release(mount);
+    return r;
 }
 
 uint32_t storage_chip_size(void) { return s_chip_size; }

@@ -20,6 +20,7 @@
 #include "io.h"
 #include "net_wifi.h"
 #include "api.h"
+#include "delivery.h"
 #include "cJSON.h"
 
 static const char *TAG = "main";
@@ -72,6 +73,13 @@ void app_main(void)
     evlog_file_start();
     log_tail();
 
+    evlog_boot_info_t bi;
+    evlog_boot_info(&bi);
+    bool brownout = strcmp(bi.cause, "brownout") == 0;
+    if (brownout) {                                  /* K5: brownout→reboot döngüsünü kır, içerik değişmez */
+        core_quiet_for(30);
+        evlog_write(EVL_WARN, "power", "brownout sonrasi acilis: TX tavani dusuk, teslimat 30 sn ertelendi");
+    }
     r = core_start();
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "core_start: %s", esp_err_to_name(r));
 
@@ -87,6 +95,9 @@ void app_main(void)
 #endif
     r = net_wifi_start(on_link);
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "wifi: %s", esp_err_to_name(r));
+    if (brownout) net_wifi_set_tx_cap_q(32);       /* ~8 dBm; ilk kararlı bağlantıdan sonra kaldırılabilir */
+    r = delivery_start();
+    if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "delivery: %s", esp_err_to_name(r));
 
     size_t nroutes;
     const http_route_t *routes = api_routes(&nroutes);

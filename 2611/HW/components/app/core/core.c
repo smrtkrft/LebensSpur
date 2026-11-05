@@ -47,6 +47,12 @@ static outbox_t s_ob;
 static bool s_link_up, s_delivery_busy, s_relay_out, s_inverted;
 static rt_blob_t s_rt_last;
 static int64_t s_last_ckpt_us;
+static int64_t s_quiet_until_us;               /* bu ana kadar yeni teslimat başlamaz */
+static int64_t s_dispatch_at_us;               /* süren teslimatın başlangıcı (bekçi) */
+
+#define NET_SETTLE_US   (10LL * 1000000LL)      /* ağ bağlanınca yerleşme */
+#define RELAY_QUIET_US  (2LL * 1000000LL)       /* röle enerjilenirken TLS başlamasın (güç piki) */
+#define DELIVERY_HANG_US (8LL * 60 * 1000000LL)  /* 120 sn + 5 ek × 60 sn + pay */
 
 static int64_t now_us(void) { return esp_timer_get_time(); }
 
@@ -114,6 +120,7 @@ static void relay_apply(int64_t now)
     if (on != s_relay_out) {
         s_relay_out = on;
         evlog_mark(EVM_RELAY, on);
+        if (on && s_quiet_until_us < now + RELAY_QUIET_US) s_quiet_until_us = now + RELAY_QUIET_US;
     }
 }
 
@@ -154,11 +161,12 @@ static void publish(int64_t now)
 
 static void dispatch_next(int64_t now)
 {
-    if (s_delivery_busy || !s_dispatch) return;
+    if (s_delivery_busy || !s_dispatch || now < s_quiet_until_us) return;
     ob_job_t *j = outbox_take_next(&s_ob, now, s_link_up);
     if (!j) return;
-    if (s_dispatch(j, s_ob.trigger_seq)) {
+    if (s_dispatch(j, s_ob.trigger_seq, timer_sm_remaining_s(&s_timer, now), s_timer.plan.n)) {
         s_delivery_busy = true;
+        s_dispatch_at_us = now;
     } else {
         j->state = JS_PENDING;                       /* delivery hazır değil: sonra */
     }
@@ -219,6 +227,11 @@ static void handle(const core_event_t *ev)
         }
         on_timer_actions(a, now);
         if (s_timer.state == TS_RUNNING && now - s_last_ckpt_us >= CKPT_US) rt_save(false);
+        if (s_delivery_busy && now - s_dispatch_at_us > DELIVERY_HANG_US) {
+            evlog_write(EVL_ERR, "sys", "teslimat 8 dk'dir yanit vermiyor: yeniden baslatma");
+            rt_save(true);
+            sys_restart(RST_DELIVERY_HANG);
+        }
         break;
     }
     case EV_BUTTON_PRESS:
@@ -269,7 +282,7 @@ static void handle(const core_event_t *ev)
         evlog_write(EVL_INFO, "relay", "role testi");
         break;
     case EV_TEST_SEND:
-        outbox_plan_test(&s_ob, (channel_t)ev->u.test.ch, now);
+        outbox_plan_test(&s_ob, (channel_t)ev->u.test.ch, ev->u.test.job_id, now);
         break;
     case EV_DELIVERY_RESULT:
         s_delivery_busy = false;
@@ -278,6 +291,7 @@ static void handle(const core_event_t *ev)
         break;
     case EV_NET_LINK:
         s_link_up = ev->u.link.up;
+        if (s_link_up && s_quiet_until_us < now + NET_SETTLE_US) s_quiet_until_us = now + NET_SETTLE_US;
         break;
     case EV_CFG_CHANGED:
         if (ev->u.cfg.section == CFG_SEC_TIMER) {
@@ -389,3 +403,8 @@ void core_get_status(app_status_t *out)
 
 void core_set_dispatch(core_dispatch_t fn) { s_dispatch = fn; }
 void core_set_status_cb(core_status_cb_t fn) { s_status_cb = fn; }
+void core_quiet_for(uint32_t seconds)
+{
+    int64_t t = now_us() + (int64_t)seconds * 1000000LL;
+    if (t > s_quiet_until_us) s_quiet_until_us = t;      /* tek yazar sayılır: açılışta, görev başlamadan */
+}

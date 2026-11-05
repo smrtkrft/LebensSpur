@@ -29,7 +29,7 @@ typedef struct {
         struct { bool up; } link;
         struct { uint8_t section; } cfg;                                   /* CFG_SEC__COUNT = grup */
         struct { uint8_t level; } factory;
-        struct { uint8_t ch; } test;                                       /* channel_t */
+        struct { uint8_t ch; uint16_t job_id; } test;                      /* channel_t, jobs kimliği */
     } u;
 } core_event_t;
 
@@ -49,7 +49,7 @@ typedef struct {
 } app_status_t;
 
 /* delivery görevine iş verme kancası (adım 4). false → meşgul/yok; iş sonra yeniden denenir. */
-typedef bool (*core_dispatch_t)(const ob_job_t *job, uint16_t trigger_seq);
+typedef bool (*core_dispatch_t)(const ob_job_t *job, uint16_t trigger_seq, uint32_t remaining_s, uint8_t warn_n);
 typedef void (*core_status_cb_t)(void);         /* durum değişti (SSE push); kısa olmalı */
 
 esp_err_t core_start(void);
@@ -58,3 +58,4 @@ void      core_post_from_isr(const core_event_t *ev);
 void      core_get_status(app_status_t *out);
 void      core_set_dispatch(core_dispatch_t fn);
 void      core_set_status_cb(core_status_cb_t fn);
+void      core_quiet_for(uint32_t seconds);                 /* teslimatı geciktir (brownout açılışı, K5) */

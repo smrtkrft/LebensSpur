@@ -11,7 +11,7 @@ void tearDown(void) {}
 
 static void test_trigger_plan_and_priority(void)
 {
-    outbox_plan_test(&o, CH_TELEGRAM, 0);
+    outbox_plan_test(&o, CH_TELEGRAM, 9, 0);
     outbox_plan_early(&o, &all, 2, 0);
     TEST_ASSERT_EQUAL_INT(4, outbox_plan_trigger(&o, &all, 0x0005, 0));   /* 2 grup maili + webhook + mqtt */
     TEST_ASSERT_NULL(outbox_take_next(&o, 0, false));                     /* ağ yok */

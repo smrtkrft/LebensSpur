@@ -4,7 +4,8 @@
  *   /data (lsdata, kalan)    : yedek, ekler, dosyalar. Sessiz biçimleme YOK: bozuksa ERROR, kullanıcı karar verir.
  * Her bölümde ".ls2611" düzen işareti: yoksa bölüm başka bir düzenden kalmıştır (ALTE slotları) ve
  * 2611 verisi içermez; biçimlenir.
- * Dosya erişimi storage_acquire/release arasında yapılır; biçimleme sayaç sıfırlanınca çalışır.
+ * Dosya erişimi storage_acquire/release arasında yapılır: bu, iki bölümü paylaşan çip için özyinelemeli
+ * bir kilit tutar (eşzamanlı erişim takılmaya yol açıyordu). Kilidi kısa tutun: uzun akışlarda parça başına alın.
  */
 #pragma once
 #include <stdbool.h>
