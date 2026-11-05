@@ -26,3 +26,11 @@ Neue/sdkconfig.old
 # IDE / Editor
 .claude/
 .vscode/
+
+# esp_bin/2611 — 2611 hattinin uretilen dosyalari (dependencies.lock TRACKED)
+esp_bin/2611/build/
+esp_bin/2611/sdkconfig
+esp_bin/2611/sdkconfig.old
+esp_bin/2611/managed_components/
+esp_bin/test-build/
+esp_bin/firmware/*.elf
