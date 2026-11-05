@@ -32,7 +32,7 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | 2026-11-05 | Kapalı süre sayaçtan **düşmez** (bugünkü davranış korunur) | Kullanıcı kararı; duvar saati bağımlılığı istenmedi |
 | 2026-11-05 | Tetikleme + teslimat sonrası sayaç **durur**; erteleme yeni tur başlatır | TETİKLENDİ kalıcı durum, GUI'de belirgin |
 | 2026-11-05 | **Her erteleme** (düğme/web/API) röleyi söndürür | Tek erteleme kapısı; kaynak fark etmez |
-| 2026-11-05 | Alarm sayısı/aralığı mantığı **bugünkü haliyle** taşınır, izole edilir; yeniden tasarım ayrı oturum | bkz. `2611/yapilacaklar.md` |
+| 2026-11-05 | ~~Alarm mantığı bugünkü haliyle taşınır~~ → **yeni alarm modeli C**: 1…10 uyarı, sona doğru logaritmik sıklaşan pencere, otomatik ilk uyarı `min(T/2, 3 gün)`, tepki payı, sessiz kırpma yok | `docs/06-alarm-tasarim.md`; A/B/C/D/E karşılaştırması |
 | 2026-11-05 | Telegram **yalnızca erken uyarıda** (bugünkü davranış) | Kullanıcı kararı: Telegram sahibine uyarı kanalı |
 | 2026-11-05 | SMTP sertifika doğrulaması **varsayılan açık**, kullanıcı kapatabilir (uyarılı, günlüklü) | MITM ile parola ele geçirme riski kapanır; özel sunucular için kaçış yolu kalır |
 | 2026-11-05 | Yapılandırılıp testi geçen kanal **otomatik açık** gelir; röle açık gelir | "Ayarı girdim ama gitmedi" tuzağı kalkar |
