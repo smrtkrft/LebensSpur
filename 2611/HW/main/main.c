@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "http.h"
 #include "cfg.h"
+#include "evlog.h"
 
 static const char *TAG = "main";
 
@@ -28,9 +29,14 @@ void app_main(void)
     ESP_LOGI(TAG, "%s v%s (IDF %s)", d->project_name, d->version, d->idf_ver);
     log_heap("acilis");
 
+    evlog_init();
     esp_err_t r = cfg_init();
-    ESP_LOGI(TAG, "cfg_init: %s, not=%s, seq=%u", esp_err_to_name(r),
-             cfg_boot_note() ? cfg_boot_note() : "-", (unsigned)cfg_seq());
+    if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "cfg_init: %s", esp_err_to_name(r));
+    if (cfg_boot_note()) evlog_write(EVL_WARN, "sys", "%s", cfg_boot_note());
+    evlog_write(EVL_INFO, "sys", "acilis v%s", d->version);
+
+    char line[320];
+    while (evlog_pop_line(line, sizeof line)) ESP_LOGI(TAG, "halka: %s", line);   /* gecici: dosya 1.5'te */
 
     size_t n; const char *hash; size_t total = 0;
     const http_embedded_t *f = http_embedded_files(&n, &hash);
