@@ -27,13 +27,16 @@ static uint16_t s_group_used;            /* bit i: grp i kullanımda */
 static SemaphoreHandle_t s_lock;
 static cfg_change_cb_t s_change_cb;
 static char s_boot_note[48];
+/* NVS blob G/C tamponu: yığında 4 KB açılamaz (main görevi 3,5 KB). Yalnız s_lock altında
+ * (ya da cfg_init sırasında, henüz başka görev yokken) kullanılır. */
+static uint8_t s_io[sizeof(blob_hdr_t) + 4000];
 
 static void *sec_ptr(const cfg_section_desc_t *d) { return (char *)&s_cfg + d->offset; }
 
 static esp_err_t blob_read(nvs_handle_t h, const char *key, const cfg_section_desc_t *d, void *out)
 {
-    uint8_t buf[sizeof(blob_hdr_t) + 4000];
-    size_t len = sizeof(buf);
+    uint8_t *buf = s_io;
+    size_t len = sizeof(s_io);
     esp_err_t r = nvs_get_blob(h, key, buf, &len);
     if (r != ESP_OK) return r;
     blob_hdr_t hd;
@@ -47,7 +50,7 @@ static esp_err_t blob_read(nvs_handle_t h, const char *key, const cfg_section_de
 
 static esp_err_t blob_write(nvs_handle_t h, const char *key, const cfg_section_desc_t *d, const void *data)
 {
-    uint8_t buf[sizeof(blob_hdr_t) + 4000];
+    uint8_t *buf = s_io;
     blob_hdr_t hd = { .schema = d->schema, .len = d->size };
     memcpy(buf, &hd, sizeof hd);
     memcpy(buf + sizeof hd, data, d->size);
@@ -170,9 +173,8 @@ esp_err_t cfg_copy_section(cfg_section_t s, void *out)
     return ESP_OK;
 }
 
-esp_err_t cfg_group_get(int idx, cfg_group_t *out)
+static esp_err_t group_get_locked(int idx, cfg_group_t *out)
 {
-    if (idx < 0 || idx >= CFG_GROUP_COUNT) return ESP_ERR_INVALID_ARG;
     if (!(s_group_used & (1u << idx))) return ESP_ERR_NOT_FOUND;
     nvs_handle_t h;
     esp_err_t r = nvs_open(NS, NVS_READONLY, &h);
@@ -184,12 +186,21 @@ esp_err_t cfg_group_get(int idx, cfg_group_t *out)
     return r;
 }
 
+esp_err_t cfg_group_get(int idx, cfg_group_t *out)
+{
+    if (idx < 0 || idx >= CFG_GROUP_COUNT) return ESP_ERR_INVALID_ARG;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    esp_err_t r = group_get_locked(idx, out);
+    xSemaphoreGive(s_lock);
+    return r;
+}
+
 esp_err_t cfg_group_set_json(int idx, const cJSON *obj, char *err, size_t errlen, const char **errfield)
 {
     if (idx < 0 || idx >= CFG_GROUP_COUNT) return ESP_ERR_INVALID_ARG;
     static cfg_group_t g;
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    if (cfg_group_get(idx, &g) != ESP_OK) cfg_fields_defaults(&cfg_group_desc, &g);
+    if (group_get_locked(idx, &g) != ESP_OK) cfg_fields_defaults(&cfg_group_desc, &g);
     esp_err_t r = cfg_fields_apply_json(&cfg_group_desc, &g, obj, false, err, errlen, errfield);
     if (r == ESP_OK) {
         g.used = true;
