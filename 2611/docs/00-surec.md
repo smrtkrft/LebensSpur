@@ -67,3 +67,4 @@ Temel kararlar (kullanıcı, 2026-11-05):
 - Commit mesajları Türkçe. Yazar yalnızca kullanıcının git kimliği.
 - Derleme çıktıları `esp_bin/` altında; `2611/` altına üretilen dosya yazılmaz.
 - Her adımdan sonra USB'deki cihaz flash'lanır ve açılış logu alınır.
+| 2026-11-05 | Arayüz görünümü **ALTE tasarımına birebir** dayanır (düzen, renkler, halka, sekmeler, akordeonlar, ikonlar); iç yapı ve hatalar düzelir. 3.4'teki sayfa yalnız geçici iskelet. Sıra: önce teslimat (adım 4), sonra arayüz (adım 5) | Kullanıcı kararı; ALTE tasarımı kullanıcının |
