@@ -20,7 +20,7 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | 1 | Kod ve cihaz işlevini anla, haritala, not çıkar | tamam (2026-11-05) | `docs/01-harita/01…07.md` — 6 harita + bulgu kaydı (46 bulgu, 11 ilke, 10 ürün sorusu) |
 | 2 | İlk plan | tamam (2026-11-05), kullanıcı onayladı | `docs/02-plan-ilk.md` — A–D bölümleri onaylı, 22 ürün kararı, 15 araştırma sorusu |
 | 3 | Plandaki özelliklerin daha iyisi var mı araştır | tamam (2026-11-05) | `docs/03-arastirma.md` özet + `docs/03-arastirma/01…07` (2 726 satır): 14 plan düzeltmesi, ~60 iyileştirme, 5 kullanıcı kararı (K1–K5) |
-| 4 | Son plan | sürüyor — K1–K5 kararları bekleniyor | `docs/04-plan-son.md` |
+| 4 | Son plan | tamam (2026-11-05) | `docs/04-plan-son.md` |
 | 5 | Uygulama (adım adım, her adım derleme + flash + commit) | bekliyor | `2611/HW`, `2611/GUI` |
 | 6 | Denetim, en ince ayrıntıya kadar | bekliyor | `docs/05-denetim.md` |
 
@@ -53,6 +53,13 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | 2026-11-05 | `build.sh` varsayılan **2611**, `--alte` eski ağaç | Aktif hat 2611 |
 | 2026-11-05 | Ek yükleme `PUT /api/groups/<i>/files/<ad>` ham gövde | Cihazda multipart yok |
 | 2026-11-05 | 128 KB `coredump` bölümü | Teşhis; kullanıcı itiraz etmedi |
+| 2026-11-05 | **K1** OTA için **ayrı GitHub deposu**; `project_name` kapısı zorunlu | `smrtkrft/LebensSpur` `releases/latest` başka ürünü (DMF) gösteriyor; API'siz akış yalnız ayrı depoda çalışır |
+| 2026-11-05 | **K2** Harici flash: `/log` 1 MB + `/data` kalan | Günlük otomatik onarım, kademe-2'de hayatta kalır, ek yazımı günlüğü bozamaz |
+| 2026-11-05 | **K3** MQTT: `net_tls` üzerinde kendi hafif 3.1.1 tek-yayın istemcisi; esp-mqtt yedek | −14 KB flash, "görev yaratılmaz" kuralı korunur |
+| 2026-11-05 | **K4** Yeniden deneme: TRIGGER 0/1/5/15/30 dk → 30 dk'da bir ±%10 jitter, 72 saat açık süre ya da erteleme; EARLY_WARN 3 deneme 0/1/5 dk | RFC 5321 §4.5.4, MTA uygulamaları, greylisting |
+| 2026-11-05 | Araştırmadan gelen 14 plan düzeltmesi ve iyileştirmeler kabul (bkz. `03-arastirma.md` §2–3) | Kanıtlı bulgular; ürün davranışını değiştirenler ayrıca soruldu |
+| 2026-11-05 | **K5** Brownout sonrası kısa aralıklı açılışta TX tavanı geçici 8 dBm + teslimat 30 s ertelenir; **içerik ve ekler değişmez** | Brownout-reboot döngüsü kırılır, teslimat önceliği korunur |
+| 2026-11-05 | OTA release deposu **`smrtkrft/LebensSpur-firmware`** (yalnız release; kaynak bu depoda); varlıklar `lebensspur.bin` + `lebensspur.elf` | Ürün adıyla kalıcı; API'siz akış |
 
 ## Çalışma kuralları
 
