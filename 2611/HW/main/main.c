@@ -18,6 +18,7 @@
 #include "core.h"
 #include "io.h"
 #include "net_wifi.h"
+#include "api.h"
 
 static const char *TAG = "main";
 
@@ -74,6 +75,14 @@ void app_main(void)
 
     r = net_wifi_start(on_link);
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "wifi: %s", esp_err_to_name(r));
+
+    size_t nroutes;
+    const http_route_t *routes = api_routes(&nroutes);
+    http_sse_set_source(api_status_json);
+    core_set_status_cb(http_sse_broadcast);
+    r = http_start(routes, nroutes);
+    if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "http: %s", esp_err_to_name(r));
+    log_heap("hazir");
 
 
 

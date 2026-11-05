@@ -141,16 +141,45 @@ static esp_err_t persist(const char *key, const cfg_section_desc_t *d, const voi
     return r;
 }
 
+static esp_err_t set_section(cfg_section_t s, const cJSON *obj, bool internal, char *err, size_t errlen,
+                             const char **errfield);
+
 esp_err_t cfg_set_section_json(cfg_section_t s, const cJSON *obj, char *err, size_t errlen,
                                const char **errfield)
+{
+    return set_section(s, obj, false, err, errlen, errfield);
+}
+
+esp_err_t cfg_set_section_internal(cfg_section_t s, const cJSON *obj)
+{
+    return set_section(s, obj, true, NULL, 0, NULL);
+}
+
+static esp_err_t set_section(cfg_section_t s, const cJSON *obj, bool internal, char *err, size_t errlen,
+                             const char **errfield)
 {
     if ((unsigned)s >= CFG_SEC__COUNT) return ESP_ERR_INVALID_ARG;
     const cfg_section_desc_t *d = &cfg_sections[s];
     static uint8_t tmp[4000];                     /* s_lock altında kullanılır */
     xSemaphoreTake(s_lock, portMAX_DELAY);
     memcpy(tmp, sec_ptr(d), d->size);
-    esp_err_t r = cfg_fields_apply_json(d, tmp, obj, false, err, errlen, errfield);
+    esp_err_t r = cfg_fields_apply_json(d, tmp, obj, internal, err, errlen, errfield);
     if (r == ESP_OK) r = persist(d->nvs_key, d, tmp);
+    if (r == ESP_OK) memcpy(sec_ptr(d), tmp, d->size);
+    xSemaphoreGive(s_lock);
+    if (r == ESP_OK) cfg_backup_schedule();
+    if (r == ESP_OK && s_change_cb) s_change_cb(s);
+    return r;
+}
+
+esp_err_t cfg_reset_section(cfg_section_t s)
+{
+    if ((unsigned)s >= CFG_SEC__COUNT) return ESP_ERR_INVALID_ARG;
+    const cfg_section_desc_t *d = &cfg_sections[s];
+    static uint8_t tmp[4000];
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    cfg_fields_defaults(d, tmp);
+    esp_err_t r = persist(d->nvs_key, d, tmp);
     if (r == ESP_OK) memcpy(sec_ptr(d), tmp, d->size);
     xSemaphoreGive(s_lock);
     if (r == ESP_OK) cfg_backup_schedule();

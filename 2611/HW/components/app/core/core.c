@@ -137,7 +137,16 @@ static void publish(int64_t now)
     st.last_checkin_src = s_status.last_checkin_src;
     st.last_checkin_up_s = s_status.last_checkin_up_s;
     st.version = (uint16_t)(s_status.version + 1);
-    bool changed = memcmp(&st, &s_status, offsetof(app_status_t, version)) != 0;
+    /* zamandan türeyen alanlar (kalan süreler) her saniye değişir: SSE yalnız olayda gitsin,
+     * istemci kalan süreyi kendi saatiyle ilerletir (güç kısıtı) */
+    app_status_t a = st, b = s_status;
+    a.remaining_s = b.remaining_s = 0;
+    a.vac_remaining_s = b.vac_remaining_s = 0;
+    a.relay_remaining_s = b.relay_remaining_s = 0;
+    bool changed = memcmp(&a, &b, offsetof(app_status_t, version)) != 0;
+    s_status.remaining_s = st.remaining_s;          /* okuyanlar güncel kalanı görsün */
+    s_status.vac_remaining_s = st.vac_remaining_s;
+    s_status.relay_remaining_s = st.relay_remaining_s;
     if (changed) s_status = st;
     xSemaphoreGive(s_status_lock);
     if (changed && s_status_cb) s_status_cb();

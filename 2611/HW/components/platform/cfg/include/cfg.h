@@ -44,6 +44,9 @@ uint32_t    cfg_seq(void);                    /* her başarılı kayıtta artar 
 esp_err_t cfg_set_section_json(cfg_section_t s, const cJSON *obj, char *err, size_t errlen,
                                const char **errfield);
 cJSON    *cfg_get_section_json(cfg_section_t s, cfg_export_mode_t mode);
+/* internal alanlara da yazar (örn. auth.hash); yalnız platform kodu kullanır, API değil */
+esp_err_t cfg_set_section_internal(cfg_section_t s, const cJSON *obj);
+esp_err_t cfg_reset_section(cfg_section_t s);         /* varsayılana döndür (gizli alanlar dahil) */
 
 esp_err_t cfg_group_get(int idx, cfg_group_t *out);   /* kullanılmıyorsa ESP_ERR_NOT_FOUND */
 esp_err_t cfg_group_set_json(int idx, const cJSON *obj, char *err, size_t errlen, const char **errfield);

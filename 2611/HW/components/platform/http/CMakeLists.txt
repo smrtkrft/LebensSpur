@@ -3,7 +3,7 @@
 # Kaynak degisince yeniden uretilir (add_custom_command + GLOB CONFIGURE_DEPENDS);
 # ciktilar derleme dizininde, sabit adlarla gomulur.
 if(CMAKE_BUILD_EARLY_EXPANSION)
-    idf_component_register(INCLUDE_DIRS "include" PRIV_REQUIRES cfg)
+    idf_component_register(INCLUDE_DIRS "include" REQUIRES esp_http_server json PRIV_REQUIRES cfg evlog esp_timer mbedtls lwip)
     return()
 endif()
 idf_build_get_property(_python PYTHON)
@@ -21,9 +21,10 @@ foreach(f ${GUI_FILES} gui_hash.txt)
 endforeach()
 file(GLOB_RECURSE _gui_src CONFIGURE_DEPENDS "${GUI_DIR}/src/*")
 
-idf_component_register(SRCS "http.c"
+idf_component_register(SRCS "http.c" "http_auth.c" "http_sse.c" "gui_files.c"
                        INCLUDE_DIRS "include"
-                       PRIV_REQUIRES cfg)
+                       REQUIRES esp_http_server json
+                       PRIV_REQUIRES cfg evlog esp_timer mbedtls lwip)
 ls_strict_warnings(${COMPONENT_LIB})
 
 add_custom_command(
