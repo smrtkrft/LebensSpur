@@ -37,4 +37,19 @@ function(ls_test name test_src)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
+# cfg semasi: uretec host derlemesinde de calisir
+set(CFG_GEN_DIR "${CMAKE_BINARY_DIR}/gen/cfg")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND ${Python3_EXECUTABLE} "${HW}/tools/gen_cfg.py"
+                "${HW}/components/platform/cfg/cfg_schema.json" "${CFG_GEN_DIR}"
+                RESULT_VARIABLE _res)
+if(NOT _res EQUAL 0)
+    message(FATAL_ERROR "gen_cfg.py basarisiz")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${HW}/components/platform/cfg/cfg_schema.json" "${HW}/tools/gen_cfg.py")
+include_directories("${CFG_GEN_DIR}")
+
 ls_test(test_smoke test_smoke.c)
+ls_test(test_cfg_schema test_cfg_schema.c)
+target_sources(test_cfg_schema PRIVATE "${CFG_GEN_DIR}/cfg_schema.gen.c")

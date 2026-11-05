@@ -35,7 +35,7 @@
 | `sdkconfig.defaults` | ALTE seti + `03-arastirma.md` §3 "sdkconfig eklemeleri" |
 | `main/main.c` | `app_main`: açılış sırası §3.4 (düzeltilmiş: röle pini NVS'ten önce) |
 | `main/CMakeLists.txt` | `REQUIRES` tüm bileşenler |
-| `tools/gen_cfg.py` | `cfg_schema.json` → `cfg_schema.gen.h/.c` + `GUI/src/schema.gen.json` (derlemede `add_custom_command`) |
+| `tools/gen_cfg.py` | `cfg_schema.json` → `cfg_schema.gen.h/.c` + `schema.gen.json` (derleme dizini `build/gen/cfg/`; configure adımında, şema değişince yeniden) |
 | `tools/semver.py` | `build.sh` için sürüm doğrulama |
 | `components/platform/cfg/` | `cfg_schema.json`, `cfg.c`, `cfg_nvs.c`, `cfg_json.c`, `cfg_backup.c`, `include/cfg.h`, `include/cfg_schema.gen.h` (üretilen) |
 | `components/platform/evlog/` | `evlog.c` (RAM halkası, RTC kaydı, sınıflandırma), `evlog_file.c` (JSONL yazma/okuma/döndürme), `sys_restart.c`, `include/evlog.h` |
