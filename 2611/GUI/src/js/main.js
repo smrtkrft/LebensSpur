@@ -1,15 +1,24 @@
-// LebensSpur 2611 — giriş noktası.
-import { api, ApiError } from './api.js';
-import { currentLang, loadLang, LANGS, t } from './i18n.js';
+// LebensSpur 2611 — giriş noktası (ALTE arayüz düzeni, yeni API).
+import { ApiError, api } from './api.js';
+import { currentLang, loadLang, t } from './i18n.js';
+import { closePopup, initNav } from './nav.js';
 import { connect, disconnect, onStatus, refresh } from './state.js';
-import { $, errText, toast } from './ui.js';
+import { byId, errText, show, toast } from './ui.js';
+import { initActions } from './pages/actions.js';
+import { initConn } from './pages/conn.js';
+import { initGroups } from './pages/groups.js';
 import { initHome, renderHome } from './pages/home.js';
+import { initInfo } from './pages/info.js';
+import { applyTheme, initSystem } from './pages/system.js';
 import { initTimer } from './pages/timer.js';
 
 function showLogin(on) {
-  $('#login').hidden = !on;
-  $('#app').hidden = on;
-  if (on) { disconnect(); $('#login-pass').focus(); }
+  show(byId('loginOverlay'), on);
+  if (on) {
+    closePopup();
+    disconnect();
+    byId('loginPassword').focus();
+  }
 }
 
 async function start() {
@@ -19,43 +28,40 @@ async function start() {
     connect();
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) showLogin(true);
-    else toast(errText(e), 'err');
+    else { toast(errText(e), 'err'); setTimeout(start, 5000); }
   }
 }
 
-async function boot() {
-  const theme = localStorage.getItem('ls-theme') || 'dark';
-  document.documentElement.dataset.theme = theme;
-  const sel = $('#lang');
-  LANGS.forEach(l => sel.add(new Option(l.toUpperCase(), l)));
-  sel.value = currentLang();
-  sel.onchange = () => loadLang(sel.value).catch(() => {});
-  /* dil yüklenemezse arayüz yine açılır (anahtarlar görünür), 5 sn sonra yeniden denenir */
-  const tryLang = () => loadLang(sel.value).catch(() => setTimeout(tryLang, 5000));
-  tryLang();
+async function login() {
+  const err = byId('loginError');
+  try {
+    await api('POST', '/api/auth/login', { password: byId('loginPassword').value });
+    byId('loginPassword').value = '';
+    show(err, false);
+    start();
+  } catch (e) {
+    err.textContent = e.code === 'locked' ? t('auth.locked', { s: '' }) : e.code === 'offline' ? t('common.offline') : t('auth.wrong');
+    show(err, true);
+  }
+}
 
-  $('#login-form').onsubmit = async ev => {
-    ev.preventDefault();
-    try {
-      await api('POST', '/api/auth/login', { password: $('#login-pass').value });
-      $('#login-pass').value = '';
-      start();
-    } catch (e) {
-      $('#login-err').textContent = e.code === 'locked' ? t('auth.locked', { s: '' }) : t('auth.wrong');
-    }
-  };
-  window.addEventListener('ls-auth-required', () => showLogin(true));
-  $('#btn-settings').onclick = async () => {
-    try { await initTimer(); $('#settings').showModal(); } catch (e) { toast(errText(e), 'err'); }
-  };
-  $('#settings-close').onclick = () => $('#settings').close();
-  $('#theme').onclick = () => {
-    const n = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = n;
-    localStorage.setItem('ls-theme', n);
-  };
+function boot() {
+  applyTheme(localStorage.getItem('ls-theme') || 'dark');
+  /* dil yüklenemezse arayüz yine açılır (HTML'deki İngilizce metin), 5 sn sonra yeniden denenir */
+  const tryLang = () => loadLang(currentLang()).catch(() => setTimeout(tryLang, 5000));
+  tryLang();
+  initNav();
   initHome();
+  initTimer();
+  initConn();
+  initActions();
+  initGroups();
+  initSystem();
+  initInfo();
   onStatus(renderHome);
+  byId('loginBtn').onclick = login;
+  byId('loginPassword').onkeydown = e => { if (e.key === 'Enter') login(); };
+  window.addEventListener('ls-auth-required', () => showLogin(true));
   start();
 }
 

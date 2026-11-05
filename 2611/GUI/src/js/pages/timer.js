@@ -1,14 +1,21 @@
-// Sayaç ayarı: birim, değer, uyarı sayısı, ilk uyarı (otomatik/elle); sunucunun planıyla önizleme.
+// Zamanlayıcı sekmesi: süre (birim + değer), uyarı sayısı 1..10, ilk uyarı (otomatik/elle), önizleme, tatil.
+// Önizleme sunucu formülünün aynısıdır (warn_sched.c); kaydı yine sunucu doğrular.
 import { api } from '../api.js';
+import { Section } from '../form.js';
 import { t } from '../i18n.js';
-import { $, errText, fmtDur, toast } from '../ui.js';
+import { registerTab } from '../nav.js';
+import { onStatus } from '../state.js';
+import { $$, byId, fmtCountdown, fmtDur, show } from '../ui.js';
 
 const UNIT_S = { min: 60, hour: 3600, day: 86400 };
+let unit = 'day';
+let st = null;                     // son durum (SSE)
+let vacTouched = false;            // kullanıcı tatil anahtarına dokundu mu (SSE ezmesin)
 
-// sunucu formülünün aynısı (önizleme için; kaydı sunucu doğrular)
-function plan(T, n, first) {
+export function plan(T, n, first) {
   const F = Math.min(60, Math.max(15, Math.floor(T / 10)));
   const L = Math.max(Math.min(Math.floor(T / 24), 86400), F);
+  if (L >= T) return null;
   if (n === 1) return [L];
   const W = first || Math.floor(T / 4);
   if (W >= T || W <= L || W < L + (n - 1) * F) return null;
@@ -17,50 +24,120 @@ function plan(T, n, first) {
   o.push(L);
   for (let k = n - 2; k >= 1; k--) o[k] = Math.max(o[k], o[k + 1] + F);
   if (n > 2 && o[1] + F > W) for (let k = 1; k < n - 1; k++) o[k] = W - Math.round((W - L) * k / (n - 1));
+  for (let k = 1; k < n; k++) if (o[k - 1] < o[k] + F) return null;
   return o;
 }
 
-function maxCount(T, first) {
+const maxCount = (T, first) => {
   let m = 0;
   for (let n = 1; n <= 10; n++) if (plan(T, n, first)) m = n;
   return m;
+};
+
+const firstS = () => (byId('warnFirstAuto').checked ? 0
+  : Math.max(1, +byId('warnFirstValue').value || 1) * UNIT_S[byId('warnFirstUnit').value]);
+
+const sec = new Section('timer', {
+  unit: { get: () => unit, set: v => setUnit(v || 'day') },
+  value: 'timerValue',
+  warn_count: 'alarmCount',
+  warn_first_s: {
+    get: firstS,
+    set: v => {
+      byId('warnFirstAuto').checked = !v;
+      if (v) {
+        const u = v % 86400 === 0 ? 'day' : v % 3600 === 0 ? 'hour' : 'min';
+        byId('warnFirstUnit').value = u;
+        byId('warnFirstValue').value = Math.round(v / UNIT_S[u]);
+      }
+    },
+  },
+});
+
+function setUnit(u) {
+  unit = u;
+  $$('.unit-btn').forEach(b => b.classList.toggle('active', b.dataset.unit === u));
+  preview();
 }
 
-function read() {
-  const unit = $('#t-unit').value, value = +$('#t-value').value, n = +$('#t-warn').value;
-  const auto = $('#t-first-auto').checked;
-  const first = auto ? 0 : Math.round(+$('#t-first').value * UNIT_S[$('#t-first-unit').value]);
-  return { unit, value, warn_count: n, warn_first_s: first };
+function clampValue() {
+  const el = byId('timerValue');
+  el.value = Math.min(60, Math.max(1, Math.round(+el.value || 1)));
 }
 
 function preview() {
-  const f = read();
-  const T = f.value * UNIT_S[f.unit];
-  $('#t-warn-out').textContent = f.warn_count;
-  $('#t-first-row').hidden = $('#t-first-auto').checked;
-  const p = plan(T, f.warn_count, f.warn_first_s);
-  $('#t-preview').textContent = p ? t('warn.preview', { list: p.map(x => fmtDur(x, 1)).join(' · ') })
-    : t('warn.max', { n: maxCount(T, f.warn_first_s) });
-  $('#t-preview').classList.toggle('bad', !p);
-  $('#t-save').disabled = !p;
+  const T = (+byId('timerValue').value || 1) * UNIT_S[unit];
+  const first = firstS();
+  show(byId('warnFirstRow'), !byId('warnFirstAuto').checked);
+  const sl = byId('alarmCount');
+  byId('alarmCountValue').textContent = sl.value;
+  const p = plan(T, +sl.value, first);
+  const info = byId('alarmInfo');
+  info.textContent = p ? t('warn.preview', { list: p.map(x => fmtDur(x, 1)).join(' · ') })
+    : t('warn.max', { n: maxCount(T, first) });
+  info.classList.toggle('bad', !p);
+  return p;
 }
 
-export async function initTimer() {
-  const c = await api('GET', '/api/config/timer');
-  $('#t-unit').value = c.unit;
-  $('#t-value').value = c.value;
-  $('#t-warn').value = c.warn_count;
-  $('#t-first-auto').checked = !c.warn_first_s;
-  if (c.warn_first_s) {
-    const u = c.warn_first_s % 86400 === 0 ? 'day' : c.warn_first_s % 3600 === 0 ? 'hour' : 'min';
-    $('#t-first-unit').value = u;
-    $('#t-first').value = c.warn_first_s / UNIT_S[u];
+function renderStatus() {
+  if (!st) return;
+  const tm = st.timer, el = byId('timerStatus');
+  const k = { running: 'timer.status_active', vacation: 'timer.status_vacation', triggered: 'state.triggered' }[tm.state];
+  el.textContent = k ? t(k, { time: fmtCountdown(tm.state === 'vacation' ? tm.vac_remaining : tm.remaining).join(' ') })
+    : t('timer.status_inactive');
+  el.classList.toggle('active', tm.state === 'running');
+  const vac = tm.state === 'vacation';
+  if (!vacTouched) byId('vacationMode').checked = vac;
+  show(byId('vacationDaysGroup'), byId('vacationMode').checked && !vac);
+  byId('vacationDaysGroup').style.display = '';
+  show(byId('vacationActiveStatus'), vac);
+  byId('vacationActiveStatus').style.display = '';
+  if (vac) byId('vacationActiveText').textContent = t('vacation.active_text', { time: fmtCountdown(tm.vac_remaining).join(' ') });
+}
+
+async function save() {
+  if (!preview()) throw new Error(byId('alarmInfo').textContent);
+  let changed = false;
+  if (sec.dirty()) { await sec.save(); changed = true; }
+  const on = byId('vacationMode').checked, vac = st && st.timer.state === 'vacation';
+  if (on && !vac) {
+    const days = Math.min(60, Math.max(1, +byId('vacationDays').value || 1));
+    await api('POST', '/api/timer/vacation', { days });
+    changed = true;
+  } else if (!on && vac) {
+    await api('DELETE', '/api/timer/vacation');
+    changed = true;
   }
-  document.querySelectorAll('#timer-form input, #timer-form select').forEach(el => { el.oninput = preview; });
-  $('#timer-form').onsubmit = async ev => {
-    ev.preventDefault();
-    try { await api('PUT', '/api/timer', read()); toast(t('common.saved')); $('#settings').close(); }
-    catch (e) { toast(errText(e), 'err'); }
-  };
-  preview();
+  vacTouched = false;
+  return changed;
+}
+
+export function initTimer() {
+  $$('.unit-btn').forEach(b => { b.onclick = () => setUnit(b.dataset.unit); });
+  const step = d => () => { byId('timerValue').value = (+byId('timerValue').value || 1) + d; clampValue(); preview(); };
+  byId('timerDecrease').onclick = step(-1);
+  byId('timerIncrease').onclick = step(1);
+  byId('timerValue').onchange = () => { clampValue(); preview(); };
+  ['timerValue', 'alarmCount', 'warnFirstAuto', 'warnFirstValue', 'warnFirstUnit'].forEach(id => {
+    byId(id).addEventListener('input', preview);
+  });
+  const vstep = d => () => { const el = byId('vacationDays'); el.value = Math.min(60, Math.max(1, (+el.value || 1) + d)); };
+  byId('vacationDecrease').onclick = vstep(-1);
+  byId('vacationIncrease').onclick = vstep(1);
+  byId('vacationMode').onchange = () => { vacTouched = true; renderStatus(); };
+  // elle seçime geçince otomatik değerden (T/4) başla
+  byId('warnFirstAuto').addEventListener('change', () => {
+    if (byId('warnFirstAuto').checked) return;
+    const W = Math.floor((+byId('timerValue').value || 1) * UNIT_S[unit] / 4);
+    const u = W >= 86400 && W % 86400 === 0 ? 'day' : W >= 3600 && W % 3600 === 0 ? 'hour' : 'min';
+    byId('warnFirstUnit').value = u;
+    byId('warnFirstValue').value = Math.max(1, Math.round(W / UNIT_S[u]));
+    preview();
+  });
+  onStatus(s => { st = s; renderStatus(); });
+  window.addEventListener('ls-lang', () => { preview(); renderStatus(); });
+  registerTab('panel-timer', {
+    show: async () => { vacTouched = false; await sec.load(); preview(); renderStatus(); },
+    save,
+  });
 }

@@ -38,6 +38,10 @@ def check(name, cond, info=""):
 
 
 print("== temel")
+# önkoşul: GUI denemelerinden kalan durumdan bağımsız başla (ilk uyarı otomatik, sayaç durmuş, tatil yok)
+req("PUT", "/api/timer", {"unit": "min", "value": 4, "warn_count": 2, "warn_first_s": 0}, headers={"X-LS-Request": "1"})
+req("DELETE", "/api/timer/vacation", headers={"X-LS-Request": "1"})
+req("POST", "/api/timer/cancel", headers={"X-LS-Request": "1"})
 s, j, _ = req("GET", "/api/auth"); check("auth durumu", s == 200 and j["ok"], (s, j))
 s, j, _ = req("GET", "/api/status"); check("status", s == 200 and "timer" in j["data"], (s, j))
 s, j, _ = req("GET", "/api/yok"); check("bilinmeyen uç 404", s == 404 and j["error"]["code"] == "not_found", (s, j))

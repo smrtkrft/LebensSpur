@@ -21,7 +21,7 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | 2 | İlk plan | tamam (2026-11-05), kullanıcı onayladı | `docs/02-plan-ilk.md` — A–D bölümleri onaylı, 22 ürün kararı, 15 araştırma sorusu |
 | 3 | Plandaki özelliklerin daha iyisi var mı araştır | tamam (2026-11-05) | `docs/03-arastirma.md` özet + `docs/03-arastirma/01…07` (2 726 satır): 14 plan düzeltmesi, ~60 iyileştirme, 5 kullanıcı kararı (K1–K5) |
 | 4 | Son plan | tamam (2026-11-05) | `docs/04-plan-son.md` |
-| 5 | Uygulama (adım adım, her adım derleme + flash + commit) | sürüyor — adım 0–4 tamam, cihazda doğrulandı (SMTP/Telegram gerçek hesap testi adım 7'de) | `2611/HW`, `2611/GUI` |
+| 5 | Uygulama (adım adım, her adım derleme + flash + commit) | sürüyor — adım 0–5 tamam (5: ALTE tasarımlı arayüz, cihazda `gui_check.py` + API testi), sıradaki 6: sistem uçları | `2611/HW`, `2611/GUI`, `docs/07-adim6-sozlesme.md` |
 | 6 | Denetim, en ince ayrıntıya kadar | bekliyor | `docs/05-denetim.md` |
 
 ## Karar günlüğü
@@ -69,3 +69,4 @@ Temel kararlar (kullanıcı, 2026-11-05):
 - Her adımdan sonra USB'deki cihaz flash'lanır ve açılış logu alınır.
 | 2026-11-05 | Arayüz görünümü **ALTE tasarımına birebir** dayanır (düzen, renkler, halka, sekmeler, akordeonlar, ikonlar); iç yapı ve hatalar düzelir. 3.4'teki sayfa yalnız geçici iskelet. Sıra: önce teslimat (adım 4), sonra arayüz (adım 5) | Kullanıcı kararı; ALTE tasarımı kullanıcının |
 | 2026-11-05 | SMTP ve Telegram gerçek hesap testleri denetim adımına (7) bırakıldı | Kullanıcı kararı; webhook/MQTT/MQTTS gerçek ağda doğrulandı |
+| 2026-11-05 | Arayüz Kaydet'i yalnız açık sekmede **değişen alanları** gönderir; yüklenmemiş bölüm hiç kaydedilmez | ALTE'de her Kaydet 7–10 istek atıyordu; cihazda yakalanan hata: yüklenmemiş form HTML varsayılanını (24 gün) yazdı |

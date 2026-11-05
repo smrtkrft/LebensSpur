@@ -1,10 +1,10 @@
 {
-  "_doc": "gzip'li azami boyutlar (bayt). Asimda build.py derlemeyi durdurur. Adim 5.3'te kalibre edilip sabitlenir. GECICI: lang_total 36 KB (5.3'te kullanilmayan ALTE anahtarlari ayiklanip 33 KB'a geri cekilecek).",
-  "index.html": 13312,
-  "app.js": 14336,
-  "app.css": 6144,
+  "_doc": "gzip'li azami boyutlar (bayt). Asimda build.py derlemeyi durdurur. Adim 5'te ALTE tasarimiyla kalibre edildi (olculen + ~%10-20 pay): index 12.4 KB, app.js 12.9 KB, app.css 8.0 KB, diller 34.4 KB.",
+  "index.html": 14336,
+  "app.js": 16384,
+  "app.css": 9216,
   "schema.json": 3072,
-  "lang_total": 36864,
+  "lang_total": 38912,
   "favicon": 1229,
   "total": 81920
 }
