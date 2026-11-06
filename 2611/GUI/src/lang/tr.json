@@ -470,5 +470,11 @@
   "time.hours": "saat",
   "time.min": "dk",
   "time.sec": "sn",
-  "common.secret_cleared": "Kaydedince silinecek"
+  "common.secret_cleared": "Kaydedince silinecek",
+  "ota.pending_verify": "onay bekliyor",
+  "device.coredump": "Çökme kaydı",
+  "device.coredump_none": "yok",
+  "device.coredump_download": "İndir",
+  "device.coredump_delete": "Sil",
+  "device.coredump_delete_confirm": "Çökme kaydı silinsin mi? Teşhis için önce indirmeniz önerilir."
 }

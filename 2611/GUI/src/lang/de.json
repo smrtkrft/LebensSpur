@@ -470,5 +470,11 @@
   "time.hours": "Stunden",
   "time.min": "Min",
   "time.sec": "Sek",
-  "common.secret_cleared": "Wird beim Speichern entfernt"
+  "common.secret_cleared": "Wird beim Speichern entfernt",
+  "ota.pending_verify": "wartet auf Bestätigung",
+  "device.coredump": "Absturzprotokoll",
+  "device.coredump_none": "keins",
+  "device.coredump_download": "Herunterladen",
+  "device.coredump_delete": "Löschen",
+  "device.coredump_delete_confirm": "Absturzprotokoll löschen? Für die Diagnose zuerst herunterladen."
 }

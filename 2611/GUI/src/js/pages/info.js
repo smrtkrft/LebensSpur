@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { has, t } from '../i18n.js';
 import { openSub, registerTab } from '../nav.js';
-import { ask, byId, errText, fmtDur, fmtKB, h, toast } from '../ui.js';
+import { ask, byId, errText, fmtDur, fmtKB, h, show, toast } from '../ui.js';
 
 const set = (id, v) => { byId(id).textContent = v === undefined || v === null || v === '' ? '-' : v; };
 const tr = (k, fb) => (has(k) ? t(k) : fb);
@@ -58,6 +58,8 @@ async function loadDevice() {
   set('sysResetReason', causeLabel(d.last_cause, d.last_cat));
   set('sysPrevUptime', d.prev_uptime ? fmtDur(d.prev_uptime, 3) : '-');
   set('sysFirmware', 'v' + s.version);
+  set('sysCoredump', d.coredump ? fmtKB(d.coredump) : t('device.coredump_none'));
+  show(byId('coredumpActions'), !!d.coredump);
 }
 
 /* ---------- günlükler ---------- */
@@ -168,6 +170,10 @@ export function initInfo() {
     };
   });
   byId('logRefreshBtn').onclick = loadLogs;
+  byId('coredumpDelete').onclick = async () => {
+    if (!(await ask(t('device.coredump_delete_confirm'), { ok: t('device.coredump_delete'), danger: true }))) return;
+    try { await api('DELETE', '/api/coredump'); loadDevice(); } catch (e) { toast(errText(e), 'err'); }
+  };
   byId('logClearBtn').onclick = async () => {
     if (!(await ask(t('logs.clear_confirm'), { ok: t('logs.clear'), danger: true }))) return;
     try { await api('DELETE', '/api/logs'); loadLogs(); } catch (e) { toast(errText(e), 'err'); }

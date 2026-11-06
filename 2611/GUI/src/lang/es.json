@@ -470,5 +470,11 @@
   "time.hours": "horas",
   "time.min": "min",
   "time.sec": "s",
-  "common.secret_cleared": "Se eliminará al guardar"
+  "common.secret_cleared": "Se eliminará al guardar",
+  "ota.pending_verify": "pendiente de confirmación",
+  "device.coredump": "Registro de fallo",
+  "device.coredump_none": "ninguno",
+  "device.coredump_download": "Descargar",
+  "device.coredump_delete": "Eliminar",
+  "device.coredump_delete_confirm": "¿Eliminar el registro de fallo? Se recomienda descargarlo antes para el diagnóstico."
 }

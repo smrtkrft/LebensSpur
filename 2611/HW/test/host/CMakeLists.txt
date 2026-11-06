@@ -72,3 +72,5 @@ ls_test(test_timer_sm test_timer_sm.c components/app/core/timer_sm.c components/
 ls_test(test_relay_button test_relay_button.c components/app/core/relay_sm.c components/app/core/button_sm.c)
 ls_test(test_outbox test_outbox.c components/app/core/outbox.c)
 ls_test(test_channels_proto test_channels_proto.c components/app/channels/smtp_proto.c components/app/channels/mqtt_pkt.c components/app/channels/tmpl.c)
+
+ls_test(test_semver test_semver.c components/platform/ota/semver.c)

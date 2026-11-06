@@ -65,24 +65,45 @@ function otaBody() {
   return otaSrc === 'custom' ? { source: 'custom', url: byId('otaServerUrl').value.trim() } : { source: 'official' };
 }
 
+// iş bitene kadar izle (denetim ve indirme sys_worker'da); her adımda onTick(iş)
+async function waitJob(id, onTick) {
+  for (let i = 0; i < 900; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const j = await api('GET', '/api/jobs/' + id);
+    if (onTick) onTick(j);
+    if (j.state === 'done') return j;
+    if (j.state === 'failed') throw new Error(j.message);
+  }
+  throw new Error('timeout');
+}
+
 async function otaInfo() {
   const o = await api('GET', '/api/ota');
   byId('currentFirmwareVersion').textContent = 'v' + o.version;
-  byId('runningPartition').textContent = o.partition;
-  show(byId('fwRollbackSection'), !!o.prev_version);
+  byId('runningPartition').textContent = o.partition + (o.pending_verify ? ' · ' + t('ota.pending_verify') : '');
+  show(byId('fwRollbackSection'), !!o.prev_version && o.state !== 'ready' && o.state !== 'rollback_ready');
   if (o.prev_version) byId('fwRollbackInfo').textContent = t('ota.fw_rollback_info', { version: o.prev_version });
-  show(byId('fwRestartSection'), o.state === 'ready');
+  show(byId('fwRestartSection'), o.state === 'ready' || o.state === 'rollback_ready');
+  show(byId('fwRemoteVersionRow'), !!o.remote);
+  byId('remoteFirmwareVersion').textContent = o.remote ? 'v' + o.remote.replace(/^v/, '') : '-';
+  show(byId('fwStartSection'), o.available);
+  return o;
 }
 
 async function otaCheck() {
   if (otaSrc === 'custom' && !otaBody().url) { toast(t('ota.custom_url_required'), 'err'); return; }
+  const btn = byId('checkFirmwareUpdateBtn');
+  btn.disabled = true;
   try {
-    const r = await api('POST', '/api/ota/check', otaBody());
-    show(byId('fwRemoteVersionRow'), true);
-    byId('remoteFirmwareVersion').textContent = r.version ? 'v' + r.version : '-';
-    show(byId('fwStartSection'), !!r.available);
-    if (!r.available) toast(t('ota.fw_already_latest'));
-  } catch (e) { toast(t('ota.fw_update_error') + ': ' + errText(e), 'err'); }
+    const { job_id } = await api('POST', '/api/ota/check', otaBody());
+    await waitJob(job_id);
+    const o = await otaInfo();
+    if (!o.available) toast(t('ota.fw_already_latest'));
+  } catch (e) {
+    toast(t('ota.fw_update_error') + ': ' + errText(e), 'err');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function otaStart() {
@@ -92,14 +113,13 @@ async function otaStart() {
   const bar = byId('fwOtaProgressBar'), txt = byId('fwOtaProgressText');
   try {
     const { job_id } = await api('POST', '/api/ota/start', otaBody());
-    for (;;) {
-      await new Promise(r => setTimeout(r, 1000));
-      const j = await api('GET', '/api/jobs/' + job_id);
+    await waitJob(job_id, j => {
       bar.style.width = j.pct + '%';
       txt.textContent = j.pct + '%' + (j.message ? ' · ' + j.message : '');
-      if (j.state === 'done') { toast(t('ota.fw_update_success')); show(byId('fwRestartSection'), true); return; }
-      if (j.state === 'failed') throw new Error(j.message);
-    }
+    });
+    bar.style.width = '100%';
+    toast(t('ota.fw_update_success'));
+    await otaInfo();
   } catch (e) {
     txt.textContent = t('ota.fw_update_error') + ': ' + errText(e);
   }

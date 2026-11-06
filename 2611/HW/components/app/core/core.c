@@ -13,6 +13,7 @@
 #include "nvs.h"
 #include "button_sm.h"
 #include "cfg.h"
+#include "ota.h"
 #include "core.h"
 #include "evlog.h"
 #include "io.h"
@@ -201,6 +202,7 @@ static void on_timer_actions(unsigned a, int64_t now)
         cfg_actions_t act;
         cfg_copy_section(CFG_SEC_ACTIONS, &act);
         evlog_mark(EVM_TIMER_EXPIRED, 0);
+        ota_abort();                                    /* tetikleme önceliklidir: süren indirme durur */
         ob_channels_t c = channels(true);
         int n = outbox_plan_trigger(&s_ob, &c, cfg_group_mask(), now);
         if (act.trig_relay) relay_sm_trigger(&s_relay, now, 0);

@@ -1,3 +1,4 @@
+#include <stdlib.h>
 /*
  * LebensSpur 2611 — açılış sırası ve görev kurulumu.
  * Ayrıntı: 2611/docs/04-plan-son.md §3.4 (düzeltilmiş açılış sırası).
@@ -15,6 +16,8 @@
 #include "cfg.h"
 #include "evlog.h"
 #include "storage.h"
+#include "esp_core_dump.h"
+#include "ota.h"
 #include "sys_worker.h"
 #include "core.h"
 #include "io.h"
@@ -71,6 +74,13 @@ void app_main(void)
 
     sys_worker_start();
     evlog_file_start();
+    ota_init();                                     /* PENDING_VERIFY → koşullu onay zamanlayıcısı */
+    esp_core_dump_summary_t *cd = calloc(1, sizeof *cd);   /* çökme kaydı varsa özeti günlüğe */
+    if (cd && esp_core_dump_image_check() == ESP_OK && esp_core_dump_get_summary(cd) == ESP_OK) {
+        evlog_write(EVL_WARN, "sys", "cokme kaydi var: gorev '%.16s', pc 0x%08lx (Bilgi > Cihaz'dan indirilebilir)",
+                    cd->exc_task, (unsigned long)cd->exc_pc);
+    }
+    free(cd);
     log_tail();
 
     evlog_boot_info_t bi;

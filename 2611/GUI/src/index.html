@@ -1606,6 +1606,11 @@
             <div class='system-row'><span class='system-label' data-i18n='device.restart_reason'>Last Shutdown Cause</span><span class='system-value' id='sysResetReason'>-</span></div>
             <div class='system-row'><span class='system-label' data-i18n='device.prev_uptime'>Previous Run</span><span class='system-value' id='sysPrevUptime'>-</span></div>
             <div class='system-row'><span class='system-label' data-i18n='device.firmware'>Firmware</span><span class='system-value' id='sysFirmware'>-</span></div>
+            <div class='system-row'><span class='system-label' data-i18n='device.coredump'>Crash record</span><span class='system-value' id='sysCoredump'>-</span></div>
+            <div class='action-buttons hidden' id='coredumpActions' style='margin-top:8px'>
+              <a class='btn-sys' id='coredumpDownload' href='/api/coredump' download data-i18n='device.coredump_download'>Download</a>
+              <button type='button' class='btn-sys btn-sys-danger' id='coredumpDelete' data-i18n='device.coredump_delete'>Delete</button>
+            </div>
           </div>
         </div>
       </div>

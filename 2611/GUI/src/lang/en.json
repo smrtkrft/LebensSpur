@@ -470,5 +470,11 @@
   "time.hours": "hours",
   "time.min": "min",
   "time.sec": "sec",
-  "common.secret_cleared": "Will be removed on save"
+  "common.secret_cleared": "Will be removed on save",
+  "ota.pending_verify": "awaiting confirmation",
+  "device.coredump": "Crash record",
+  "device.coredump_none": "none",
+  "device.coredump_download": "Download",
+  "device.coredump_delete": "Delete",
+  "device.coredump_delete_confirm": "Delete the crash record? Downloading it first for diagnosis is recommended."
 }

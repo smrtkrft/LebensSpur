@@ -470,5 +470,11 @@
   "time.hours": "ore",
   "time.min": "min",
   "time.sec": "s",
-  "common.secret_cleared": "Verrà rimosso al salvataggio"
+  "common.secret_cleared": "Verrà rimosso al salvataggio",
+  "ota.pending_verify": "in attesa di conferma",
+  "device.coredump": "Registro crash",
+  "device.coredump_none": "nessuno",
+  "device.coredump_download": "Scarica",
+  "device.coredump_delete": "Elimina",
+  "device.coredump_delete_confirm": "Eliminare il registro crash? Si consiglia di scaricarlo prima per la diagnosi."
 }

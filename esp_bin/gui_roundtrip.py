@@ -371,6 +371,13 @@ STEPS = [
       document.querySelector('input[name="hwOtaSource"][value="custom"]').click(); await H.sleep(200);
       if (!H.vis('hwOtaCustomSection') || !H.vis('hwOtaWarning')) f.push('özel kaynak alanları açılmadı');
       document.querySelector('input[name="hwOtaSource"][value="official"]').click();
+      H.clearToasts(); H.click('checkFirmwareUpdateBtn'); await H.sleep(500);
+      if (!H.$('checkFirmwareUpdateBtn').disabled) f.push('denetim sürerken düğme kilitlenmedi');
+      for (let i = 0; i < 60 && H.$('checkFirmwareUpdateBtn').disabled; i++) await H.sleep(500);
+      const o = (await H.api('GET', '/api/ota')).data;
+      if (!['error', 'no_update', 'available'].includes(o.state)) f.push('denetim sonucu: ' + o.state);
+      if (!H.toasts().length && !o.available) f.push('denetim sonucu kullanıcıya bildirilmedi');
+      if (o.available && !H.vis('fwStartSection')) f.push('yeni sürüm var ama Kur düğmesi yok');
       H.click('footerCancelBtn');
     """),
     step("tema_dil", """
@@ -398,7 +405,7 @@ STEPS = [
       for (const id of ['sysDeviceId','sysChip','sysCores','sysCpuFreq','sysFlashSize','sysRamTotal','sysRamFree','sysRamMinFree',
                         'ramUsagePercent','sysIntFlashTotal','sysIntFlashUsed','sysIntFlashFree','sysLogVol','sysUserData','sysWifiStatus',
                         'sysWifiSsid','sysRssi','sysIp','sysMdns','sysApStatus','sysApClients','sysTxPower','sysUptime','sysBootCount',
-                        'sysResetReason','sysPrevUptime','sysFirmware'])
+                        'sysResetReason','sysPrevUptime','sysFirmware','sysCoredump'])
         if (!H.$(id).textContent || H.$(id).textContent === '-' || /undefined|NaN|null/.test(H.$(id).textContent)) f.push(id + ' = ' + H.$(id).textContent);
       if (!H.$('sysExtFlashSize').textContent.includes('16')) f.push('harici flash boyutu: ' + H.$('sysExtFlashSize').textContent);
       return f.concat([]);

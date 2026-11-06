@@ -9,6 +9,8 @@
 #include "cfg.h"
 #include "core.h"
 #include "esp_chip_info.h"
+#include "esp_core_dump.h"
+#include "esp_partition.h"
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
 #include "esp_image_format.h"
@@ -21,6 +23,7 @@
 #include "freertos/task.h"
 #include "jobs.h"
 #include "net_wifi.h"
+#include "ota.h"
 #include "storage.h"
 #include "sys_worker.h"
 #include "api_priv.h"
@@ -75,25 +78,68 @@ static esp_err_t h_device(http_req_t *r)
     cJSON_AddStringToObject(o, "last_cause", b.cause ? b.cause : "unknown");
     cJSON_AddStringToObject(o, "last_cat", b.cat ? b.cat : "unknown");
     cJSON_AddNumberToObject(o, "prev_uptime", b.prev_uptime_s);
+    size_t cd_addr = 0, cd_size = 0;
+    bool cd = esp_core_dump_image_check() == ESP_OK && esp_core_dump_image_get(&cd_addr, &cd_size) == ESP_OK && cd_size;
+    cJSON_AddNumberToObject(o, "coredump", cd ? (double)cd_size : 0);
     return http_ok(r, o);
 }
 
-/* ---------- güncelleme bilgisi (indirme/kurulum adım 6'da) ---------- */
+/* ---------- güncelleme (OTA) ---------- */
 
 static esp_err_t h_ota(http_req_t *r)
 {
-    cJSON *o = cJSON_CreateObject();
+    ota_status_t st;
+    ota_get_status(&st);
     const esp_partition_t *run = esp_ota_get_running_partition();
-    cJSON_AddStringToObject(o, "version", esp_app_get_description()->version);
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddStringToObject(o, "version", st.current);
     cJSON_AddStringToObject(o, "partition", run ? run->label : "?");
-    const esp_partition_t *other = esp_ota_get_next_update_partition(NULL);
-    esp_app_desc_t d;
-    if (other && esp_ota_get_partition_description(other, &d) == ESP_OK &&
-        strcmp(d.project_name, esp_app_get_description()->project_name) == 0) {
-        cJSON_AddStringToObject(o, "prev_version", d.version);
-    }
-    cJSON_AddStringToObject(o, "state", "idle");
+    cJSON_AddStringToObject(o, "state", ota_state_name(st.state));
+    cJSON_AddNumberToObject(o, "pct", st.pct);
+    cJSON_AddStringToObject(o, "message", st.message);
+    cJSON_AddStringToObject(o, "remote", st.remote);
+    cJSON_AddBoolToObject(o, "available", st.state == OTA_AVAILABLE);
+    if (st.rollback_available) cJSON_AddStringToObject(o, "prev_version", st.rollback);
+    cJSON_AddBoolToObject(o, "pending_verify", st.pending_verify);
+    if (st.last_invalid[0]) cJSON_AddStringToObject(o, "last_invalid", st.last_invalid);
     return http_ok(r, o);
+}
+
+/* gövde {source:"official"} | {source:"custom", url:"https://…"}; özel kaynak yalnız https */
+static esp_err_t ota_req(http_req_t *r, bool start)
+{
+    const cJSON *src = cJSON_GetObjectItem(http_body(r), "source");
+    const cJSON *url = cJSON_GetObjectItem(http_body(r), "url");
+    const char *u = NULL;
+    if (cJSON_IsString(src) && strcmp(src->valuestring, "custom") == 0) {
+        if (!cJSON_IsString(url) || strncmp(url->valuestring, "https://", 8) != 0 || strlen(url->valuestring) > 250 ||
+            strpbrk(url->valuestring, " \t\r\n")) {
+            return http_fail(r, 400, "validation", "https:// ile baslayan adres", "url");
+        }
+        u = url->valuestring;
+    } else if (!cJSON_IsString(src) || strcmp(src->valuestring, "official") != 0) {
+        return http_fail(r, 400, "validation", "official|custom", "source");
+    }
+    job_id_t id = jobs_create(start ? "ota_start" : "ota_check");
+    esp_err_t e = start ? ota_start(u, id) : ota_check(u, id);
+    if (e != ESP_OK) {
+        jobs_update(id, JOB_FAILED, 0, "busy");
+        return http_fail(r, 409, "busy", "", NULL);
+    }
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddNumberToObject(o, "job_id", id);
+    return http_ok(r, o);
+}
+
+static esp_err_t h_ota_check(http_req_t *r) { return ota_req(r, false); }
+static esp_err_t h_ota_start(http_req_t *r) { return ota_req(r, true); }
+
+static esp_err_t h_ota_rollback(http_req_t *r)
+{
+    esp_err_t e = ota_rollback();
+    if (e == ESP_ERR_NOT_FOUND) return http_fail(r, 409, "no_rollback", "", NULL);
+    if (e != ESP_OK) return http_fail(r, 409, "busy", esp_err_to_name(e), NULL);
+    return http_ok(r, NULL);
 }
 
 /* ---------- günlükler ---------- */
@@ -152,7 +198,7 @@ static void job_restart(void *arg)
 {
     (void)arg;
     vTaskDelay(pdMS_TO_TICKS(400));                         /* HTTP yanıtı gitsin */
-    sys_restart(RST_USER_WEB);
+    sys_restart(ota_restart_pending() ? RST_OTA : RST_USER_WEB);   /* güncelleme/geri alma uygulanıyor */
 }
 
 static void erase_progress(int pct)
@@ -196,6 +242,151 @@ static esp_err_t h_factory(http_req_t *r)
     }
     cJSON *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "job_id", s_factory_job);
+    return http_ok(r, o);
+}
+
+/* ---------- çökme kaydı (coredump) ---------- */
+
+static esp_err_t h_coredump(http_req_t *r)
+{
+    size_t addr = 0, size = 0;
+    if (esp_core_dump_image_check() != ESP_OK || esp_core_dump_image_get(&addr, &size) != ESP_OK || !size) {
+        return http_fail(r, 404, "not_found", "", NULL);
+    }
+    const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, NULL);
+    if (!p) return http_fail(r, 404, "not_found", "", NULL);
+    httpd_req_t *raw = http_raw(r);
+    httpd_resp_set_type(raw, "application/octet-stream");
+    httpd_resp_set_hdr(raw, "Content-Disposition", "attachment; filename=\"lebensspur-coredump.elf\"");
+    httpd_resp_set_hdr(raw, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(raw, "X-Content-Type-Options", "nosniff");
+    static char buf[1024];
+    size_t off = addr - p->address;                       /* görüntü bölüm başından itibaren */
+    for (size_t done = 0; done < size;) {
+        size_t n = size - done < sizeof buf ? size - done : sizeof buf;
+        if (esp_partition_read(p, off + done, buf, n) != ESP_OK || httpd_resp_send_chunk(raw, buf, (ssize_t)n) != ESP_OK) {
+            httpd_resp_send_chunk(raw, NULL, 0);
+            return ESP_OK;
+        }
+        done += n;
+    }
+    httpd_resp_send_chunk(raw, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t h_coredump_del(http_req_t *r)
+{
+    esp_err_t e = esp_core_dump_image_erase();
+    if (e != ESP_OK) return http_fail(r, 500, "internal", esp_err_to_name(e), NULL);
+    evlog_write(EVL_INFO, "user", "cokme kaydi silindi");
+    return http_ok(r, NULL);
+}
+
+/* ---------- depolama ---------- */
+
+static esp_err_t h_storage(http_req_t *r)
+{
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddNumberToObject(o, "chip_mb", storage_chip_size() >> 20);
+    add_vol(o, "log", STG_LOG);
+    add_vol(o, "data", STG_DATA);
+    const char *n = storage_note();
+    cJSON_AddStringToObject(o, "note", n ? n : "");
+    return http_ok(r, o);
+}
+
+static job_id_t s_fmt_job;
+static const char *s_fmt_mount;
+
+static void job_format(void *arg)
+{
+    (void)arg;
+    jobs_update(s_fmt_job, JOB_RUNNING, 10, s_fmt_mount);
+    esp_err_t e = storage_format(s_fmt_mount);
+    evlog_write(e == ESP_OK ? EVL_WARN : EVL_ERR, "user", "%s bicimlendi: %s", s_fmt_mount, esp_err_to_name(e));
+    jobs_update(s_fmt_job, e == ESP_OK ? JOB_DONE : JOB_FAILED, 100, esp_err_to_name(e));
+}
+
+static esp_err_t h_storage_format(http_req_t *r)
+{
+    const cJSON *m = cJSON_GetObjectItem(http_body(r), "mount");
+    const char *mount = !cJSON_IsString(m) ? NULL : strcmp(m->valuestring, STG_LOG) == 0 ? STG_LOG
+                      : strcmp(m->valuestring, STG_DATA) == 0 ? STG_DATA : NULL;
+    if (!mount) return http_fail(r, 400, "validation", "/log|/data", "mount");
+    if (storage_state(mount) == STG_ABSENT) return http_fail(r, 409, "storage_absent", "", NULL);
+    s_fmt_mount = mount;
+    s_fmt_job = jobs_create("format");
+    if (sys_worker_post(job_format, NULL) != ESP_OK) {
+        jobs_update(s_fmt_job, JOB_FAILED, 0, "busy");
+        return http_fail(r, 503, "busy", "", NULL);
+    }
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddNumberToObject(o, "job_id", s_fmt_job);
+    return http_ok(r, o);
+}
+
+/* ---------- yapılandırma yedeği / dışa aktarma ---------- */
+
+static esp_err_t h_backup_info(http_req_t *r)
+{
+    uint32_t seq = 0;
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddBoolToObject(o, "available", cfg_backup_info(&seq) == ESP_OK);
+    cJSON_AddNumberToObject(o, "seq", seq);
+    return http_ok(r, o);
+}
+
+static job_id_t s_bk_job;
+
+static void job_backup(void *arg)
+{
+    bool restore = arg != NULL;
+    esp_err_t e = restore ? cfg_backup_restore() : cfg_backup_write();
+    evlog_write(e == ESP_OK ? EVL_INFO : EVL_ERR, "user", "yapilandirma %s: %s", restore ? "geri yuklendi" : "yedeklendi",
+                esp_err_to_name(e));
+    jobs_update(s_bk_job, e == ESP_OK ? JOB_DONE : JOB_FAILED, 100, restore && e == ESP_OK ? "restart" : esp_err_to_name(e));
+    if (restore && e == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        sys_restart(RST_GENERIC);                          /* geri yüklenen ayarlar her modülde temiz başlasın */
+    }
+}
+
+static esp_err_t backup_req(http_req_t *r, bool restore)
+{
+    if (storage_state(STG_DATA) != STG_MOUNTED) return http_fail(r, 409, "storage_absent", "", NULL);
+    if (restore && cfg_backup_info(NULL) != ESP_OK) return http_fail(r, 404, "not_found", "yedek yok", NULL);
+    s_bk_job = jobs_create(restore ? "restore" : "backup");
+    if (sys_worker_post(job_backup, restore ? (void *)1 : NULL) != ESP_OK) {
+        jobs_update(s_bk_job, JOB_FAILED, 0, "busy");
+        return http_fail(r, 503, "busy", "", NULL);
+    }
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddNumberToObject(o, "job_id", s_bk_job);
+    return http_ok(r, o);
+}
+
+static esp_err_t h_backup_write(http_req_t *r) { return backup_req(r, false); }
+static esp_err_t h_backup_restore(http_req_t *r) { return backup_req(r, true); }
+
+/* tüm bölümler + gruplar; gizli alanlar maskeli (indirilen dosyada parola yok) */
+static esp_err_t h_export(http_req_t *r)
+{
+    cJSON *o = cJSON_CreateObject();
+    cJSON_AddStringToObject(o, "device", net_wifi_device_name());
+    cJSON_AddStringToObject(o, "version", esp_app_get_description()->version);
+    cJSON *sec = cJSON_AddObjectToObject(o, "sections");
+    for (int i = 0; i < CFG_SEC__COUNT; i++) {
+        cJSON_AddItemToObject(sec, cfg_sections[i].name, cfg_get_section_json((cfg_section_t)i, CFG_EXPORT_API));
+    }
+    cJSON *gr = cJSON_AddArrayToObject(o, "groups");
+    static cfg_group_t g;
+    for (int i = 0; i < CFG_GROUP_COUNT; i++) {
+        if (cfg_group_get(i, &g) != ESP_OK) continue;
+        cJSON *j = cfg_fields_to_json(&cfg_group_desc, &g, CFG_EXPORT_API);
+        cJSON_AddNumberToObject(j, "id", i);
+        cJSON_AddItemToArray(gr, j);
+    }
+    http_set_header(r, "Content-Disposition", "attachment; filename=\"lebensspur-config.json\"");
     return http_ok(r, o);
 }
 
@@ -271,6 +462,9 @@ static esp_err_t h_reset(http_req_t *r)
 const http_route_t api_sys_routes[] = {
     { "/api/device", HTTP_GET, HR_AUTH, h_device },
     { "/api/ota", HTTP_GET, HR_AUTH, h_ota },
+    { "/api/ota/check", HTTP_POST, HR_WRITE, h_ota_check },
+    { "/api/ota/start", HTTP_POST, HR_WRITE, h_ota_start },
+    { "/api/ota/rollback", HTTP_POST, HR_AUTH | HR_CSRF, h_ota_rollback },
     { "/api/device/restart", HTTP_POST, HR_AUTH | HR_CSRF, h_restart },
     { "/api/device/factory-reset", HTTP_POST, HR_WRITE, h_factory },
     { "/api/logs", HTTP_GET, HR_AUTH, h_logs },
@@ -278,5 +472,13 @@ const http_route_t api_sys_routes[] = {
     { "/api/remote/key", HTTP_GET, HR_AUTH, h_key_get },
     { "/api/remote/key", HTTP_POST, HR_AUTH | HR_CSRF, h_key_new },
     { "/api/reset", HTTP_GET, 0, h_reset },
+    { "/api/coredump", HTTP_GET, HR_AUTH, h_coredump },
+    { "/api/coredump", HTTP_DELETE, HR_AUTH | HR_CSRF, h_coredump_del },
+    { "/api/storage", HTTP_GET, HR_AUTH, h_storage },
+    { "/api/storage/format", HTTP_POST, HR_WRITE, h_storage_format },
+    { "/api/backup", HTTP_GET, HR_AUTH, h_backup_info },
+    { "/api/backup", HTTP_POST, HR_AUTH | HR_CSRF, h_backup_write },
+    { "/api/backup/restore", HTTP_POST, HR_AUTH | HR_CSRF, h_backup_restore },
+    { "/api/export", HTTP_GET, HR_AUTH, h_export },
 };
 const size_t api_sys_routes_n = sizeof api_sys_routes / sizeof api_sys_routes[0];

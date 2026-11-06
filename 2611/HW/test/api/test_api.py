@@ -145,6 +145,70 @@ s, j, _ = req("PUT", "/api/config/device", {"ap_enabled": True})
 check("AP bölümü kaydı yanıt döndürdü", s == 200, (s, j, f"{_t.time() - t0:.1f} s"))
 _t.sleep(5)
 
+print("== OTA")
+def wait_job(jid, sec=60):
+    for _ in range(sec):
+        _t.sleep(1)
+        s, j, _ = req("GET", f"/api/jobs/{jid}")
+        if s == 200 and j["data"]["state"] in ("done", "failed"):
+            return j["data"]
+    return {"state": "timeout", "message": ""}
+s, j, _ = req("GET", "/api/ota"); o = j["data"] if s == 200 else {}
+check("OTA bilgisi", s == 200 and o.get("version") and o.get("partition", "").startswith("ota_"), (s, j))
+s, j, _ = req("POST", "/api/ota/check", {"source": "custom", "url": "http://x/a.bin"}); check("OTA özel http → 400", s == 400, (s, j))
+s, j, _ = req("POST", "/api/ota/check", {"source": "baska"}); check("OTA geçersiz kaynak → 400", s == 400, (s, j))
+s, j, _ = req("POST", "/api/ota/check", {"source": "official"})
+jid = j["data"]["job_id"] if s == 200 else 0
+s2, j2, _ = req("POST", "/api/ota/check", {"source": "official"}); check("OTA aynı anda ikinci iş → 409", s2 == 409, (s2, j2))
+r = wait_job(jid)
+ok = r["state"] == "done" or (r["state"] == "failed" and "404" in r["message"])   # release deposu yoksa 404
+check("OTA resmi denetim sonuçlandı (güncel/yeni ya da depo yok 404)", ok, r)
+DMF = "https://github.com/smrtkrft/LebensSpur/releases/download/v1.0.6/SmartKraft_DMF.ino.bin"
+s, j, _ = req("GET", "/api/ota"); prev0 = j["data"].get("prev_version")
+for kind in ("check", "start"):
+    s, j, _ = req("POST", f"/api/ota/{kind}", {"source": "custom", "url": DMF})
+    r = wait_job(j["data"]["job_id"]) if s == 200 else {"state": "?", "message": str(j)}
+    check(f"OTA {kind}: başka ürünün imajı reddedilir (GitHub yönlendirme + uzun adres)", r["state"] == "failed" and "baska urun" in r["message"], r)
+s, j, _ = req("GET", "/api/ota")
+check("reddedilen imaj geri alma bilgisini değiştirmedi", j["data"].get("prev_version") == prev0, (prev0, j["data"]))
+if not prev0:
+    s, j, _ = req("POST", "/api/ota/rollback", headers={"X-LS-Request": "1"}); check("geri alınacak imaj yokken → 409", s == 409, (s, j))
+
+print("== depolama, yedek, dışa aktarma, çökme kaydı")
+s, j, _ = req("GET", "/api/storage")
+check("depolama bilgisi", s == 200 and j["data"]["chip_mb"] >= 4 and j["data"]["log"]["state"] == "mounted" and j["data"]["data"]["state"] == "mounted", (s, j))
+s, j, r = req("GET", "/api/export")
+d = j["data"] if s == 200 else {}
+leak = [f"{sec}.{k}" for sec, v in d.get("sections", {}).items() for k in ("pass", "ap_pass", "token", "key", "hash") if k in v and v[k] not in ("", "***")]
+import os as _os
+_schema = json.load(open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "../../components/platform/cfg/cfg_schema.json")))
+_want = set(_schema["sections"])
+check("dışa aktarma: şemadaki tüm bölümler, sırlar maskeli", s == 200 and set(d.get("sections", {})) == _want and not leak,
+      (s, sorted(_want ^ set(d.get("sections", {}))), leak))
+check("dışa aktarma indirme adı", "attachment" in (r.getheader("Content-Disposition") or ""), r.getheader("Content-Disposition"))
+s, j, _ = req("POST", "/api/backup", headers={"X-LS-Request": "1"})
+r = wait_job(j["data"]["job_id"]) if s == 200 else {"state": "?"}
+check("elle yedek", r["state"] == "done", (s, r))
+s, j, _ = req("GET", "/api/backup"); check("yedek mevcut", s == 200 and j["data"]["available"] and j["data"]["seq"] > 0, (s, j))
+s, j, _ = req("GET", "/api/coredump"); check("çökme kaydı yokken 404 / varken indirilir", s in (200, 404), s)
+s, j, _ = req("POST", "/api/storage/format", {"mount": "/etc"}); check("biçimlendirme: geçersiz bölüm → 400", s == 400, (s, j))
+s, j, _ = req("POST", "/api/storage/format", {"mount": "/log"})
+r = wait_job(j["data"]["job_id"]) if s == 200 else {"state": "?"}
+check("/log biçimlendirme işi", r["state"] == "done", (s, r))
+s, j, _ = req("GET", "/api/logs?n=5"); check("biçimlendirme sonrası günlük okunuyor", s == 200, (s, j))
+s, j, _ = req("GET", "/api/config/relay"); relay0 = j["data"]
+s, j, _ = req("GET", "/api/status"); up0 = j["data"]["uptime"]
+s, j, _ = req("POST", "/api/backup/restore", headers={"X-LS-Request": "1"})
+check("yedekten geri yükleme başladı", s == 200, (s, j))
+_t.sleep(4)
+for _ in range(30):
+    s, j, _ = req("GET", "/api/status")
+    if s == 200 and j["data"]["uptime"] < up0:
+        break
+    _t.sleep(2)
+check("geri yükleme sonrası cihaz yeniden başladı", s == 200 and j["data"]["uptime"] < up0, (s, j.get("data", {}).get("uptime") if j else None))
+s, j, _ = req("GET", "/api/config/relay"); check("geri yükleme ayarları korudu", s == 200 and j["data"] == relay0, (relay0, j))
+
 print("== mail grupları ve ekler")
 import time
 s, j, _ = req("PUT", "/api/groups/0", {"name": "Aile", "subject": "Acil", "body": "Mesaj", "recipients": "a@b.ch, c@d.ch"})

@@ -470,5 +470,11 @@
   "time.hours": "heures",
   "time.min": "min",
   "time.sec": "s",
-  "common.secret_cleared": "Sera supprimé à l'enregistrement"
+  "common.secret_cleared": "Sera supprimé à l'enregistrement",
+  "ota.pending_verify": "en attente de confirmation",
+  "device.coredump": "Rapport de plantage",
+  "device.coredump_none": "aucun",
+  "device.coredump_download": "Télécharger",
+  "device.coredump_delete": "Supprimer",
+  "device.coredump_delete_confirm": "Supprimer le rapport de plantage ? Il est conseillé de le télécharger d'abord pour le diagnostic."
 }
