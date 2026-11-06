@@ -476,5 +476,10 @@
   "device.coredump_none": "ninguno",
   "device.coredump_download": "Descargar",
   "device.coredump_delete": "Eliminar",
-  "device.coredump_delete_confirm": "¿Eliminar el registro de fallo? Se recomienda descargarlo antes para el diagnóstico."
+  "device.coredump_delete_confirm": "¿Eliminar el registro de fallo? Se recomienda descargarlo antes para el diagnóstico.",
+  "backup.offer": "Se encontró una copia de seguridad de los ajustes anteriores al restablecimiento de fábrica. ¿Restaurarla?",
+  "backup.restore": "Restaurar copia (el dispositivo se reinicia)",
+  "backup.fresh": "Empezar de nuevo (se borra la copia anterior)",
+  "backup.restoring": "Restaurando ajustes, el dispositivo se reinicia…",
+  "backup.dismissed": "Se continúa con una configuración nueva"
 }

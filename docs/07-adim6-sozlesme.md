@@ -2,7 +2,7 @@
 
 Adım 5'te arayüz (ALTE tasarımı) bu uçlara göre yazıldı.
 
-**Durum (2026-11-06):** tüm uçlar uygulandı (`api_sys.c`, `platform/ota`) ve iki tam denetim turundan geçti. Ek uçlar: `GET/DELETE /api/coredump`, `GET /api/storage`, `POST /api/storage/format`, `GET/POST /api/backup`, `POST /api/backup/restore`, `GET /api/export`. OTA uçtan uca tur (indir→onay→geri al→tetiklemede iptal) 1.0.1.1 release'iyle yapılacak.
+**Durum (2026-11-06):** tüm uçlar uygulandı (`api_sys.c`, `platform/ota`) ve iki tam denetim turundan geçti. Ek uçlar: `GET/DELETE /api/coredump`, `GET /api/storage`, `POST /api/storage/format`, `GET/POST /api/backup` (`GET` yanıtı `{available, seq, offer}`; `offer` = fabrika ayarı sonrası yedek kilidi açık ve geçerli yedek var), `POST /api/backup/restore`, `POST /api/backup/dismiss` ("yeni başla": kilidi kaldırır, güncel ayarları yedekler; 2026-11-06), `GET /api/export`. OTA uçtan uca tur (indir→onay→geri al→tetiklemede iptal) 1.0.1.1 release'iyle yapılacak.
 
 **Denetim notu:** yapılandırma yedeği her değişiklikten 300 ms sonra yazılır; fabrika ayarı 1 sonrası ilk değişiklik eski yedeği ezer (`.prev` bir kuşak tutar). Geri yükleme teklifi açılışta, ilk kayıttan önce yapılmalı (adım 7). Aşağıdaki üç doğrulama da sunucuya taşındı; gizli alan `null` ile temizlenir.
 Zarf her yerde `{"ok":true,"data":…}` / `{"ok":false,"error":{code,message,field}}`. Yazma uçları `X-LS-Request: 1` ister.

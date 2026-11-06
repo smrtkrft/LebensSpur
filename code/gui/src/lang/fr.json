@@ -476,5 +476,10 @@
   "device.coredump_none": "aucun",
   "device.coredump_download": "Télécharger",
   "device.coredump_delete": "Supprimer",
-  "device.coredump_delete_confirm": "Supprimer le rapport de plantage ? Il est conseillé de le télécharger d'abord pour le diagnostic."
+  "device.coredump_delete_confirm": "Supprimer le rapport de plantage ? Il est conseillé de le télécharger d'abord pour le diagnostic.",
+  "backup.offer": "Une sauvegarde des réglages d'avant la réinitialisation a été trouvée. La restaurer ?",
+  "backup.restore": "Restaurer la sauvegarde (l'appareil redémarre)",
+  "backup.fresh": "Repartir de zéro (l'ancienne sauvegarde est supprimée)",
+  "backup.restoring": "Restauration des réglages, l'appareil redémarre…",
+  "backup.dismissed": "Poursuite avec une nouvelle configuration"
 }

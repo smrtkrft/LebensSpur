@@ -292,7 +292,7 @@ static const http_route_t s_routes[] = {
 };
 
 /* alt tablolar tek tabloda birleştirilir (http katmanı tek dizi bekler) */
-static http_route_t s_all[sizeof s_routes / sizeof s_routes[0] + 32];
+static http_route_t s_all[sizeof s_routes / sizeof s_routes[0] + 40];   /* gruplar 9 + sistem 22; assert taşmayı yakalar */
 
 const http_route_t *api_routes(size_t *count)
 {

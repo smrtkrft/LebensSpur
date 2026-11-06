@@ -333,7 +333,17 @@ static esp_err_t h_backup_info(http_req_t *r)
     cJSON *o = cJSON_CreateObject();
     cJSON_AddBoolToObject(o, "available", cfg_backup_info(&seq) == ESP_OK);
     cJSON_AddNumberToObject(o, "seq", seq);
+    cJSON_AddBoolToObject(o, "offer", cfg_backup_offer());   /* fabrika ayarı sonrası: geri yükleme önerilsin */
     return http_ok(r, o);
+}
+
+/* "yeni başla": eski yedek bırakılır, güncel ayarlar yedek olur */
+static esp_err_t h_backup_dismiss(http_req_t *r)
+{
+    esp_err_t e = cfg_backup_dismiss();
+    if (e != ESP_OK) return http_fail(r, 500, "internal", esp_err_to_name(e), NULL);
+    evlog_write(EVL_INFO, "user", "yedek onerisi reddedildi: guncel ayarlar yedeklenecek");
+    return http_ok(r, NULL);
 }
 
 static job_id_t s_bk_job;
@@ -480,6 +490,7 @@ const http_route_t api_sys_routes[] = {
     { "/api/backup", HTTP_GET, HR_AUTH, h_backup_info },
     { "/api/backup", HTTP_POST, HR_AUTH | HR_CSRF, h_backup_write },
     { "/api/backup/restore", HTTP_POST, HR_AUTH | HR_CSRF, h_backup_restore },
+    { "/api/backup/dismiss", HTTP_POST, HR_AUTH | HR_CSRF, h_backup_dismiss },
     { "/api/export", HTTP_GET, HR_AUTH, h_export },
 };
 const size_t api_sys_routes_n = sizeof api_sys_routes / sizeof api_sys_routes[0];

@@ -3,6 +3,7 @@
  * (LRU temizliği kapatmaz); push httpd_queue_work ile httpd görevinde yapılır → yuvalar kilitsiz.
  * Kopma: gönderim hatası ya da recv(MSG_PEEK) == 0. 60 sn'de bir kalp atışı tam durumu taşır.
  */
+#include <errno.h>
 #include <stdatomic.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -34,8 +35,13 @@ static void drop(int i)
 static bool alive(httpd_req_t *r)
 {
     char c;
+    errno = 0;
     int n = recv(httpd_req_to_sockfd(r), &c, 1, MSG_PEEK | MSG_DONTWAIT);
-    return n != 0;                                  /* 0 = karşı taraf kapattı; -1/EAGAIN = canlı */
+    if (n > 0) return true;                         /* istemciden gelen veri bekliyor: bağlantı açık */
+    if (n == 0) return false;                       /* karşı taraf düzgün kapattı (FIN) */
+    /* -1: yalnız "şimdilik veri yok" canlıdır. Tarayıcı okunmamış veriyle kapatınca RST gelir
+       (ECONNRESET/ENOTCONN); bunu canlı saymak yuvayı kalp atışına (60 sn) kadar tutuyordu. */
+    return errno == EAGAIN || errno == EWOULDBLOCK;
 }
 
 static void send_all(void *arg)

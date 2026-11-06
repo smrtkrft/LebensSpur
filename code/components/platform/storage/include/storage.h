@@ -22,6 +22,11 @@ storage_state_t storage_state(const char *mount);
 const char     *storage_state_name(storage_state_t s);
 bool            storage_acquire(const char *mount);   /* MOUNTED değilse false */
 void            storage_release(const char *mount);
+/* Uzun akış (ağdan dosya alma): bölüm kullanımda işaretlenir (biçimleme/silme bekler) ama ÇİP KİLİDİ
+ * TUTULMAZ; her dosya işlemi yine acquire/release arasında yapılır. Ağ beklerken çipi kilitlemek diğer
+ * görevleri (günlük, yedek) dakikalarca bekletip bekçiyi tetikliyordu (2 MB ek yüklemesi, 2026-11-06). */
+bool            storage_pin(const char *mount);       /* MOUNTED değilse false */
+void            storage_unpin(const char *mount);
 esp_err_t       storage_format(const char *mount);    /* sayaç 0 olana dek ≤5 s bekler, yoksa ESP_ERR_TIMEOUT */
 /* Kademe-2: /data'yı baştan sona siler (sırlar okunamaz kalsın) ve biçimler. progress(0..100) */
 esp_err_t       storage_erase_data_full(void (*progress)(int pct));

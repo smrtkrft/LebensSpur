@@ -476,5 +476,10 @@
   "device.coredump_none": "keins",
   "device.coredump_download": "Herunterladen",
   "device.coredump_delete": "Löschen",
-  "device.coredump_delete_confirm": "Absturzprotokoll löschen? Für die Diagnose zuerst herunterladen."
+  "device.coredump_delete_confirm": "Absturzprotokoll löschen? Für die Diagnose zuerst herunterladen.",
+  "backup.offer": "Eine Sicherung der Einstellungen vor dem Zurücksetzen wurde gefunden. Wiederherstellen?",
+  "backup.restore": "Sicherung wiederherstellen (Gerät startet neu)",
+  "backup.fresh": "Neu beginnen (alte Sicherung wird gelöscht)",
+  "backup.restoring": "Einstellungen werden wiederhergestellt, Gerät startet neu…",
+  "backup.dismissed": "Weiter mit neuer Einrichtung"
 }

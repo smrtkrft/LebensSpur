@@ -9,6 +9,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "cJSON.h"
 #include "api_priv.h"
 #include "cfg.h"
@@ -16,6 +18,7 @@
 #include "evlog.h"
 #include "jobs.h"
 #include "outbox.h"
+#include "esp_timer.h"
 #include "storage.h"
 
 #define FILE_MAX  (2u * 1024u * 1024u)
@@ -187,20 +190,40 @@ static esp_err_t h_file_put(http_req_t *r)
     snprintf(tmp, sizeof tmp, "%s.part", path);
     FILE *f = fopen(tmp, "wb");
     bool ok = f != NULL;
-    static char chunk[2048];
-    size_t got = 0;
-    int timeouts = 0;
-    while (ok && got < len) {
-        int k = httpd_req_recv(http_raw(r), chunk, len - got < sizeof chunk ? len - got : sizeof chunk);
-        if (k == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) continue;
-        if (k <= 0) { ok = false; break; }
-        ok = fwrite(chunk, 1, (size_t)k, f) == (size_t)k;
-        got += (size_t)k;
-    }
-    if (f) { fflush(f); fsync(fileno(f)); fclose(f); }
-    if (ok) { remove(path); ok = rename(tmp, path) == 0; }
-    else remove(tmp);
+    /* Ağdan alırken çip kilidi tutulmaz (yalnız bölüm "kullanımda": biçimlenemez); her parça kısa bir
+     * acquire..release içinde yazılır. Kilit tüm aktarım boyunca tutulunca günlük/yedek işleri bekleyip
+     * bekçi cihazı yeniden başlatıyordu. */
+    bool pinned = ok && storage_pin(STG_DATA);
+    ok = ok && pinned;
     storage_release(STG_DATA);
+    static char chunk[4096];
+    size_t got = 0;
+    int stalls = 0;
+    const int64_t deadline = esp_timer_get_time() + 180LL * 1000000LL;   /* yavaş ağda da 2 MB sığar */
+    while (ok && got < len) {
+        size_t want = len - got < sizeof chunk ? len - got : sizeof chunk, have = 0;
+        while (have < want) {                        /* parçayı doldur: daha az yazma, daha az kilit */
+            int k = httpd_req_recv(http_raw(r), chunk + have, want - have);
+            if (k == HTTPD_SOCK_ERR_TIMEOUT && ++stalls < 5 && esp_timer_get_time() < deadline) continue;
+            if (k <= 0) { ok = false; break; }
+            stalls = 0;                              /* ilerleme var: takılma sayacı sıfırlanır */
+            have += (size_t)k;
+        }
+        if (!ok) break;
+        if (!storage_acquire(STG_DATA)) { ok = false; break; }
+        ok = fwrite(chunk, 1, have, f) == have;
+        storage_release(STG_DATA);
+        got += have;
+        /* httpd (öncelik 5) kilidi bırakır bırakmaz yeniden alabiliyor; bekleyen düşük öncelikli
+         * görevler (sys_worker: günlük, yedek) sıra bulamayıp bekçiyi tetikliyordu → bir tik ver */
+        vTaskDelay(1);
+    }
+    bool fs = storage_acquire(STG_DATA);             /* bölüm pin'li: hâlâ bağlı */
+    if (f) { fflush(f); fsync(fileno(f)); fclose(f); }
+    if (ok && fs) { remove(path); ok = rename(tmp, path) == 0; }
+    else { ok = false; if (fs) remove(tmp); }
+    if (fs) storage_release(STG_DATA);
+    if (pinned) storage_unpin(STG_DATA);
     if (!ok) return http_fail(r, 500, "write_failed", "", NULL);
     evlog_write(EVL_INFO, "mail", "grup %d: ek yuklendi (%s, %u B)", i + 1, name, (unsigned)len);
     return http_ok(r, NULL);

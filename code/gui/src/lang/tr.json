@@ -476,5 +476,10 @@
   "device.coredump_none": "yok",
   "device.coredump_download": "İndir",
   "device.coredump_delete": "Sil",
-  "device.coredump_delete_confirm": "Çökme kaydı silinsin mi? Teşhis için önce indirmeniz önerilir."
+  "device.coredump_delete_confirm": "Çökme kaydı silinsin mi? Teşhis için önce indirmeniz önerilir.",
+  "backup.offer": "Fabrika ayarından önceki ayarların yedeği bulundu. Geri yüklensin mi?",
+  "backup.restore": "Yedeği geri yükle (cihaz yeniden başlar)",
+  "backup.fresh": "Yeni başla (eski yedek silinir)",
+  "backup.restoring": "Ayarlar geri yükleniyor, cihaz yeniden başlıyor…",
+  "backup.dismissed": "Yeni kurulumla devam ediliyor"
 }

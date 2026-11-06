@@ -8,4 +8,6 @@ esp_err_t cfg_priv_persist(const char *key, const cfg_section_desc_t *d, const v
 esp_err_t cfg_priv_group_read(int idx, cfg_group_t *out);       /* kilit altında */
 void      cfg_priv_group_mark(int idx, bool used);
 void      cfg_priv_backup_init(void);                             /* cfg_init çağırır */
+bool      cfg_priv_bk_hold(void);                                 /* yedek kilidi açık mı (meta.flags) */
+esp_err_t cfg_priv_bk_hold_clear(void);                           /* kilidi kaldır, meta'yı yaz */
 void      cfg_backup_schedule(void);                            /* değişiklikte: 300 ms birleştirip yedek yaz */

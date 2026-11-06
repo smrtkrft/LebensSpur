@@ -476,5 +476,10 @@
   "device.coredump_none": "nessuno",
   "device.coredump_download": "Scarica",
   "device.coredump_delete": "Elimina",
-  "device.coredump_delete_confirm": "Eliminare il registro crash? Si consiglia di scaricarlo prima per la diagnosi."
+  "device.coredump_delete_confirm": "Eliminare il registro crash? Si consiglia di scaricarlo prima per la diagnosi.",
+  "backup.offer": "È stato trovato un backup delle impostazioni precedenti al ripristino di fabbrica. Ripristinarlo?",
+  "backup.restore": "Ripristina backup (il dispositivo si riavvia)",
+  "backup.fresh": "Ricomincia da capo (il vecchio backup viene eliminato)",
+  "backup.restoring": "Ripristino delle impostazioni, il dispositivo si riavvia…",
+  "backup.dismissed": "Si continua con una nuova configurazione"
 }

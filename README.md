@@ -60,7 +60,7 @@ Derleme çıktıları git'e girmez. Nereye yazıldıkları:
 ./code/esp_bin/full_check.sh <cihaz-ip> <port> <çıktı-klasörü>  # tam denetim
 ```
 
-Tam denetim altı katmanı sırayla çalıştırır:
+Tam denetim yedi katmanı sırayla çalıştırır:
 
 1. Birim testleri.
 2. `-Werror` ile derleme ve cihaza yükleme.
@@ -68,6 +68,16 @@ Tam denetim altı katmanı sırayla çalıştırır:
 4. Arayüz ekran ve JavaScript denetimi.
 5. Arayüz ↔ cihaz gidiş-dönüş testi.
 6. Güvenlik testi; cihaz parolasız ve parolalı durumda karşılaştırılır.
+7. Zorlama ve gerçek koşullar: istek seli, canlı bağlantı yuvalarının tükenmesi, yarım bağlantılar, art arda ayar kaydı, sayaç uç değerleri, ek dosya sınırları, art arda yeniden başlatma, ayar yazılırken USB'den sert reset.
+
+Fabrika ayarı testi (`code/test/api/test_factory.py`) tam denetimin dışındadır. Fabrika ayarı WiFi bilgisini sildiği için bu test, WiFi bilgisini derleme ortamından yeniden yazan geliştirme derlemesiyle çalışır:
+
+```sh
+LS_DEV_WIFI_SSID=... LS_DEV_WIFI_PASS=... ./code/esp_bin/build.sh reconfigure
+LS_DEV_WIFI_SSID=... LS_DEV_WIFI_PASS=... ./code/esp_bin/build.sh -p <port> flash
+python3 code/test/api/test_factory.py <cihaz-ip>
+./code/esp_bin/build.sh reconfigure && ./code/esp_bin/build.sh -p <port> flash   # parolasız derlemeye dön
+```
 
 Özet `<çıktı-klasörü>/ozet.txt` dosyasına yazılır. Kural: her düzeltmeden sonra tam denetim baştan çalışır. Sonraki aşamaya ancak **arka arkaya iki tur hatasız** geçtikten sonra geçilir.
 

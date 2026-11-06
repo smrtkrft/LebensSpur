@@ -128,7 +128,7 @@ async function otaStart() {
 /* ---------- yeniden başlatma / fabrika ayarı ---------- */
 
 // cihaz yeniden açılınca sayfayı tazele (en çok ~2 dk dener)
-function reloadWhenBack(delay) {
+export function reloadWhenBack(delay) {
   setTimeout(async function poll(n = 0) {
     try { const r = await fetch('/api/auth', { cache: 'no-store' }); if (r.ok) { location.reload(); return; } } catch (e) { /* kapalı */ }
     if (n < 60) setTimeout(() => poll(n + 1), 2000);

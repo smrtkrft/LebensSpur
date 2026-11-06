@@ -19,7 +19,10 @@ static const char *TAG = "cfg";
 #define META_KEY  "meta"
 #define META_MAGIC 0x3632534Cu   /* "LS26" */
 
-typedef struct { uint32_t magic; uint16_t version; uint16_t _pad; uint32_t seq; } meta_t;
+typedef struct { uint32_t magic; uint16_t version; uint16_t flags; uint32_t seq; } meta_t;
+/* flags (eski _pad, eski kayıtlarda 0): yedek kilidi — fabrika ayarı / temiz kurulumdan sonra
+ * kullanıcı "geri yükle" ya da "yeni başla" diyene kadar harici flash'taki yedeğin üzerine yazılmaz */
+#define META_F_BK_HOLD 0x0001u
 typedef struct { uint16_t schema; uint16_t len; } blob_hdr_t;
 
 static cfg_t s_cfg;
@@ -99,7 +102,7 @@ esp_err_t cfg_init(void)
         if (r != ESP_OK) return r;
         r = nvs_open(NS, NVS_READWRITE, &h);
         if (r != ESP_OK) return r;
-        s_meta = (meta_t){ .magic = META_MAGIC, .version = 1, .seq = 0 };
+        s_meta = (meta_t){ .magic = META_MAGIC, .version = 1, .flags = META_F_BK_HOLD, .seq = 0 };
         r = meta_write(h);
         if (r != ESP_OK) { nvs_close(h); return r; }
     }
@@ -285,7 +288,7 @@ esp_err_t cfg_factory_reset(void)
     if (r == ESP_OK) {
         r = nvs_erase_all(h);
         uint32_t seq = s_meta.seq + 1;
-        s_meta = (meta_t){ .magic = META_MAGIC, .version = 1, .seq = seq };
+        s_meta = (meta_t){ .magic = META_MAGIC, .version = 1, .flags = META_F_BK_HOLD, .seq = seq };
         if (r == ESP_OK) r = meta_write(h);
         nvs_close(h);
     }
@@ -296,6 +299,25 @@ esp_err_t cfg_factory_reset(void)
 }
 
 /* ---- iç arayüz (cfg_backup.c) ---- */
+bool cfg_priv_bk_hold(void) { return (s_meta.flags & META_F_BK_HOLD) != 0; }
+
+esp_err_t cfg_priv_bk_hold_clear(void)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    esp_err_t r = ESP_OK;
+    if (s_meta.flags & META_F_BK_HOLD) {
+        s_meta.flags &= (uint16_t)~META_F_BK_HOLD;
+        nvs_handle_t h;
+        r = nvs_open(NS, NVS_READWRITE, &h);
+        if (r == ESP_OK) {
+            r = meta_write(h);
+            nvs_close(h);
+        }
+    }
+    xSemaphoreGive(s_lock);
+    return r;
+}
+
 void cfg_priv_lock(void) { xSemaphoreTake(s_lock, portMAX_DELAY); }
 void cfg_priv_unlock(void) { xSemaphoreGive(s_lock); }
 void *cfg_priv_section(const cfg_section_desc_t *d) { return sec_ptr(d); }

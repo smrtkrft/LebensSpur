@@ -60,12 +60,25 @@ static cJSON *wrap(const char *k, cJSON *v, const char *k2, cJSON *v2)
 }
 
 static esp_err_t backup_write_locked(void);
+static esp_err_t process(const char *path, bool apply, uint32_t *seq_out);
+
+/* elle yedek (API): kullanıcı güncel ayarları yedeklemeyi seçti → kilit kalkar */
 esp_err_t cfg_backup_write(void)
 {
+    cfg_priv_bk_hold_clear();
     bk_lock();
     esp_err_t r = backup_write_locked();
     bk_unlock();
     return r;
+}
+
+/* geçerli yedek var mı (önce güncel, sonra önceki); bk_lock altında çağrılır */
+static bool backup_valid_locked(uint32_t *seq)
+{
+    if (!storage_acquire(STG_DATA)) return false;
+    bool ok = process(F_CUR, false, seq) == ESP_OK || process(F_PRV, false, seq) == ESP_OK;
+    storage_release(STG_DATA);
+    return ok;
 }
 
 static esp_err_t backup_write_locked(void)
@@ -120,7 +133,17 @@ static void backup_job(void *arg)
     (void)arg;
     vTaskDelay(pdMS_TO_TICKS(300));            /* art arda kayıtları birleştir */
     atomic_store(&s_pending, false);
-    cfg_backup_write();
+    bk_lock();
+    if (cfg_priv_bk_hold()) {
+        if (backup_valid_locked(NULL)) {       /* eski yedek korunur: kullanıcı kararını bekle */
+            bk_unlock();
+            ESP_LOGI(TAG, "yedek kilitli: eski yedek korunuyor (geri yukleme karari bekleniyor)");
+            return;
+        }
+        cfg_priv_bk_hold_clear();              /* korunacak yedek yok (ilk kurulum / kademe 2) */
+    }
+    backup_write_locked();
+    bk_unlock();
 }
 
 void cfg_backup_schedule(void)
@@ -191,6 +214,22 @@ static esp_err_t process(const char *path, bool apply, uint32_t *seq_out)
     return r;
 }
 
+bool cfg_backup_offer(void)
+{
+    if (!cfg_priv_bk_hold()) return false;
+    bk_lock();
+    bool ok = backup_valid_locked(NULL);
+    bk_unlock();
+    return ok;
+}
+
+esp_err_t cfg_backup_dismiss(void)
+{
+    esp_err_t r = cfg_priv_bk_hold_clear();
+    if (r == ESP_OK) cfg_backup_schedule();   /* güncel ayarlar yedek olur */
+    return r;
+}
+
 esp_err_t cfg_backup_info(uint32_t *seq)
 {
     if (!storage_acquire(STG_DATA)) return ESP_ERR_INVALID_STATE;
@@ -214,6 +253,7 @@ esp_err_t cfg_backup_restore(void)
         r = process(src, true, NULL);
     }
     bk_unlock();
+    if (r == ESP_OK) cfg_priv_bk_hold_clear();   /* geri yüklenen ayarlar artık güncel yedek kaynağı */
     storage_release(STG_DATA);
     ESP_LOGI(TAG, "geri yukleme: %s (%s)", esp_err_to_name(r), src ? src : "-");
     return r;

@@ -63,3 +63,7 @@ void cfg_set_change_cb(cfg_change_cb_t cb);
 esp_err_t cfg_backup_write(void);                     /* sys_worker'da; değişiklikte kendiliğinden planlanır */
 esp_err_t cfg_backup_info(uint32_t *seq);             /* geçerli yedek var mı (önce güncel, sonra önceki) */
 esp_err_t cfg_backup_restore(void);                   /* sys_worker'da; sonra yeniden başlatma önerilir */
+/* Yedek kilidi: fabrika ayarı / temiz kurulumdan sonra eski yedeğin üzerine kendiliğinden yazılmaz.
+ * Kilit; geri yükleme, "yeni başla" (dismiss) ya da elle yedekle kalkar; hiç yedek yoksa kendiliğinden kalkar. */
+bool      cfg_backup_offer(void);                      /* kilit açık VE geçerli yedek var: arayüz geri yükleme önersin */
+esp_err_t cfg_backup_dismiss(void);                    /* "yeni başla": kilidi kaldırır, güncel ayarları yedekler */

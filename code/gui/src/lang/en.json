@@ -476,5 +476,10 @@
   "device.coredump_none": "none",
   "device.coredump_download": "Download",
   "device.coredump_delete": "Delete",
-  "device.coredump_delete_confirm": "Delete the crash record? Downloading it first for diagnosis is recommended."
+  "device.coredump_delete_confirm": "Delete the crash record? Downloading it first for diagnosis is recommended.",
+  "backup.offer": "A backup of the settings from before the factory reset was found. Restore it?",
+  "backup.restore": "Restore backup (device restarts)",
+  "backup.fresh": "Start fresh (old backup is deleted)",
+  "backup.restoring": "Restoring settings, device is restarting…",
+  "backup.dismissed": "Continuing with a fresh setup"
 }

@@ -208,6 +208,26 @@ void storage_release(const char *mount)
     xSemaphoreGiveRecursive(s_chip_lock);
 }
 
+bool storage_pin(const char *mount)
+{
+    vol_t *v = vol(mount);
+    if (!v || !s_lock) return false;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool ok = v->state == STG_MOUNTED;
+    if (ok) v->users++;
+    xSemaphoreGive(s_lock);
+    return ok;
+}
+
+void storage_unpin(const char *mount)
+{
+    vol_t *v = vol(mount);
+    if (!v || !s_lock) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (v->users > 0) v->users--;
+    xSemaphoreGive(s_lock);
+}
+
 /* FORMATTING'e geçip kullanıcıların bitmesini bekler; kilit alınmış dönerse ESP_OK */
 static esp_err_t begin_exclusive(vol_t *v)
 {

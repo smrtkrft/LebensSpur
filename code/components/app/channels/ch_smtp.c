@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <time.h>
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "cfg.h"
 #include "channel.h"
 #include "evlog.h"
@@ -123,6 +125,7 @@ static bool send_attachment(smtp_t *s, const char *path, const char *name, char 
         if (n == 0) return true;
         off += (long)n;
         if (!b64_encode_lines(raw, n, s->buf, WORK) || !send_str(s, s->buf)) return false;
+        vTaskDelay(1);                               /* kilidi bekleyen düşük öncelikli görevlere sıra (sys_worker) */
     }
 }
 
