@@ -456,7 +456,8 @@ static esp_err_t h_reset(http_req_t *r)
     core_get_status(&st);
     if (st.total_s == 0) return http_fail(r, 409, "no_timer", "", NULL);
     core_event_t ev = { .type = EV_CHECKIN, .u.checkin.src = CHK_API_KEY };
-    return core_post(&ev) == ESP_OK ? http_ok(r, NULL) : http_fail(r, 503, "busy", "", NULL);
+    esp_err_t e = core_post_sync(&ev, 1000);
+    return e == ESP_OK || e == ESP_ERR_TIMEOUT ? http_ok(r, NULL) : http_fail(r, 503, "busy", "", NULL);
 }
 
 const http_route_t api_sys_routes[] = {

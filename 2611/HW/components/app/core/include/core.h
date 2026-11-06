@@ -21,6 +21,7 @@ typedef enum {
 
 typedef struct {
     core_event_type_t type;
+    uint32_t ticket;                            /* core_post_sync: işlendi bildirimi (0 = yok) */
     union {
         struct { checkin_source_t src; } checkin;
         struct { uint8_t days; } vacation;
@@ -54,6 +55,9 @@ typedef void (*core_status_cb_t)(void);         /* durum değişti (SSE push); k
 
 esp_err_t core_start(void);
 esp_err_t core_post(const core_event_t *ev);                 /* 0 bekleme; dolu → ESP_ERR_NO_MEM */
+/* Gönder ve çekirdek işleyip durumu yayınlayana kadar bekle (API: yanıt döndüğünde etki görünür).
+ * ESP_ERR_TIMEOUT: olay kuyrukta, sonra işlenecek. Yalnız görev bağlamından. */
+esp_err_t core_post_sync(core_event_t *ev, uint32_t timeout_ms);
 void      core_post_from_isr(const core_event_t *ev);
 void      core_get_status(app_status_t *out);
 void      core_set_dispatch(core_dispatch_t fn);

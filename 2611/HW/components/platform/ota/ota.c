@@ -53,6 +53,7 @@ static void set_state(ota_state_t st, int pct, const char *msg)
 
 static void set_remote(const char *v)
 {
+    if (*v == 'v' || *v == 'V') v++;                    /* tag "v1.0.1.1" ile imaj "1.0.1.1" aynı biçimde */
     portENTER_CRITICAL(&s_mux);
     strlcpy(s_st.remote, v, sizeof s_st.remote);
     portEXIT_CRITICAL(&s_mux);
@@ -289,6 +290,7 @@ static void start_job(void *arg)
         esp_https_ota_abort(h);
         set_state(OTA_ABORTED, 0, "iptal edildi (tetikleme)");
         evlog_write(EVL_WARN, "ota", "indirme iptal edildi");
+        scan_rollback();                                /* yarım yazım öbür bölümü bozdu: geri alma yok */
         finish_job(false, "aborted");
         return;
     }
@@ -302,6 +304,7 @@ static void start_job(void *arg)
         snprintf(err, sizeof err, "indirme/dogrulama: %s", esp_err_to_name(e));
         set_state(OTA_ERROR, 0, err);
         evlog_write(EVL_ERR, "ota", "%s", err);
+        scan_rollback();
         finish_job(false, err);
         return;
     }

@@ -1,6 +1,7 @@
 /*
  * core — app_core görevi. Durum makineleri (timer_sm, relay_sm, button_sm, outbox) burada birleşir.
  */
+#include <stdatomic.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -325,13 +326,18 @@ static void handle(const core_event_t *ev)
 
 /* ---------- görev ve kurulum ---------- */
 
+static atomic_uint s_ticket, s_done_ticket;        /* core_post_sync bilet sayaçları */
+
 static void task(void *arg)
 {
     (void)arg;
     esp_task_wdt_add(NULL);
     core_event_t ev;
     for (;;) {
-        if (xQueueReceive(s_q, &ev, pdMS_TO_TICKS(1000)) == pdTRUE) handle(&ev);
+        if (xQueueReceive(s_q, &ev, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            handle(&ev);                                 /* durum yayını handle içinde */
+            if (ev.ticket) atomic_store(&s_done_ticket, ev.ticket);
+        }
         esp_task_wdt_reset();
     }
 }
@@ -379,6 +385,20 @@ esp_err_t core_start(void)
     esp_timer_start_periodic(s_tick, 1000000);
     esp_err_t r = io_button_init(btn_isr);
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "dugme: %s", esp_err_to_name(r));
+    return ESP_OK;
+}
+
+esp_err_t core_post_sync(core_event_t *ev, uint32_t timeout_ms)
+{
+    uint32_t t = atomic_fetch_add(&s_ticket, 1) + 1;
+    if (!t) t = atomic_fetch_add(&s_ticket, 1) + 1;     /* 0 "bilet yok" demek */
+    ev->ticket = t;
+    esp_err_t e = core_post(ev);
+    if (e != ESP_OK) return e;
+    for (uint32_t waited = 0; (int32_t)(atomic_load(&s_done_ticket) - t) < 0; waited += 5) {
+        if (waited >= timeout_ms) return ESP_ERR_TIMEOUT;
+        vTaskDelay(pdMS_TO_TICKS(5) ? pdMS_TO_TICKS(5) : 1);
+    }
     return ESP_OK;
 }
 

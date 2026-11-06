@@ -151,9 +151,11 @@ static esp_err_t save_timer(http_req_t *r, const cJSON *body)
 
 static esp_err_t h_timer_put(http_req_t *r) { return save_timer(r, http_body(r)); }
 
+/* komut çekirdekte işlenene kadar bekler: yanıt döndüğünde GET /api/status yeni durumu gösterir */
 static esp_err_t post_core(http_req_t *r, core_event_t ev)
 {
-    return core_post(&ev) == ESP_OK ? http_ok(r, NULL) : http_fail(r, 503, "busy", "", NULL);
+    esp_err_t e = core_post_sync(&ev, 1000);
+    return e == ESP_OK || e == ESP_ERR_TIMEOUT ? http_ok(r, NULL) : http_fail(r, 503, "busy", "", NULL);
 }
 
 static esp_err_t h_checkin(http_req_t *r)

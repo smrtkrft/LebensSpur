@@ -26,3 +26,18 @@ Sunucuya taşınacak doğrulamalar (arayüz şimdilik kendi denetliyor):
 - `device.ap_pass` boş değilse ≥ 8 karakter (WPA2 kuralı); sunucu da reddetmeli.
 - Gizli alan boş gönderilince korunuyor → AP parolasını **kaldırmanın** yolu yok. Adım 6: `DELETE /api/config/device/ap_pass` ya da `{"ap_pass":null}` ile açık temizleme.
 - Webhook başlıkları JSON nesnesi olmalı (`ch_http.c` cJSON ile ayrıştırıyor); sunucu kayıtta da denetlemeli.
+
+## OTA cihaz turu (2026-11-06, `smrtkrft/LebensSpur-firmware`)
+
+| Senaryo | Sonuç |
+|---|---|
+| Denetim: HEAD `/releases/latest` → 302 → tag | `v1.0.1.1` bulundu; depo yokken "404" hatası |
+| İndir + doğrula (1,15 MB) | 13 s |
+| Yeniden başlat | yeni imaj `ota_1`, açılış nedeni `ota_fw` |
+| Koşullu onay | 30. s'de onaylandı (WiFi bağlı) |
+| Elle geri alma | önceki sürüme döndü; geri alınan imaj da onay bekler (bootloader) |
+| Onaysız imaj sıfırlanırsa | bootloader öbür geçerli imaja döndü, `last_invalid` raporlandı |
+| Onay beklerken yeni OTA | reddedildi |
+| İndirme sırasında tetikleme | indirme iptal, tetikleme/teslimat normal |
+| Başka ürünün imajı (DMF, GitHub) | ürün adı kapısı flash'a yazmadan reddetti; ALTE'nin "Out of buffer" sorunu yok |
+| İptal sonrası geri alma bilgisi | eski kalıyordu → 1.0.1.2'de düzeltildi |
