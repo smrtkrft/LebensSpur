@@ -76,6 +76,8 @@ Fabrika ayarı testi (`code/test/api/test_factory.py`) tam denetimin dışındad
 LS_DEV_WIFI_SSID=... LS_DEV_WIFI_PASS=... ./code/esp_bin/build.sh reconfigure
 LS_DEV_WIFI_SSID=... LS_DEV_WIFI_PASS=... ./code/esp_bin/build.sh -p <port> flash
 python3 code/test/api/test_factory.py <cihaz-ip>
+# arayüzdeki geri yükleme önerisi: fabrika ayarından (kademe 1) hemen sonra
+python3 code/esp_bin/gui_check.py http://<cihaz-ip>/ <çıktı-klasörü> --steps code/test/gui/backup_offer_steps.json
 ./code/esp_bin/build.sh reconfigure && ./code/esp_bin/build.sh -p <port> flash   # parolasız derlemeye dön
 ```
 

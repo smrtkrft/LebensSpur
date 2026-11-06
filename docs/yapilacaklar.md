@@ -1,6 +1,6 @@
-# 2611 — yapılacaklar
+# LebensSpur — yapılacaklar
 
-Bu dosya 2611 kapsamı **dışında** bırakılan, ayrı oturumda ele alınacak işleri tutar. 2611 yeni özellik eklemez; buradakiler sonraya.
+Bu dosya yeniden yapılandırma (kod adı 2611) kapsamı **dışında** bırakılan, ayrı oturumda ele alınacak işleri tutar. Yeniden yapılandırma yeni özellik eklemez; buradakiler sonraya.
 
 ## Ayrı oturum konuları
 

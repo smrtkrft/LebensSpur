@@ -68,9 +68,12 @@ static void test_vacation(void)
     TEST_ASSERT_EQUAL_UINT32(7 * D, timer_sm_remaining_s(&t, 50 * S));
     TEST_ASSERT_EQUAL(TA_VACATION_END | TA_PERSIST, timer_sm_eval(&t, (int64_t)(2 * D + 10) * S, &wi));
     TEST_ASSERT_EQUAL(TS_RUNNING, t.state);
+    TEST_ASSERT_EQUAL_UINT32(0, t.vac_total_s);                              /* tatil bitince toplam sıfır */
     TEST_ASSERT_EQUAL_UINT32(7 * D, timer_sm_remaining_s(&t, (int64_t)(2 * D + 10) * S));
     TEST_ASSERT_EQUAL_INT(0, timer_sm_vacation(&t, 1, 0));
+    TEST_ASSERT_EQUAL_UINT32(1 * D, t.vac_total_s);
     TEST_ASSERT_EQUAL_INT(0, timer_sm_vacation_cancel(&t, 5 * S));          /* iptal: tam süreden */
+    TEST_ASSERT_EQUAL_UINT32(0, t.vac_total_s);
     TEST_ASSERT_EQUAL_UINT32(7 * D, timer_sm_remaining_s(&t, 5 * S));
     TEST_ASSERT_EQUAL_INT(-1, timer_sm_vacation(&t, 61, 0));
 }

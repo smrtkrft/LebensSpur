@@ -38,16 +38,6 @@ static void log_heap(const char *when)
              (unsigned)(i.total_free_bytes + i.total_allocated_bytes));
 }
 
-/* gecici teshis (adim 3.4'te API'ye tasinir): gunlugun son satirlari */
-static bool print_line(const char *l, void *ctx) { (*(int *)ctx)++; ESP_LOGI(TAG, "gunluk: %.150s", l); return true; }
-static void log_tail(void)
-{
-    int n = 0; uint32_t next;
-    vTaskDelay(pdMS_TO_TICKS(200));
-    evlog_read(0, 16, print_line, &n, &next);
-    ESP_LOGI(TAG, "gunluk: %d satir, sonraki imlec %lu", n, (unsigned long)next);
-}
-
 static void on_link(bool up) { core_post(&(core_event_t){ .type = EV_NET_LINK, .u.link.up = up }); }
 
 void app_main(void)
@@ -84,7 +74,6 @@ void app_main(void)
                     cd->exc_task, (unsigned long)cd->exc_pc);
     }
     free(cd);
-    log_tail();
 
     evlog_boot_info_t bi;
     evlog_boot_info(&bi);

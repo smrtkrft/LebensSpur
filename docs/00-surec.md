@@ -22,7 +22,7 @@ Temel kararlar (kullanıcı, 2026-11-05):
 | 3 | Plandaki özelliklerin daha iyisi var mı araştır | tamam (2026-11-05) | `docs/03-arastirma.md` özet + `docs/03-arastirma/01…07` (2 726 satır): 14 plan düzeltmesi, ~60 iyileştirme, 5 kullanıcı kararı (K1–K5) |
 | 4 | Son plan | tamam (2026-11-05) | `docs/04-plan-son.md` |
 | 5 | Uygulama (adım adım, her adım derleme + flash + commit) | tamam (2026-11-06) — alt adım 0–6 (6: OTA ve cihaz uçları), ilk yayın `v1.0.0` | `code/` (`main`, `components`, `gui`, `test`), `docs/07-adim6-sozlesme.md` |
-| 6 | Denetim, en ince ayrıntıya kadar | sıradaki | `docs/05-denetim.md` |
+| 6 | Denetim, en ince ayrıntıya kadar | sürüyor (2026-11-06) — ara rapor yazıldı; açık: röle direnci onayı, SMTP/Telegram gerçek hesap, flash yokken / gerilim düşmesi | `docs/05-denetim.md` |
 
 ## Karar günlüğü
 

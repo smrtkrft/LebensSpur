@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 # Sürümün TEK kaynağı (arayüz ve OTA da buradan alır)
-set(PROJECT_VER "1.0.0.2")
+set(PROJECT_VER "1.0.0.3")
 
 set(SDKCONFIG "${CMAKE_CURRENT_LIST_DIR}/esp_bin/sdkconfig")
 set(EXTRA_COMPONENT_DIRS

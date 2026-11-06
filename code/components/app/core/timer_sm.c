@@ -119,6 +119,7 @@ int timer_sm_vacation(timer_sm_t *s, uint8_t days, int64_t now)
 int timer_sm_vacation_cancel(timer_sm_t *s, int64_t now)
 {
     if (s->state != TS_VACATION) return -1;
+    s->vac_total_s = 0;                             /* tatil bitti: eski toplam durumda kalmasın */
     start_full(s, now);
     return 0;
 }
@@ -127,6 +128,7 @@ unsigned timer_sm_eval(timer_sm_t *s, int64_t now, uint8_t *warn_idx)
 {
     if (s->state == TS_VACATION) {
         if (now < s->vac_deadline_us) return TA_NONE;
+        s->vac_total_s = 0;
         start_full(s, now);
         return TA_VACATION_END | TA_PERSIST;
     }
