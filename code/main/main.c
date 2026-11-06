@@ -52,7 +52,7 @@ static void on_link(bool up) { core_post(&(core_event_t){ .type = EV_NET_LINK, .
 
 void app_main(void)
 {
-    io_relay_early_init();                       /* ilk iş: röle güvenli seviyede (NVS'ten önce) */
+    io_relay_early_init();                       /* ilk iş: röle pinine dokunma, açılış halini kaydet (polarite henüz bilinmiyor) */
     const esp_app_desc_t *d = esp_app_get_description();
     ESP_LOGI(TAG, "%s v%s (IDF %s)", d->project_name, d->version, d->idf_ver);
     log_heap("acilis");
@@ -60,6 +60,9 @@ void app_main(void)
     evlog_init();
     esp_err_t r = cfg_init();
     if (r != ESP_OK) evlog_write(EVL_ERR, "sys", "cfg_init: %s", esp_err_to_name(r));
+    io_relay_init(cfg_get()->relay.inverted);    /* polarite belli: boşta seviyesi → çıkış → tutmayı bırak */
+    ESP_LOGI(TAG, "role pini acilista: iomux 0x%08lx, tutma %s", (unsigned long)io_relay_boot_pad(),
+             io_relay_boot_held() ? "var" : "yok");
     if (cfg_boot_note()) evlog_write(EVL_WARN, "sys", "%s", cfg_boot_note());
     evlog_write(EVL_INFO, "sys", "acilis v%s", d->version);
 

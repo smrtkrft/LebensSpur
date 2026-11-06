@@ -210,6 +210,32 @@ for _ in range(30):
 check("geri yükleme sonrası cihaz yeniden başladı", s == 200 and j["data"]["uptime"] < up0, (s, j.get("data", {}).get("uptime") if j else None))
 s, j, _ = req("GET", "/api/config/relay"); check("geri yükleme ayarları korudu", s == 200 and j["data"] == relay0, (relay0, j))
 
+print("== röle: süre sonu ve yeniden başlatmada boşta konumu")
+W1 = {"X-LS-Request": "1"}
+def relay_st():
+    s, j, _ = req("GET", "/api/status")
+    return j["data"]["relay"] if s == 200 else {}
+def wait_reboot(up_before):
+    _t.sleep(4)
+    for _ in range(30):
+        s, j, _ = req("GET", "/api/status")
+        if s == 200 and j["data"]["uptime"] < up_before:
+            return True
+        _t.sleep(2)
+    return False
+check("röle boşta", relay_st().get("on") is False, relay_st())
+req("POST", "/api/test/relay", headers=W1); _t.sleep(1)
+check("röle testi çekti (5 sn)", relay_st().get("on") is True, relay_st())
+s, j, _ = req("GET", "/api/status"); up0 = j["data"]["uptime"]
+s, j, _ = req("POST", "/api/device/restart", headers=W1)
+check("röle çekiliyken yeniden başlatma kabul", s == 200, (s, j))
+check("yeniden başlatma oldu", wait_reboot(up0))
+check("yeniden başlatmadan sonra röle boşta (tekrar çekmez)", relay_st() == {"on": False, "remaining": 0}, relay_st())
+req("POST", "/api/test/relay", headers=W1); _t.sleep(1)
+check("röle testi yeniden çekti", relay_st().get("on") is True, relay_st())
+_t.sleep(6)
+check("süre bitince röle boşta", relay_st() == {"on": False, "remaining": 0}, relay_st())
+
 print("== mail grupları ve ekler")
 import time
 s, j, _ = req("PUT", "/api/groups/0", {"name": "Aile", "subject": "Acil", "body": "Mesaj", "recipients": "a@b.ch, c@d.ch"})
