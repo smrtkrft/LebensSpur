@@ -1,37 +1,22 @@
-# macOS
+# macOS / Windows
 .DS_Store
 Thumbs.db
 
-# esp_bin — uretilen build dosyalari (dependencies.lock TRACKED kalir)
-esp_bin/HW/build/
-esp_bin/HW/sdkconfig
-esp_bin/HW/sdkconfig.old
-esp_bin/HW/managed_components/
-esp_bin/firmware/*.bin
-esp_bin/logs/
+# Yalnız yerel: eski hatlar (ALTE, Neue), eski derleme klasörleri, notlar
+nogit/
 
-# ALTE/ altinda yanlislikla uretilen build dosyalari (olmamali)
-ALTE/HW/build/
-ALTE/HW/sdkconfig
-ALTE/HW/sdkconfig.old
-ALTE/HW/managed_components/
-ALTE/HW/dependencies.lock
-
-# Neue (park edilmis hat) build ciktilari
-Neue/build/
-Neue/managed_components/
-Neue/sdkconfig
-Neue/sdkconfig.old
+# code — üretilen dosyalar (kaynak ağacına bir şey üretilmez; çıktılar code/esp_bin altında)
+code/esp_bin/build/
+code/esp_bin/sdkconfig
+code/esp_bin/sdkconfig.old
+code/esp_bin/test-build/
+code/esp_bin/firmware/
+code/esp_bin/logs/
+code/managed_components/
+# idf.py doğrudan (-B olmadan) çalıştırılırsa
+code/build/
 
 # IDE / Editor
 .claude/
 .vscode/
-
-# esp_bin/2611 — 2611 hattinin uretilen dosyalari (dependencies.lock TRACKED)
-esp_bin/2611/build/
-esp_bin/2611/sdkconfig
-esp_bin/2611/sdkconfig.old
-esp_bin/2611/managed_components/
-esp_bin/test-build/
-esp_bin/firmware/*.elf
 __pycache__/

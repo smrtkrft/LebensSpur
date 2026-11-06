@@ -1,9 +1,0 @@
-# LebensSpur 2611 — dahili 4 MB flash bolum tablosu
-# Program + web arayuzu yalniz burada; harici flash yalniz veri (/log, /data).
-# 0x1B000-0x20000 (20 KB) bilerek bos: ileride nvs_keys (NVS sifreleme) icin.
-# Name,     Type, SubType,  Offset,   Size
-nvs,        data, nvs,      0x9000,   0x10000
-otadata,    data, ota,      0x19000,  0x2000
-ota_0,      app,  ota_0,    0x20000,  0x1E0000
-ota_1,      app,  ota_1,    0x200000, 0x1E0000
-coredump,   data, coredump, 0x3E0000, 0x20000

@@ -1,3 +1,0 @@
-# esp_bin sarmalayici proje icin ek ayar.
-# Partition CSV yolu proje dizinine (esp_bin/HW) gore cozulur.
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../ALTE/HW/partitions.csv"
